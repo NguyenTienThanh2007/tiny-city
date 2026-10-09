@@ -4,6 +4,32 @@ import type { SimulationEvent, WorldState } from '../src/index.js';
 import { createDemoWorldFixture, createEmptyWorldFixture } from '../src/fixtures.js';
 
 describe('simulation runner', () => {
+  it('replaces editor layouts without resetting clock, RNG, citizens, or pending commands', () => {
+    const simulation = new Simulation(createDemoWorldFixture());
+    simulation.advance(140);
+    simulation.pause();
+    const before = simulation.getState();
+    simulation.enqueue({ type: 'citizen.relocate', citizenId: 'citizen-1', position: { x: 3, y: 4 } });
+    const plan = { ...before.plan, name: 'Edited layout' };
+    simulation.replacePlan(plan);
+    plan.name = 'Caller mutation';
+    expect(simulation.getState().plan.name).toBe('Edited layout');
+    expect(simulation.getState().clock).toEqual(before.clock);
+    expect(simulation.getState().randomState).toBe(before.randomState);
+    expect(simulation.getState().citizens).toEqual(before.citizens);
+    expect(simulation.pendingCommandCount).toBe(1);
+    expect(simulation.step().state.citizens[0]?.position).toEqual({ x: 3, y: 4 });
+  });
+
+  it('rejects a layout with dangling citizen references without partial state changes', () => {
+    const simulation = new Simulation(createDemoWorldFixture());
+    const before = simulation.getState();
+    simulation.enqueue({ type: 'citizen.relocate', citizenId: 'citizen-1', position: { x: 3, y: 4 } });
+    expect(() => simulation.replacePlan({ ...before.plan, buildings: [] })).toThrow(/unknown home/);
+    expect(simulation.getState()).toBe(before);
+    expect(simulation.pendingCommandCount).toBe(1);
+  });
+
   it('defers commands until a whole tick, then applies them FIFO', () => {
     const simulation = new Simulation(createDemoWorldFixture());
     simulation.enqueue({ type: 'citizen.relocate', citizenId: 'citizen-1', position: { x: 3, y: 4 } });

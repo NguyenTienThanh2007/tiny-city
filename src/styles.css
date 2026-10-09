@@ -149,6 +149,12 @@ button { color: inherit; }
 .inspector-footer { position: sticky; bottom: 0; display: flex; align-items: center; gap: 7px; min-height: 45px; margin: auto -19px 0; padding: 0 16px; border-top: 1px solid #ecebe3; background: #fbfaf6; color: #9b9e92; font-size: 7px; letter-spacing: .1em; font-weight: 700; white-space: nowrap; }
 .online-dot { width: 6px; height: 6px; border-radius: 50%; background: #c6a65d; }
 .inspector-footer strong { color: #a3834e; font-size: 7px; }
+.simulation-controls { display: grid; gap: 9px; margin: 18px 0 12px; padding-top: 14px; border-top: 1px solid #e3e7dc; color: #536054; font-size: 10px; }
+.simulation-controls > output:first-child { font-weight: 700; }
+.simulation-controls > div { display: flex; gap: 8px; }
+.simulation-controls button { justify-content: center; }
+.simulation-controls button:disabled { opacity: .45; cursor: default; }
+.simulation-event { overflow-wrap: anywhere; color: #7b887b; font-size: 9px; }
 .footer-sep { width: 1px; height: 12px; margin: 0 3px 0 auto; background: #e3e3da; }
 
 @media (max-width: 1150px) {
@@ -378,6 +384,19 @@ button:focus-visible, input:focus-visible { outline: 3px solid #8dac86; outline-
   .planner-bar input { height: 40px; padding: 0 10px; font-size: 11px; }
   .planner-submit { width: 34px; height: 34px; border-radius: 9px; }
   .toast { bottom: 82px; max-width: calc(100% - 24px); white-space: normal; }
+}
+
+/* Keep clock controls available when the existing inspector is hidden. */
+@media (max-width: 930px) {
+  .workspace { position: relative; }
+  .inspector { display: contents; }
+  .inspector > :not(.simulation-controls) { display: none; }
+  .simulation-controls { position: absolute; z-index: 5; top: 130px; left: 84px; grid-template-columns: auto 110px; align-items: center; gap: 7px 12px; width: min(260px, calc(100% - 100px)); margin: 0; padding: 9px 11px; border: 1px solid #ffffffb8; border-radius: 10px; background: #fffcf0ed; box-shadow: 0 4px 14px #314d3515; }
+  .simulation-controls button { height: 30px; padding: 0 6px; }
+  .simulation-event { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .simulation-controls { top: 145px; left: 72px; width: min(260px, calc(100% - 86px)); grid-template-columns: auto 105px; gap: 6px 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

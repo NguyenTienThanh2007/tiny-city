@@ -51,6 +51,7 @@ const { state, events, steps, alpha } = simulation.advance(100);
 | Method/property | Behavior |
 | --- | --- |
 | `getState()` | Current immutable snapshot; retain older snapshots safely |
+| `replacePlan(plan)` | Validate, copy, and freeze an editor-authored layout without changing clock, RNG, citizens, or pending commands; invalid layouts throw atomically |
 | `enqueue(command)` | Copy a typed command and queue it for the next executed tick |
 | `pendingCommandCount` | Number of queued commands |
 | `advance(elapsedMs)` | Accumulate real time, execute fixed ticks, return one result batch |

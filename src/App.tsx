@@ -1,20 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { getGameTime } from '@tiny-city/simulation';
 import CityViewport from './game/CityViewport';
-import { initialCity } from './data/initialCity';
+import { loadCitySave, saveCity } from './simulation/citySave';
+import { useCitySimulation } from './simulation/useCitySimulation';
 import { BUILDINGS, canPlace, createBuilding, isLandCell, type BuildingKind, type CityState, type Cell, type Tool } from './types';
-
-const SAVE_KEY = 'tiny-city-imagine-save-v1';
-
-function loadCity(): CityState {
-  try {
-    const saved = localStorage.getItem(SAVE_KEY);
-    if (!saved) return initialCity;
-    const parsed = JSON.parse(saved) as CityState;
-    if (parsed.size === 64 && Array.isArray(parsed.roads) && Array.isArray(parsed.buildings) && typeof parsed.funds === 'number') return parsed;
-  } catch { /* start with the Villa Gardens sample */ }
-  return initialCity;
-}
 
 const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
   { id: 'select', label: 'Select', shortcut: 'V' },
@@ -64,7 +54,9 @@ function MiniMap({ city }: { city: CityState }) {
 }
 
 function App() {
-  const [city, setCity] = useState<CityState>(loadCity);
+  const [loaded] = useState(() => loadCitySave());
+  const [city, setCity] = useState<CityState>(loaded.city);
+  const { world, lastEvent, advance, syncCity, togglePause, step, getSnapshot } = useCitySimulation(loaded.city, loaded.world);
   const cityRef = useRef(city);
   cityRef.current = city;
   const [history, setHistory] = useState<CityState[]>([]);
@@ -76,6 +68,12 @@ function App() {
   const [saved, setSaved] = useState(false);
   const [constructionClock, setConstructionClock] = useState(Date.now());
   const noticeTimerRef = useRef<number | null>(null);
+
+  const advanceSimulation = useCallback((elapsedMs: number) => {
+    const tick = getSnapshot().clock.tick;
+    advance(elapsedMs);
+    if (getSnapshot().clock.tick !== tick) setSaved(false);
+  }, [advance, getSnapshot]);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -92,12 +90,13 @@ function App() {
 
   const commit = useCallback((next: CityState) => {
     const previous = cityRef.current;
+    syncCity(next);
     setHistory((current) => [...current.slice(-39), previous]);
     setRedoHistory([]);
     cityRef.current = next;
     setCity(next);
     setSaved(false);
-  }, []);
+  }, [syncCity]);
 
   const addRoad = useCallback((cell: Cell) => {
     const current = cityRef.current;
@@ -140,24 +139,28 @@ function App() {
   const undo = useCallback(() => {
     const previous = history.at(-1);
     if (!previous) return;
-    setRedoHistory((current) => [...current, cityRef.current]);
+    const currentCity = cityRef.current;
+    syncCity(previous);
+    setRedoHistory((current) => [...current, currentCity]);
     setHistory((current) => current.slice(0, -1));
     cityRef.current = previous;
     setCity(previous);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [history]);
+  }, [history, syncCity]);
 
   const redo = useCallback(() => {
     const next = redoHistory.at(-1);
     if (!next) return;
-    setHistory((current) => [...current.slice(-39), cityRef.current]);
+    const currentCity = cityRef.current;
+    syncCity(next);
+    setHistory((current) => [...current.slice(-39), currentCity]);
     setRedoHistory((current) => current.slice(0, -1));
     cityRef.current = next;
     setCity(next);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [redoHistory]);
+  }, [redoHistory, syncCity]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -187,7 +190,7 @@ function App() {
 
   const save = () => {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(city));
+      saveCity(localStorage, cityRef.current, getSnapshot());
       setSaved(true);
       showNotice('Villa Gardens saved on this device');
     } catch {
@@ -201,6 +204,9 @@ function App() {
   const selectedBuilding = city.buildings.find((building) => building.id === selectedBuildingId) ?? null;
   const selectedSpec = selectedBuilding ? BUILDINGS[selectedBuilding.kind] : null;
   const selectedTool = tools.find((item) => item.id === tool);
+  const gameTime = getGameTime(world.clock);
+  const gameDay = String(gameTime.day + 1).padStart(2, '0');
+  const gameClock = `${String(Math.floor(gameTime.minuteOfDay / 60)).padStart(2, '0')}:${String(gameTime.minuteOfDay % 60).padStart(2, '0')}`;
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -299,6 +305,8 @@ function App() {
         <section className="map-stage">
           <CityViewport
             city={city}
+            world={world}
+            onSimulationFrame={advanceSimulation}
             tool={tool}
             selectedBuildingId={selectedBuildingId}
             onSelectBuilding={setSelectedBuildingId}
@@ -326,7 +334,7 @@ function App() {
             <input value={command} onChange={(event) => setCommand(event.target.value)} aria-label="Describe a city change" placeholder="Describe what you want to build…" />
             <button className="planner-submit" type="submit" aria-label="Apply city plan" title="Build from prompt" disabled={!command.trim()}><Icon name="arrow" size={18} /></button>
           </form>
-          {notice && <div className="toast" role="status" aria-live="polite"><span className="toast-check">✓</span>{notice}</div>}
+          {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check">✓</span>{notice}</div>}
         </section>
 
         <aside className="inspector">
@@ -348,7 +356,10 @@ function App() {
               <div className="detail-line"><span>Map location</span><strong>{selectedBuilding.x}, {selectedBuilding.y}</strong></div>
               <div className="detail-line"><span>Condition</span><strong className="condition"><i /> {constructionClock < selectedBuilding.createdAt + 5200 ? 'Under construction' : 'New'}</strong></div>
               <div className="inspector-buttons">
-                <button className="outline-action" onClick={() => showNotice('Building details are ready to connect to the city simulation.')}>Building details <Icon name="arrow" size={15} /></button>
+                <button className="outline-action" onClick={() => {
+                  const building = world.plan.buildings.find((entry) => entry.id === selectedBuilding.id);
+                  if (building) showNotice(`${building.name} · ${building.kind} · capacity ${building.capacity}`);
+                }}>Building details <Icon name="arrow" size={15} /></button>
                 <button className="small-destruct" aria-label="Bulldoze selected building" onClick={() => bulldoze({ x: selectedBuilding.x, y: selectedBuilding.y })}><Icon name="bulldoze" size={16} /></button>
               </div>
             </div>
@@ -363,7 +374,15 @@ function App() {
               </div>
             </>
           )}
-          <div className="inspector-footer"><span className="online-dot" /> CITY SIMULATION <strong>PAUSED</strong><span className="footer-sep" /> DAY 01</div>
+          <div className="simulation-controls" role="group" aria-label="Simulation controls">
+            <output aria-label="Simulation clock">DAY {gameDay} · {gameClock}</output>
+            <div>
+              <button className="outline-action" onClick={() => { togglePause(); setSaved(false); }}>{world.clock.paused ? 'Resume' : 'Pause'}</button>
+              <button className="outline-action" disabled={!world.clock.paused} onClick={() => { step(); setSaved(false); }}>Step</button>
+            </div>
+            <output className="simulation-event" aria-label="Latest simulation event">{lastEvent ? `${lastEvent.type} · tick ${lastEvent.tick}` : 'No simulation events yet'}</output>
+          </div>
+          <div className="inspector-footer"><span className="online-dot" /> CITY SIMULATION <strong>{world.clock.paused ? 'PAUSED' : 'RUNNING'}</strong><span className="footer-sep" /> DAY {gameDay}</div>
         </aside>
       </section>
     </main>
