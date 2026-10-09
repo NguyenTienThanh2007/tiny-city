@@ -68,16 +68,32 @@ function App() {
   const cityRef = useRef(city);
   cityRef.current = city;
   const [history, setHistory] = useState<CityState[]>([]);
+  const [redoHistory, setRedoHistory] = useState<CityState[]>([]);
   const [tool, setTool] = useState<Tool>('select');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState(false);
   const [constructionClock, setConstructionClock] = useState(Date.now());
+  const noticeTimerRef = useRef<number | null>(null);
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => {
+      setNotice('');
+      noticeTimerRef.current = null;
+    }, 2600);
+  }, []);
+
+  useEffect(() => () => {
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+  }, []);
 
   const commit = useCallback((next: CityState) => {
     const previous = cityRef.current;
     setHistory((current) => [...current.slice(-39), previous]);
+    setRedoHistory([]);
     cityRef.current = next;
     setCity(next);
     setSaved(false);
@@ -86,25 +102,25 @@ function App() {
   const addRoad = useCallback((cell: Cell) => {
     const current = cityRef.current;
     if (!isLandCell(cell.x, cell.y, current.size)) return;
-    if (current.funds < 8) return;
+    if (current.funds < 8) { showNotice('You need $8 to build a road tile.'); return; }
     if (current.roads.some((road) => road.x === cell.x && road.y === cell.y)) return;
     if (current.buildings.some((building) => {
       const spec = BUILDINGS[building.kind];
       return cell.x >= building.x && cell.x < building.x + spec.width && cell.y >= building.y && cell.y < building.y + spec.height;
-    })) return;
+    })) { showNotice('Roads cannot overlap a building.'); return; }
     commit({ ...current, roads: [...current.roads, cell], funds: current.funds - 8 });
-  }, [commit]);
+  }, [commit, showNotice]);
 
   const placeBuilding = useCallback((kind: BuildingKind, x: number, y: number) => {
     const current = cityRef.current;
     const cost = BUILDINGS[kind].cost;
-    if (!canPlace(current, kind, x, y)) return;
-    if (current.funds < cost) { setNotice('Not enough funds for this build.'); return; }
+    if (!canPlace(current, kind, x, y)) { showNotice('That lot is occupied or outside the buildable area.'); return; }
+    if (current.funds < cost) { showNotice(`You need $${cost} to build a ${BUILDINGS[kind].label.toLowerCase()}.`); return; }
     const building = createBuilding(kind, x, y, current.buildings.filter((entry) => entry.kind === kind).length + 1);
     commit({ ...current, buildings: [...current.buildings, building], funds: current.funds - cost });
     setSelectedBuildingId(building.id);
     setTool('select');
-  }, [commit]);
+  }, [commit, showNotice]);
 
   const bulldoze = useCallback((cell: Cell) => {
     const current = cityRef.current;
@@ -121,43 +137,70 @@ function App() {
     if (roads.length !== current.roads.length) commit({ ...current, roads });
   }, [commit, selectedBuildingId]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     const previous = history.at(-1);
     if (!previous) return;
+    setRedoHistory((current) => [...current, cityRef.current]);
     setHistory((current) => current.slice(0, -1));
     cityRef.current = previous;
     setCity(previous);
     setSaved(false);
     setSelectedBuildingId(null);
-  };
+  }, [history]);
+
+  const redo = useCallback(() => {
+    const next = redoHistory.at(-1);
+    if (!next) return;
+    setHistory((current) => [...current.slice(-39), cityRef.current]);
+    setRedoHistory((current) => current.slice(0, -1));
+    cityRef.current = next;
+    setCity(next);
+    setSaved(false);
+    setSelectedBuildingId(null);
+  }, [redoHistory]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+      const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && key === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && key === 'y') {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       const shortcuts: Record<string, Tool> = { v: 'select', r: 'road', '1': 'villa', '2': 'park', '3': 'clubhouse', x: 'bulldoze' };
-      const next = shortcuts[event.key.toLowerCase()];
+      const next = shortcuts[key];
       if (next) setTool(next);
       if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [redo, undo]);
 
   const save = () => {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(city));
-    setSaved(true);
-    setNotice('Villa Gardens saved on this device');
-    window.setTimeout(() => setNotice(''), 2200);
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(city));
+      setSaved(true);
+      showNotice('Villa Gardens saved on this device');
+    } catch {
+      showNotice('Could not save this city in browser storage.');
+    }
   };
 
   const roads = city.roads.length;
   const villas = city.buildings.filter((building) => building.kind === 'villa').length;
+  const parks = city.buildings.filter((building) => building.kind === 'park').length;
   const selectedBuilding = city.buildings.find((building) => building.id === selectedBuildingId) ?? null;
   const selectedSpec = selectedBuilding ? BUILDINGS[selectedBuilding.kind] : null;
   const selectedTool = tools.find((item) => item.id === tool);
-  const population = 0;
 
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -165,11 +208,6 @@ function App() {
     const timer = window.setTimeout(() => setConstructionClock(Date.now()), delay);
     return () => window.clearTimeout(timer);
   }, [selectedBuilding?.id, selectedBuilding?.createdAt]);
-
-  const showNotice = (message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice(''), 2600);
-  };
 
   const plannerSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -184,12 +222,22 @@ function App() {
     const subject = match[2].toLowerCase();
     if (subject.startsWith('road') || subject.startsWith('đường')) {
       let added = 0;
+      let current = cityRef.current;
+      const nextRoads = [...current.roads];
       for (let y = 30; y < 42 && added < count; y += 1) {
         const cell = { x: 18, y };
-        if (cityRef.current.funds < 8) break;
-        if (!cityRef.current.roads.some((road) => road.x === cell.x && road.y === cell.y)) { addRoad(cell); added += 1; }
+        if (current.funds - added * 8 < 8) break;
+        if (nextRoads.some((road) => road.x === cell.x && road.y === cell.y)) continue;
+        const blocked = current.buildings.some((building) => {
+          const spec = BUILDINGS[building.kind];
+          return cell.x >= building.x && cell.x < building.x + spec.width && cell.y >= building.y && cell.y < building.y + spec.height;
+        });
+        if (blocked || !isLandCell(cell.x, cell.y, current.size)) continue;
+        nextRoads.push(cell);
+        added += 1;
       }
-      showNotice(`Planner preview: added ${added} road tile${added === 1 ? '' : 's'}`);
+      if (added) commit({ ...current, roads: nextRoads, funds: current.funds - added * 8 });
+      showNotice(added ? `Built ${added} road tile${added === 1 ? '' : 's'}.` : 'No clear road lots were available for that plan.');
       setCommand('');
       return;
     }
@@ -207,7 +255,7 @@ function App() {
     }
     if (placed) commit(current);
     setTool('select');
-    showNotice(`Planner preview: placed ${placed} ${kind}${placed === 1 ? '' : 's'}`);
+    showNotice(placed ? `Built ${placed} ${kind}${placed === 1 ? '' : 's'}.` : 'No open lots or funds were available for that plan.');
     setCommand('');
   };
 
@@ -220,18 +268,18 @@ function App() {
           <div className="brand-mark"><span /><span /><span /><span /></div>
           <div><div className="brand-name">TINY CITY</div><div className="brand-tagline">IMAGINE · BUILD · LIVE</div></div>
         </div>
-        <div className="project-name"><span className="status-dot" /><span>Villa Gardens</span><span className="project-chevron">⌄</span></div>
-        <div className="mode-switch" aria-label="Game mode">
-          <button className="mode-tab active"><span className="mode-tab-index">01</span> Architect</button>
-          <button className="mode-tab" onClick={() => showNotice('Life Mode is planned for the next milestone.')}>02&nbsp; Life</button>
-          <button className="mode-tab" onClick={() => showNotice('God Mode is planned for the next milestone.')}>03&nbsp; God</button>
+        <div className="project-name"><span className="status-dot" /><span>Villa Gardens</span><span className="project-state">LOCAL CITY</span></div>
+        <div className="mode-switch" role="group" aria-label="Game mode">
+          <button className="mode-tab active" aria-pressed="true"><span className="mode-tab-index">01</span> Architect</button>
+          <button className="mode-tab" aria-pressed="false" onClick={() => showNotice('Life Mode is planned for the next milestone.')}>02&nbsp; Life</button>
+          <button className="mode-tab" aria-pressed="false" onClick={() => showNotice('God Mode is planned for the next milestone.')}>03&nbsp; God</button>
         </div>
         <div className="top-actions">
-          <button className="icon-button" aria-label="Undo" title="Undo" onClick={undo} disabled={!history.length}><Icon name="undo" /></button>
-          <button className="icon-button" aria-label="Redo" title="Redo" disabled><Icon name="redo" /></button>
+          <button className="icon-button" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!history.length}><Icon name="undo" /></button>
+          <button className="icon-button" aria-label="Redo" title="Redo (⌘⇧Z)" onClick={redo} disabled={!redoHistory.length}><Icon name="redo" /></button>
           <span className="action-divider" />
           <button className={`save-button ${saved ? 'is-saved' : ''}`} onClick={save}><Icon name="save" size={16} />{saved ? 'Saved' : 'Save'}</button>
-          <button className="avatar-button" aria-label="Profile">H</button>
+          <button className="avatar-button" aria-label="Profile" title="Profile" onClick={() => showNotice('Your city is saved locally on this device.')}>H</button>
         </div>
       </header>
 
@@ -239,7 +287,7 @@ function App() {
         <nav className="tool-rail" aria-label="Build tools">
           <div className="rail-label">TOOLS</div>
           {tools.map((item) => (
-            <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} onClick={() => setTool(item.id)} title={`${item.label} · ${item.shortcut}`}>
+              <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => setTool(item.id)} title={`${item.label} · ${item.shortcut}`}>
               <span className={`tool-icon tool-${item.id}`}><Icon name={item.id === 'bulldoze' ? 'bulldoze' : item.id} size={19} /></span>
               <span className="tool-label">{item.label}</span>
               {item.cost !== undefined && <span className="tool-cost">${item.cost}</span>}
@@ -266,7 +314,7 @@ function App() {
           <div className="city-stats">
             <div className="city-stat"><span className="stat-icon homes"><Icon name="home" size={15} /></span><span><strong>{villas}</strong><small>HOMES</small></span></div>
             <div className="city-stat"><span className="stat-icon roads"><Icon name="roadStat" size={15} /></span><span><strong>{roads}</strong><small>ROAD TILES</small></span></div>
-            <div className="city-stat"><span className="stat-icon people"><Icon name="people" size={15} /></span><span><strong>{population}</strong><small>RESIDENTS</small></span></div>
+            <div className="city-stat"><span className="stat-icon park"><Icon name="park" size={15} /></span><span><strong>{parks}</strong><small>PARKS</small></span></div>
             <div className="city-stat cash"><span className="stat-icon cash"><Icon name="coin" size={15} /></span><span><strong>${city.funds.toLocaleString()}</strong><small>FUNDS</small></span></div>
           </div>
           <div className="map-controls"><span className="control-dot" /> {keyboardHelp}<span className="control-separator">·</span> Scroll to zoom <span className="control-separator">·</span> Shift + drag to pan</div>
@@ -274,22 +322,24 @@ function App() {
           <MiniMap city={city} />
           <form className="planner-bar" onSubmit={plannerSubmit}>
             <div className="planner-sparkle"><Icon name="sparkle" size={19} /></div>
-            <div className="planner-copy"><strong>Imagine something new</strong><span>Try “build 3 villas” or “xây 3 biệt thự”</span></div>
-            <input value={command} onChange={(event) => setCommand(event.target.value)} aria-label="Describe a city change" placeholder="Describe a change for your city..." />
-            <button className="planner-submit" type="submit" aria-label="Preview city plan"><Icon name="arrow" size={18} /></button>
+            <div className="planner-copy"><strong>Build with a prompt</strong><span>Try “build 3 villas” · “thêm 5 đường”</span></div>
+            <input value={command} onChange={(event) => setCommand(event.target.value)} aria-label="Describe a city change" placeholder="Describe what you want to build…" />
+            <button className="planner-submit" type="submit" aria-label="Apply city plan" title="Build from prompt" disabled={!command.trim()}><Icon name="arrow" size={18} /></button>
           </form>
-          {notice && <div className="toast"><span className="toast-check">✓</span>{notice}</div>}
+          {notice && <div className="toast" role="status" aria-live="polite"><span className="toast-check">✓</span>{notice}</div>}
         </section>
 
         <aside className="inspector">
-          <div className="inspector-topline"><span>NEIGHBORHOOD</span><button className="more-button">•••</button></div>
+          <div className="inspector-topline"><span>NEIGHBORHOOD</span><button className="more-button" aria-label="Neighborhood information" title="Neighborhood information" onClick={() => showNotice('Villa Gardens is a locally saved coastal district.')}>•••</button></div>
           <h2>{selectedBuilding ? selectedBuilding.name : 'Build something lovely.'}</h2>
           <p className="inspector-subtitle">{selectedBuilding ? 'BUILDING INSPECTOR' : 'YOUR CITY, YOUR STORY'}</p>
-          <div className="inspector-scene">
+          <div className={`inspector-scene ${selectedBuilding ? `is-${selectedBuilding.kind}` : ''}`}>
             <div className="scene-sun" /><div className="scene-cloud cloud-one" /><div className="scene-cloud cloud-two" />
-            <div className="scene-ground" /><div className="scene-house"><span className="house-roof" /><span className="house-wall" /><span className="house-window one" /><span className="house-window two" /><span className="house-door" /></div>
+            <div className="scene-ground" />
+            {selectedBuilding?.kind !== 'park' && <div className={`scene-house ${selectedBuilding?.kind === 'clubhouse' ? 'is-clubhouse' : ''}`}><span className="house-roof" /><span className="house-wall" /><span className="house-window one" /><span className="house-window two" /><span className="house-door" /></div>}
             <div className="scene-tree tree-one"><i /><b /></div><div className="scene-tree tree-two"><i /><b /></div>
-            <div className="scene-caption"><span>VILLA GARDENS</span><b>01 / 10</b></div>
+            {selectedBuilding?.kind === 'park' && <div className="scene-path" />}
+            <div className="scene-caption"><span>{selectedBuilding?.name ?? 'VILLA GARDENS'}</span><b>{selectedBuilding ? `${selectedBuilding.x} · ${selectedBuilding.y}` : `${villas} HOMES`}</b></div>
           </div>
           {selectedBuilding && selectedSpec ? (
             <div className="building-details">

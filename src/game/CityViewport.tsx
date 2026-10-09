@@ -256,7 +256,7 @@ export default function CityViewport(props: Props) {
       const handleCell = (cell: Cell) => {
         const current = propsRef.current;
         if (!isLandCell(cell.x, cell.y, current.city.size)) return;
-        if (pointerAction === 'paint' && !current.city.buildings.some((building) => occupiedCells(building).some((at) => at.x === cell.x && at.y === cell.y))) {
+        if (pointerAction === 'paint') {
           current.onAddRoad(cell);
         } else if (pointerAction === 'bulldoze') {
           current.onBulldoze(cell);
@@ -281,7 +281,7 @@ export default function CityViewport(props: Props) {
           current.onSelectBuilding(buildingAt(current.city, cell.x, cell.y)?.id ?? null);
         } else {
           const kind = current.tool as BuildingKind;
-          if (canPlace(current.city, kind, cell.x, cell.y)) current.onPlaceBuilding(kind, cell.x, cell.y);
+          current.onPlaceBuilding(kind, cell.x, cell.y);
         }
       });
       app.stage.on('globalpointermove', (event) => {
@@ -299,13 +299,17 @@ export default function CityViewport(props: Props) {
         if (current.tool === 'road' && isLandCell(cell.x, cell.y, current.city.size)) {
           const blocked = current.city.buildings.some((building) => occupiedCells(building).some((at) => at.x === cell.x && at.y === cell.y));
           const road = new Set(current.city.roads.map((at) => cellKey(at.x, at.y))).has(cellKey(cell.x, cell.y));
-          if (!road) polygon(ghostShape, tileDiamond(cell.x, cell.y), blocked ? 0xd97962 : 0x8ba8ac, 0.72, blocked ? 0xb84c43 : 0xe9f0d5);
+          if (!road) {
+            const affordable = current.city.funds >= 8;
+            const invalid = blocked || !affordable;
+            polygon(ghostShape, tileDiamond(cell.x, cell.y), invalid ? 0xd97962 : 0x8ba8ac, 0.72, invalid ? 0xb84c43 : 0xe9f0d5);
+          }
         } else if (current.tool === 'road') {
           polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xd97962, 0.64, 0xb84c43);
         } else if (current.tool === 'villa' || current.tool === 'park' || current.tool === 'clubhouse') {
           const kind = current.tool;
           const spec = BUILDINGS[kind];
-          const valid = canPlace(current.city, kind, cell.x, cell.y);
+          const valid = canPlace(current.city, kind, cell.x, cell.y) && current.city.funds >= spec.cost;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), valid ? 0xf3da98 : 0xd97962, 0.58, valid ? 0xf9f2d5 : 0xb84c43);
         } else {
           polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.24, 0xfff4d5);
