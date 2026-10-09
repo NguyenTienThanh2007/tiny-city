@@ -1,5 +1,5 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
-import type { ClockState, Citizen, ScheduleEntry, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
+import type { CityPlan, ClockState, Citizen, ScheduleEntry, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
 import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
 
 function copyCommand(command: WorldCommand): WorldCommand {
@@ -35,6 +35,13 @@ export class Simulation {
 
   getState(): WorldState {
     return this.state;
+  }
+
+  /** Replace an editor-authored layout without restarting time or dropping commands. */
+  replacePlan(plan: CityPlan): void {
+    const next = { ...this.state, plan };
+    validateWorld(next);
+    this.state = freeze(cloneWorld(next));
   }
 
   get pendingCommandCount(): number {

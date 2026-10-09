@@ -1,5 +1,8 @@
 import { Application, Container, Graphics, Rectangle, Text } from 'pixi.js';
 import { useEffect, useRef } from 'react';
+import type { CityPlan, WorldState } from '@tiny-city/simulation';
+import { getRenderBuildings } from '../simulation/cityAdapter';
+import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, canPlace, cellKey, isLandCell, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
 
 const TILE_W = 56;
@@ -10,6 +13,8 @@ const MAP_OFFSET_X = 32 * TILE_W;
 
 type Props = {
   city: CityState;
+  world: WorldState;
+  onSimulationFrame: (elapsedMs: number) => void;
   tool: Tool;
   selectedBuildingId: string | null;
   onSelectBuilding: (id: string | null) => void;
@@ -165,15 +170,15 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   layer.addChild(item);
 }
 
-function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, selectedId: string | null, includeTerrain: boolean) {
+function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean) {
   if (includeTerrain) {
     terrain.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
-    drawTerrain(terrain, city.size);
+    drawTerrain(terrain, plan.width);
   }
   roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   buildings.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   drawRoads(roads, city);
-  [...city.buildings].sort((a, b) => a.x + a.y - (b.x + b.y)).forEach((building) => {
+  getRenderBuildings(city, plan).sort((a, b) => a.x + a.y - (b.x + b.y)).forEach((building) => {
     const age = Date.now() - building.createdAt;
     drawBuilding(buildings, building, building.id === selectedId, Math.min(1, age / 5200));
   });
@@ -233,7 +238,7 @@ export default function CityViewport(props: Props) {
       terrainRef.current = terrain;
       roadsRef.current = roads;
       buildingsRef.current = buildings;
-      redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.selectedBuildingId, true);
+      redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true);
 
       const view = { x: 0, y: 0, scale: 0.86 };
       const center = iso(18, 20);
@@ -334,9 +339,10 @@ export default function CityViewport(props: Props) {
       app.canvas.addEventListener('wheel', onWheel, { passive: false });
       const resizeObserver = new ResizeObserver(updateCamera);
       resizeObserver.observe(host);
+      const disconnectSimulation = connectSimulationTicker(app.ticker, (elapsedMs) => propsRef.current.onSimulationFrame(elapsedMs));
       app.ticker.add(() => {
         const now = Date.now();
-        const orderedBuildings = [...propsRef.current.city.buildings].sort((a, b) => a.x + a.y - (b.x + b.y));
+        const orderedBuildings = getRenderBuildings(propsRef.current.city, propsRef.current.world.plan).sort((a, b) => a.x + a.y - (b.x + b.y));
         buildings.children.forEach((item, index) => {
           const building = orderedBuildings[index];
           if (!building) return;
@@ -347,6 +353,7 @@ export default function CityViewport(props: Props) {
       });
 
       (app as Application & { __cleanup?: () => void }).__cleanup = () => {
+        disconnectSimulation();
         app.canvas.removeEventListener('wheel', onWheel);
         window.removeEventListener('keydown', updateShift);
         window.removeEventListener('keyup', updateShift);
@@ -374,8 +381,8 @@ export default function CityViewport(props: Props) {
     const roads = roadsRef.current;
     const buildings = buildingsRef.current;
     if (!terrain || !roads || !buildings) return;
-    redrawCity(terrain, roads, buildings, props.city, props.selectedBuildingId, false);
-  }, [props.city, props.selectedBuildingId]);
+    redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false);
+  }, [props.city, props.world.plan, props.selectedBuildingId]);
 
   return <div ref={hostRef} className="city-viewport" aria-label="Isometric 64 by 64 city map" />;
 }
