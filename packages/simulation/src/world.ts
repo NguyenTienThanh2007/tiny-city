@@ -1,7 +1,10 @@
 import { createClock, validateClock } from './clock.js';
 import type { ClockOptions } from './clock.js';
 import { createRandomState, validateRandomState } from './random.js';
-import type { CityPlan, Citizen, DailySchedule, Position, WorldState } from './types.js';
+import { createBudget, validateBudget } from './budget.js';
+import { BUILDING_CATALOG, isBuildingType } from './catalog.js';
+import { OccupancyGrid } from './grid.js';
+import type { CityPlan, CityPlanInput, Citizen, DailySchedule, Position, WorldState } from './types.js';
 
 const ACTIVITIES = new Set(['sleep', 'home', 'work', 'leisure', 'idle']);
 const BUILDING_KINDS = new Set(['home', 'workplace', 'park']);
@@ -36,15 +39,22 @@ export function validateSchedule(schedule: DailySchedule, plan: CityPlan): void 
 
 /** Validates package-local snapshots; this is not a network JSON decoder. */
 export function validateWorld(world: WorldState): void {
-  assert(world.schemaVersion === 1, 'unsupported world schema version');
+  assert(world.schemaVersion === 2, 'unsupported world schema version');
   identifier(world.id, 'world id');
   identifier(world.plan.id, 'plan id');
   identifier(world.plan.name, 'plan name');
   const { plan } = world;
   assert(Number.isSafeInteger(plan.width) && plan.width > 0 &&
-    Number.isSafeInteger(plan.height) && plan.height > 0, 'plan dimensions must be positive safe integers');
+    Number.isSafeInteger(plan.height) && plan.height > 0 && plan.width * plan.height <= 1_000_000,
+    'plan dimensions must be positive safe integers with at most 1000000 tiles');
+  assert([plan.roads, plan.blockedTiles, plan.buildings].every(Array.isArray), 'plan tile collections must be arrays');
+  assert(plan.roads.length <= plan.width * plan.height && plan.blockedTiles.length <= plan.width * plan.height &&
+    plan.buildings.length <= plan.width * plan.height, 'plan collections exceed map capacity');
   validateClock(world.clock);
   validateRandomState(world.randomState);
+  validateBudget(world.budget);
+  assert(Number.isSafeInteger(world.revision) && world.revision >= 0, 'revision must be a nonnegative safe integer');
+  assert(Number.isSafeInteger(world.nextBuildingId) && world.nextBuildingId > 0, 'nextBuildingId must be a positive safe integer');
   const buildings = new Set<string>();
   for (const building of plan.buildings) {
     identifier(building.id, 'building id');
@@ -59,7 +69,15 @@ export function validateWorld(world: WorldState): void {
       building.position.x + building.footprint.width <= plan.width &&
       building.position.y + building.footprint.height <= plan.height, 'building footprint must fit the plan');
     assert(Number.isSafeInteger(building.capacity) && building.capacity >= 0, 'capacity must be nonnegative');
+    if (building.type !== undefined) {
+      assert(isBuildingType(building.type), 'unknown building type');
+      const definition = BUILDING_CATALOG[building.type];
+      assert(building.kind === definition.kind && building.capacity === definition.capacity &&
+        building.footprint.width === definition.footprint.width && building.footprint.height === definition.footprint.height,
+        'catalog building does not match its definition');
+    }
   }
+  new OccupancyGrid(plan);
   const citizens = new Set<string>();
   for (const citizen of world.citizens) {
     identifier(citizen.id, 'citizen id');
@@ -78,14 +96,26 @@ export function validateWorld(world: WorldState): void {
 /** Copies plain contract data so callers retain ownership of their input objects. */
 export function cloneWorld(world: WorldState): WorldState {
   return {
-    ...world,
-    clock: { ...world.clock },
-    plan: { ...world.plan, buildings: world.plan.buildings.map((building) => ({
-      ...building, position: { ...building.position }, footprint: { ...building.footprint },
-    })) },
+    schemaVersion: 2, id: world.id, revision: world.revision, nextBuildingId: world.nextBuildingId,
+    budget: { openingBalance: world.budget.openingBalance, balance: world.budget.balance, totalSpent: world.budget.totalSpent },
+    clock: { tick: world.clock.tick, fixedStepMs: world.clock.fixedStepMs, minutesPerTick: world.clock.minutesPerTick,
+      accumulatedMs: world.clock.accumulatedMs, paused: world.clock.paused },
+    randomState: world.randomState,
+    plan: { id: world.plan.id, name: world.plan.name, width: world.plan.width, height: world.plan.height,
+      roads: world.plan.roads.map((tile) => ({ x: tile.x, y: tile.y })),
+      blockedTiles: world.plan.blockedTiles.map((tile) => ({ x: tile.x, y: tile.y })),
+      buildings: world.plan.buildings.map((building) => ({
+        id: building.id, name: building.name, kind: building.kind, capacity: building.capacity,
+        ...(building.type === undefined ? {} : { type: building.type }),
+        position: { x: building.position.x, y: building.position.y },
+        footprint: { width: building.footprint.width, height: building.footprint.height },
+      })) },
     citizens: world.citizens.map((citizen) => ({
-      ...citizen, position: { ...citizen.position },
-      schedule: { entries: citizen.schedule.entries.map((entry) => ({ ...entry })) },
+      id: citizen.id, name: citizen.name, homeBuildingId: citizen.homeBuildingId, workBuildingId: citizen.workBuildingId,
+      activity: citizen.activity, targetBuildingId: citizen.targetBuildingId,
+      position: { x: citizen.position.x, y: citizen.position.y },
+      schedule: { entries: citizen.schedule.entries.map((entry) => ({ startMinute: entry.startMinute,
+        activity: entry.activity, targetBuildingId: entry.targetBuildingId })) },
     })),
   };
 }
@@ -101,18 +131,20 @@ export function freeze<T>(value: T): T {
 
 export function createWorld(options: {
   readonly id: string;
-  readonly plan: CityPlan;
+  readonly plan: CityPlanInput;
   readonly citizens?: readonly Citizen[];
   readonly seed?: number | string;
   readonly clock?: ClockOptions;
+  readonly startingFunds?: number;
 }): WorldState {
   const world: WorldState = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: options.id,
-    plan: options.plan,
+    plan: { ...options.plan, roads: options.plan.roads ?? [], blockedTiles: options.plan.blockedTiles ?? [] },
     citizens: options.citizens ?? [],
     clock: createClock(options.clock),
     randomState: createRandomState(options.seed ?? 0),
+    budget: createBudget(options.startingFunds ?? 0), revision: 0, nextBuildingId: 1,
   };
   validateWorld(world);
   return freeze(cloneWorld(world));

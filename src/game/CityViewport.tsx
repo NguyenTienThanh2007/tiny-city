@@ -1,9 +1,10 @@
 import { Application, Container, Graphics, Rectangle, Text } from 'pixi.js';
 import { useEffect, useRef } from 'react';
 import type { CityPlan, WorldState } from '@tiny-city/simulation';
+import { validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
-import { BUILDINGS, canPlace, cellKey, isLandCell, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
+import { BUILDINGS, cellKey, isLandCell, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
 
 const TILE_W = 56;
 const TILE_H = 28;
@@ -302,11 +303,9 @@ export default function CityViewport(props: Props) {
         }
         ghostShape.clear();
         if (current.tool === 'road' && isLandCell(cell.x, cell.y, current.city.size)) {
-          const blocked = current.city.buildings.some((building) => occupiedCells(building).some((at) => at.x === cell.x && at.y === cell.y));
-          const road = new Set(current.city.roads.map((at) => cellKey(at.x, at.y))).has(cellKey(cell.x, cell.y));
-          if (!road) {
-            const affordable = current.city.funds >= 8;
-            const invalid = blocked || !affordable;
+          const validation = validateRoadPlacement(current.world, cell);
+          if (validation.valid || validation.reason !== 'road-already-exists') {
+            const invalid = !validation.valid;
             polygon(ghostShape, tileDiamond(cell.x, cell.y), invalid ? 0xd97962 : 0x8ba8ac, 0.72, invalid ? 0xb84c43 : 0xe9f0d5);
           }
         } else if (current.tool === 'road') {
@@ -314,7 +313,7 @@ export default function CityViewport(props: Props) {
         } else if (current.tool === 'villa' || current.tool === 'park' || current.tool === 'clubhouse') {
           const kind = current.tool;
           const spec = BUILDINGS[kind];
-          const valid = canPlace(current.city, kind, cell.x, cell.y) && current.city.funds >= spec.cost;
+          const valid = validateBuildingPlacement(current.world, kind, cell).valid;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), valid ? 0xf3da98 : 0xd97962, 0.58, valid ? 0xf9f2d5 : 0xb84c43);
         } else {
           polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.24, 0xfff4d5);

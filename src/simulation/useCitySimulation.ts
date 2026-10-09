@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Simulation } from '@tiny-city/simulation';
-import type { SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
+import type { CityCommand, CitySnapshot, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../types';
-import { createCityWorld, toCityPlan } from './cityAdapter';
+import { createCityWorld } from './cityAdapter';
 
 export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   const [simulation] = useState(() => new Simulation(restoredWorld ?? createCityWorld(city)));
@@ -11,7 +11,8 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
 
   const publish = useCallback((result: SimulationResult) => {
     setWorld(result.state);
-    const event = [...result.events].reverse().find((entry) => entry.type !== 'clock.ticked') ?? result.events.at(-1);
+    const event = [...result.events].reverse().find((entry) => entry.type !== 'clock.ticked' &&
+      entry.type !== 'city.road-network-changed' && entry.type !== 'city.budget-changed') ?? result.events.at(-1);
     if (event) setLastEvent(event);
   }, []);
 
@@ -22,10 +23,18 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
     if (result.steps > 0) publish(result);
   }, [simulation, publish]);
 
-  const syncCity = useCallback((nextCity: CityState) => {
-    simulation.replacePlan(toCityPlan(nextCity));
-    setWorld(simulation.getState());
-  }, [simulation]);
+  const execute = useCallback((command: CityCommand) => {
+    const result = simulation.execute(command);
+    publish(result);
+    return result;
+  }, [simulation, publish]);
+  const executeBatch = useCallback((commands: readonly CityCommand[]) => {
+    const result = simulation.executeBatch(commands);
+    publish(result);
+    return result;
+  }, [simulation, publish]);
+  const restoreCity = useCallback((snapshot: CitySnapshot) => publish(simulation.restoreCity(snapshot)), [simulation, publish]);
+  const getCitySnapshot = useCallback(() => simulation.getCitySnapshot(), [simulation]);
 
   const togglePause = useCallback(() => {
     if (simulation.getState().clock.paused) simulation.resume();
@@ -38,5 +47,5 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   }, [simulation, publish]);
 
   const getSnapshot = useCallback(() => simulation.getState(), [simulation]);
-  return { world, lastEvent, advance, syncCity, togglePause, step, getSnapshot };
+  return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, step, getSnapshot };
 }

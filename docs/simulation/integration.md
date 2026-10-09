@@ -1,6 +1,6 @@
-# Phase 0 frontend integration
+# Phase 1A frontend integration
 
-The existing React/PixiJS city builder now consumes `@tiny-city/simulation` through its public ESM exports. The root npm workspace registers `packages/simulation`; the root lockfile is authoritative for the integrated build. No shared contract package, Gemini integration, or Phase 1 system has been introduced.
+The React/PixiJS builder consumes public simulation ESM exports. Phase 1A makes the engine authoritative for layout, roads, budgets, and IDs. The root lockfile still owns the integrated dependency graph. [Contract coordination](./phase-1a.md) documents schema 2 and placement/history policies. No duplicate shared/Python model, Gemini, NPC pathfinding, or unrelated phase is included.
 
 ## Install and run
 
@@ -15,7 +15,7 @@ Development, frontend build, and frontend integration tests automatically build 
 
 ## Contract boundary
 
-`src/simulation/cityAdapter.ts` maps the existing editor `CityState` into the public `CityPlan` contract without changing its saved map fields or visual vocabulary.
+`src/simulation/cityAdapter.ts` imports initial/legacy editor data once. Thereafter `projectCity` derives compatibility map fields from the engine. Only construction timestamps remain editor metadata. Existing visual kinds and drawing behavior stay intact.
 
 | Editor building | Simulation kind | Footprint | Capacity metadata |
 | --- | --- | --- | --- |
@@ -23,9 +23,9 @@ Development, frontend build, and frontend integration tests automatically build 
 | Park | `park` | 4 × 4 tiles | 20 |
 | Clubhouse | `workplace` | 3 × 3 tiles | 20 |
 
-IDs, names, and tile coordinates are preserved. Roads, funds, construction timestamps, and visual styles remain editor metadata. The Pixi renderer reads canonical building names and positions from `world.plan` and joins them to visual metadata by ID. The original isometric projection, terrain, construction animation, tool handling, pan, and zoom remain in place.
+IDs, names, and tile coordinates survive import. Roads come from `world.plan.roads`, funds from `world.budget.balance`. Hover previews call the public placement validators; prices and footprints come from the immutable catalog. Drawing functions, isometric projection, construction timing, tools, pan, and zoom remain intact.
 
-Every builder commit, undo, and redo synchronizes the plan through `Simulation.replacePlan`. That method validates and copies the plan while retaining clock state, random state, citizens, and pending commands. It rejects invalid changes atomically, including removing a building referenced by a citizen. The Phase 0 editor has an empty citizen collection and does not create residents or implement NPC behavior.
+Every builder mutation submits structured `CityCommand` payloads through `executeBatch`. Planner scans preview the same reducer and commit one atomic batch, producing a single undo entry for a multi-building/road plan. History entries capture engine `CitySnapshot` data and compatibility metadata; undo/redo calls `restoreCity`. Time, RNG, and queues stay current; IDs retain their high-water mark. Structural changes no longer use `replacePlan`. The editor still creates no residents.
 
 ## Clock and event flow
 
@@ -41,12 +41,13 @@ Construction effects continue to use the original editor timestamps. Simulation 
 
 ## Compatible browser saves
 
-`src/simulation/citySave.ts` keeps the existing `tiny-city-imagine-save-v1` storage key and its top-level `size`, `roads`, `buildings`, and `funds` fields. New saves add `saveVersion: 2` and `simulation: WorldState`.
+`src/simulation/citySave.ts` keeps the original storage key and top-level map fields. New saves use `saveVersion: 3` with a deterministically serialized schema-2 world as authority.
 
-- Legacy maps load unchanged with a fresh paused simulation.
-- New saves restore the world clock, fractional remainder, pause state, and seeded random state.
-- Restored simulation layouts must match the editor map and contain no Phase 1 residents.
-- A corrupt/mismatched optional simulation snapshot falls back to a fresh paused world while retaining a valid saved map.
+- Legacy maps load with a fresh paused world and their current funds as the opening budget.
+- Phase 0 v2 envelopes migrate schema-1 clocks, RNG, roads, and timestamps using editor context.
+- New saves restore the complete ledger, revision, ID cursor, clock remainder, pause state, and RNG. A valid schema-2 snapshot wins over stale top-level roads/funds.
+- The browser adapter remains scoped to the existing 64×64 catalog city without residents; the standalone engine supports generic snapshots independently.
+- Corrupt optional snapshots recover a valid compatibility map and remaining funds with a fresh world; historical spending cannot be recovered from corrupted data.
 - Malformed map data or unavailable storage falls back safely to the existing sample city.
 - Save failures remain visible through the existing city notice. Advancing time or editing marks the Save button dirty.
 
@@ -67,4 +68,4 @@ The GitHub Actions workflow runs these checks on pull requests targeting `main` 
 
 ## API boundary
 
-The minimal FastAPI service still exposes only `/health` and OpenAPI documentation. Its CORS defaults allow localhost/127.0.0.1 on port 5173 and can be configured with `TINY_CITY_CORS_ORIGINS`. The browser runs the simulation locally without requiring the API. World/command HTTP endpoints, AI, pathfinding, and persistence backends remain outside Phase 0.
+The FastAPI scaffold still exposes only health/OpenAPI documentation. The browser runs the simulation locally. World/command HTTP endpoints, Gemini, NPC pathfinding, and persistence backends remain outside Phase 1A.

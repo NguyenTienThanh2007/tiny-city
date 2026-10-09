@@ -15,7 +15,11 @@ vi.mock('./game/CityViewport', () => ({
     <output data-testid="simulation-world">{JSON.stringify(props.world)}</output>
     <button onClick={() => props.onSimulationFrame(100)}>Test frame</button>
     <button onClick={() => props.onSimulationFrame(50)}>Test half frame</button>
-    <button onClick={() => props.onPlaceBuilding('villa', 40, 40)}>Test place villa</button>
+    <button onClick={() => props.onPlaceBuilding('villa', 19, 10)}>Test place villa</button>
+    <button onClick={() => props.onPlaceBuilding('villa', 40, 40)}>Test isolated villa</button>
+    <button onClick={() => props.onPlaceBuilding('park', 40, 40)}>Test place park</button>
+    <button onClick={() => props.onAddRoad({ x: 40, y: 39 })}>Test adjacent road</button>
+    <button onClick={() => props.onBulldoze({ x: 40, y: 39 })}>Test remove road</button>
     <button onClick={() => props.onAddRoad({ x: 42, y: 42 })}>Test paint road</button>
   </div>,
 }));
@@ -25,7 +29,73 @@ function world() { return JSON.parse(screen.getByTestId('simulation-world').text
 function click(name: string) { fireEvent.click(screen.getByRole('button', { name })); }
 function expectSynchronized() { expect(world().plan).toEqual(toCityPlan(editorCity())); }
 
-describe('Phase 0 frontend integration', () => {
+describe('frontend city/simulation integration', () => {
+  it('rejects isolated homes and charges only authoritative successful commands', () => {
+    render(<App />);
+    click('Test isolated villa');
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('must touch a road');
+    expect(editorCity().funds).toBe(initialCity.funds);
+    expect(world().nextBuildingId).toBe(1);
+    expect(world().revision).toBe(0);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    click('Test adjacent road');
+    expect(world().budget.totalSpent).toBe(8);
+    expect(screen.getByLabelText('Latest simulation event')).toHaveTextContent('city.roads-edited');
+    click('Test isolated villa');
+    expect(editorCity().buildings).toHaveLength(13);
+    expect(world().budget).toEqual({ openingBalance: initialCity.funds, balance: initialCity.funds - 128, totalSpent: 128 });
+    expect(world().plan.buildings.at(-1).id).toBe('building-1');
+    expect(screen.getByLabelText('Latest simulation event')).toHaveTextContent('city.building-built');
+    expectSynchronized();
+  });
+
+  it('supports parks without road access and keeps IDs unique across abandoned undo history', () => {
+    render(<App />);
+    click('Test place park');
+    expect(world().plan.buildings.at(-1).type).toBe('park');
+    expect(world().budget.totalSpent).toBe(80);
+    click('Undo');
+    expect(editorCity().funds).toBe(initialCity.funds);
+    expect(world().budget.totalSpent).toBe(0);
+    click('Test place park');
+    expect(world().plan.buildings.at(-1).id).toBe('building-2');
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled();
+    expectSynchronized();
+  });
+
+  it('removes roads without refunds or deleting neighboring buildings and supports budget undo/redo', () => {
+    render(<App />);
+    click('Test adjacent road');
+    click('Test isolated villa');
+    click('Test remove road');
+    expect(editorCity().roads).toHaveLength(initialCity.roads.length);
+    expect(editorCity().buildings).toHaveLength(13);
+    expect(world().budget.totalSpent).toBe(128);
+    click('Undo');
+    expect(editorCity().roads).toHaveLength(initialCity.roads.length + 1);
+    expect(world().budget.totalSpent).toBe(128);
+    click('Undo');
+    expect(world().budget.totalSpent).toBe(8);
+    expect(editorCity().buildings).toHaveLength(12);
+    click('Redo');
+    expect(world().budget.totalSpent).toBe(128);
+    expectSynchronized();
+  });
+
+  it('treats multi-road planner commands as one undoable authoritative batch', () => {
+    render(<App />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'thêm 5 đường' } });
+    click('Apply city plan');
+    expect(editorCity().roads).toHaveLength(initialCity.roads.length + 5);
+    expect(world().budget.totalSpent).toBe(40);
+    click('Undo');
+    expect(editorCity().roads).toEqual(initialCity.roads);
+    expect(world().budget.totalSpent).toBe(0);
+    click('Redo');
+    expect(world().budget.totalSpent).toBe(40);
+    expectSynchronized();
+  });
+
   it('connects resume, pause, manual stepping, event output, and the live clock', () => {
     render(<StrictMode><App /></StrictMode>);
     expect(screen.getByLabelText('Simulation clock')).toHaveTextContent('DAY 01 · 00:00');

@@ -5,6 +5,7 @@ import { createWorld, freeze } from './world.js';
 
 export const EXAMPLE_CITY_PLAN: CityPlan = freeze({
   id: 'phase-0-plan', name: 'Tiny Meadow', width: 24, height: 18,
+  roads: [], blockedTiles: [],
   buildings: [
     { id: 'home-maple', name: 'Maple House', kind: 'home', position: { x: 2, y: 2 }, footprint: { width: 2, height: 2 }, capacity: 2 },
     { id: 'home-willow', name: 'Willow House', kind: 'home', position: { x: 6, y: 2 }, footprint: { width: 2, height: 2 }, capacity: 2 },

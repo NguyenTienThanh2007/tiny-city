@@ -1,7 +1,7 @@
 export const MAP_SIZE = 64;
 
 export type Tool = 'select' | 'road' | 'villa' | 'park' | 'clubhouse' | 'bulldoze';
-export type BuildingKind = Exclude<Tool, 'select' | 'road' | 'bulldoze'>;
+export type BuildingKind = BuildingType;
 
 export interface Cell {
   x: number;
@@ -34,9 +34,9 @@ export interface CityState {
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingSpec> = {
-  villa: { kind: 'villa', label: 'Villa', width: 2, height: 2, cost: 120, tint: 0xe9d3a3 },
-  park: { kind: 'park', label: 'Park', width: 4, height: 4, cost: 80, tint: 0x74a979 },
-  clubhouse: { kind: 'clubhouse', label: 'Clubhouse', width: 3, height: 3, cost: 220, tint: 0xe7a66d },
+  villa: { kind: 'villa', label: BUILDING_CATALOG.villa.label, width: BUILDING_CATALOG.villa.footprint.width, height: BUILDING_CATALOG.villa.footprint.height, cost: BUILDING_CATALOG.villa.cost, tint: 0xe9d3a3 },
+  park: { kind: 'park', label: BUILDING_CATALOG.park.label, width: BUILDING_CATALOG.park.footprint.width, height: BUILDING_CATALOG.park.footprint.height, cost: BUILDING_CATALOG.park.cost, tint: 0x74a979 },
+  clubhouse: { kind: 'clubhouse', label: BUILDING_CATALOG.clubhouse.label, width: BUILDING_CATALOG.clubhouse.footprint.width, height: BUILDING_CATALOG.clubhouse.footprint.height, cost: BUILDING_CATALOG.clubhouse.cost, tint: 0xe7a66d },
 };
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;
@@ -54,31 +54,5 @@ export function occupiedCells(building: Building): Cell[] {
   return cells;
 }
 
-export function canPlace(city: CityState, kind: BuildingKind, x: number, y: number): boolean {
-  const spec = BUILDINGS[kind];
-  if (x < 0 || y < 0 || x + spec.width > city.size || y + spec.height > city.size) return false;
-  const blocked = new Set(city.roads.map((cell) => cellKey(cell.x, cell.y)));
-  for (const building of city.buildings) {
-    for (const cell of occupiedCells(building)) blocked.add(cellKey(cell.x, cell.y));
-  }
-  for (let dy = 0; dy < spec.height; dy += 1) {
-    for (let dx = 0; dx < spec.width; dx += 1) {
-      if (!isLandCell(x + dx, y + dy, city.size)) return false;
-      if (blocked.has(cellKey(x + dx, y + dy))) return false;
-    }
-  }
-  return true;
-}
-
-export function createBuilding(kind: BuildingKind, x: number, y: number, index: number): Building {
-  const spec = BUILDINGS[kind];
-  const shortName = kind === 'villa' ? 'Villa' : spec.label;
-  return {
-    id: `${kind}-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
-    kind,
-    x,
-    y,
-    name: kind === 'villa' ? `Villa ${String(index).padStart(2, '0')}` : shortName,
-    createdAt: Date.now(),
-  };
-}
+import { BUILDING_CATALOG } from '@tiny-city/simulation';
+import type { BuildingType } from '@tiny-city/simulation';

@@ -1,6 +1,6 @@
 # @tiny-city/simulation
 
-Headless TypeScript simulation foundation with no runtime dependencies. Exposes JSON-safe readonly contracts, a deterministic fixed-step runner, seeded random helpers, typed commands/events, and optional frontend fixtures.
+Headless TypeScript engine with no runtime dependencies. Exposes readonly schema-2 contracts, a deterministic clock, seeded randomness, authoritative city commands/budgets, occupancy and road topology, typed events, and deterministic serialization/Phase 0 migration.
 
 ```sh
 npm ci
@@ -20,4 +20,4 @@ const result = simulation.advance(100);
 
 Requires Node.js 22.12+ for development tooling. Output is ESM targeting ES2022 and includes declarations. Build before consuming the package.
 
-See [public contracts](../../docs/simulation/contracts.md) and [Developer B integration](../../docs/simulation/integration.md). No AI, movement/pathfinding, storage backend, renderer code, or shared-contract package is included.
+See [public contracts](../../docs/simulation/contracts.md), [Phase 1A coordination](../../docs/simulation/phase-1a.md), and [frontend integration](../../docs/simulation/integration.md). No Gemini, NPC movement/pathfinding, storage backend, graphics implementation, or shared-contract copy is included.

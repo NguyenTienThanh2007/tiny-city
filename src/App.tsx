@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { getGameTime } from '@tiny-city/simulation';
+import { applyCityCommand, CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
+import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import CityViewport from './game/CityViewport';
 import { loadCitySave, saveCity } from './simulation/citySave';
 import { useCitySimulation } from './simulation/useCitySimulation';
-import { BUILDINGS, canPlace, createBuilding, isLandCell, type BuildingKind, type CityState, type Cell, type Tool } from './types';
+import { projectCity } from './simulation/cityAdapter';
+import { BUILDINGS, type BuildingKind, type CityState, type Cell, type Tool } from './types';
+
+type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
 
 const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
   { id: 'select', label: 'Select', shortcut: 'V' },
-  { id: 'road', label: 'Road', shortcut: 'R', cost: 8 },
+  { id: 'road', label: 'Road', shortcut: 'R', cost: CONSTRUCTION_COSTS.road },
   { id: 'villa', label: 'Villa', shortcut: '1', cost: BUILDINGS.villa.cost },
   { id: 'park', label: 'Park', shortcut: '2', cost: BUILDINGS.park.cost },
   { id: 'clubhouse', label: 'Clubhouse', shortcut: '3', cost: BUILDINGS.clubhouse.cost },
@@ -56,11 +60,11 @@ function MiniMap({ city }: { city: CityState }) {
 function App() {
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
-  const { world, lastEvent, advance, syncCity, togglePause, step, getSnapshot } = useCitySimulation(loaded.city, loaded.world);
+  const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, step, getSnapshot } = useCitySimulation(loaded.city, loaded.world);
   const cityRef = useRef(city);
   cityRef.current = city;
-  const [history, setHistory] = useState<CityState[]>([]);
-  const [redoHistory, setRedoHistory] = useState<CityState[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [redoHistory, setRedoHistory] = useState<HistoryEntry[]>([]);
   const [tool, setTool] = useState<Tool>('select');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
@@ -88,79 +92,80 @@ function App() {
     if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
   }, []);
 
-  const commit = useCallback((next: CityState) => {
-    const previous = cityRef.current;
-    syncCity(next);
+  const commitCommands = useCallback((commands: readonly CityCommand[]) => {
+    const previous = { snapshot: getCitySnapshot(), city: cityRef.current };
+    const result = executeBatch(commands);
+    if (!result.applied) {
+      const rejection = result.events.find((event) => event.type === 'city.command-rejected');
+      if (rejection?.type === 'city.command-rejected') {
+        const reason = rejection.reason;
+        if (reason === 'road-required') showNotice('Villas and clubhouses must touch a road along an edge.');
+        else if (reason === 'insufficient-funds') showNotice('Not enough funds to complete that edit.');
+        else if (reason === 'building-in-use') showNotice('This building is referenced by a resident schedule.');
+        else if (reason !== 'road-already-exists' && reason !== 'road-not-found' && reason !== 'building-not-found') {
+          showNotice('That lot is occupied or outside the buildable area.');
+        }
+      }
+      return result;
+    }
+    const next = projectCity(result.state, cityRef.current, Date.now());
     setHistory((current) => [...current.slice(-39), previous]);
     setRedoHistory([]);
     cityRef.current = next;
     setCity(next);
     setSaved(false);
-  }, [syncCity]);
+    return result;
+  }, [executeBatch, getCitySnapshot, showNotice]);
 
   const addRoad = useCallback((cell: Cell) => {
-    const current = cityRef.current;
-    if (!isLandCell(cell.x, cell.y, current.size)) return;
-    if (current.funds < 8) { showNotice('You need $8 to build a road tile.'); return; }
-    if (current.roads.some((road) => road.x === cell.x && road.y === cell.y)) return;
-    if (current.buildings.some((building) => {
-      const spec = BUILDINGS[building.kind];
-      return cell.x >= building.x && cell.x < building.x + spec.width && cell.y >= building.y && cell.y < building.y + spec.height;
-    })) { showNotice('Roads cannot overlap a building.'); return; }
-    commit({ ...current, roads: [...current.roads, cell], funds: current.funds - 8 });
-  }, [commit, showNotice]);
+    const preview = validateRoadPlacement(getSnapshot(), cell);
+    if (!preview.valid && preview.reason === 'road-already-exists') return;
+    commitCommands([{ type: 'city.edit-roads', add: [cell], remove: [] }]);
+  }, [commitCommands, getSnapshot]);
 
   const placeBuilding = useCallback((kind: BuildingKind, x: number, y: number) => {
-    const current = cityRef.current;
-    const cost = BUILDINGS[kind].cost;
-    if (!canPlace(current, kind, x, y)) { showNotice('That lot is occupied or outside the buildable area.'); return; }
-    if (current.funds < cost) { showNotice(`You need $${cost} to build a ${BUILDINGS[kind].label.toLowerCase()}.`); return; }
-    const building = createBuilding(kind, x, y, current.buildings.filter((entry) => entry.kind === kind).length + 1);
-    commit({ ...current, buildings: [...current.buildings, building], funds: current.funds - cost });
-    setSelectedBuildingId(building.id);
+    const result = commitCommands([{ type: 'city.build', buildingType: kind, position: { x, y } }]);
+    if (!result.applied) return;
+    const event = result.events.find((entry) => entry.type === 'city.building-built');
+    if (event?.type === 'city.building-built') setSelectedBuildingId(event.building.id);
     setTool('select');
-  }, [commit, showNotice]);
+  }, [commitCommands]);
 
   const bulldoze = useCallback((cell: Cell) => {
-    const current = cityRef.current;
-    const building = [...current.buildings].reverse().find((entry) => {
-      const spec = BUILDINGS[entry.kind];
-      return cell.x >= entry.x && cell.x < entry.x + spec.width && cell.y >= entry.y && cell.y < entry.y + spec.height;
-    });
-    if (building) {
-      commit({ ...current, buildings: current.buildings.filter((entry) => entry.id !== building.id) });
-      if (selectedBuildingId === building.id) setSelectedBuildingId(null);
-      return;
-    }
-    const roads = current.roads.filter((road) => road.x !== cell.x || road.y !== cell.y);
-    if (roads.length !== current.roads.length) commit({ ...current, roads });
-  }, [commit, selectedBuildingId]);
+    const occupant = new OccupancyGrid(getSnapshot().plan).get(cell);
+    if (occupant?.type === 'building') {
+      const result = commitCommands([{ type: 'city.demolish', buildingId: occupant.buildingId }]);
+      if (result.applied && selectedBuildingId === occupant.buildingId) setSelectedBuildingId(null);
+    } else if (occupant?.type === 'road') commitCommands([{ type: 'city.edit-roads', add: [], remove: [cell] }]);
+  }, [commitCommands, getSnapshot, selectedBuildingId]);
 
   const undo = useCallback(() => {
     const previous = history.at(-1);
     if (!previous) return;
-    const currentCity = cityRef.current;
-    syncCity(previous);
+    const currentCity = { snapshot: getCitySnapshot(), city: cityRef.current };
+    restoreCity(previous.snapshot);
+    const next = projectCity(getSnapshot(), previous.city);
     setRedoHistory((current) => [...current, currentCity]);
     setHistory((current) => current.slice(0, -1));
-    cityRef.current = previous;
-    setCity(previous);
-    setSaved(false);
-    setSelectedBuildingId(null);
-  }, [history, syncCity]);
-
-  const redo = useCallback(() => {
-    const next = redoHistory.at(-1);
-    if (!next) return;
-    const currentCity = cityRef.current;
-    syncCity(next);
-    setHistory((current) => [...current.slice(-39), currentCity]);
-    setRedoHistory((current) => current.slice(0, -1));
     cityRef.current = next;
     setCity(next);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [redoHistory, syncCity]);
+  }, [history, restoreCity, getSnapshot, getCitySnapshot]);
+
+  const redo = useCallback(() => {
+    const next = redoHistory.at(-1);
+    if (!next) return;
+    const currentCity = { snapshot: getCitySnapshot(), city: cityRef.current };
+    restoreCity(next.snapshot);
+    const restored = projectCity(getSnapshot(), next.city);
+    setHistory((current) => [...current.slice(-39), currentCity]);
+    setRedoHistory((current) => current.slice(0, -1));
+    cityRef.current = restored;
+    setCity(restored);
+    setSaved(false);
+    setSelectedBuildingId(null);
+  }, [redoHistory, restoreCity, getSnapshot, getCitySnapshot]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -227,39 +232,34 @@ function App() {
     const count = Math.max(1, Math.min(12, Number(match[1] ?? 1)));
     const subject = match[2].toLowerCase();
     if (subject.startsWith('road') || subject.startsWith('đường')) {
-      let added = 0;
-      let current = cityRef.current;
-      const nextRoads = [...current.roads];
-      for (let y = 30; y < 42 && added < count; y += 1) {
+      const commands: CityCommand[] = [];
+      let draft = getSnapshot();
+      for (let y = 30; y < 42 && commands.length < count; y += 1) {
         const cell = { x: 18, y };
-        if (current.funds - added * 8 < 8) break;
-        if (nextRoads.some((road) => road.x === cell.x && road.y === cell.y)) continue;
-        const blocked = current.buildings.some((building) => {
-          const spec = BUILDINGS[building.kind];
-          return cell.x >= building.x && cell.x < building.x + spec.width && cell.y >= building.y && cell.y < building.y + spec.height;
-        });
-        if (blocked || !isLandCell(cell.x, cell.y, current.size)) continue;
-        nextRoads.push(cell);
-        added += 1;
+        if (!validateRoadPlacement(draft, cell).valid) continue;
+        const command: CityCommand = { type: 'city.edit-roads', add: [cell], remove: [] };
+        draft = applyCityCommand(draft, command).state;
+        commands.push(command);
       }
-      if (added) commit({ ...current, roads: nextRoads, funds: current.funds - added * 8 });
+      const added = commands.length;
+      if (added) commitCommands(commands);
       showNotice(added ? `Built ${added} road tile${added === 1 ? '' : 's'}.` : 'No clear road lots were available for that plan.');
       setCommand('');
       return;
     }
     const kind: BuildingKind = subject.startsWith('park') || subject.startsWith('công') ? 'park' : subject.startsWith('club') ? 'clubhouse' : 'villa';
-    let placed = 0;
-    let current = cityRef.current;
-    for (let y = 8; y <= 55 && placed < count; y += 1) {
-      for (let x = 7; x <= 55 && placed < count; x += 1) {
-        if (!canPlace(current, kind, x, y)) continue;
-        if (current.funds < BUILDINGS[kind].cost) break;
-        const building = createBuilding(kind, x, y, current.buildings.filter((entry) => entry.kind === kind).length + 1);
-        current = { ...current, buildings: [...current.buildings, building], funds: current.funds - BUILDINGS[kind].cost };
-        placed += 1;
+    const commands: CityCommand[] = [];
+    let draft = getSnapshot();
+    for (let y = 8; y <= 55 && commands.length < count; y += 1) {
+      for (let x = 7; x <= 55 && commands.length < count; x += 1) {
+        if (!validateBuildingPlacement(draft, kind, { x, y }).valid) continue;
+        const command: CityCommand = { type: 'city.build', buildingType: kind, position: { x, y } };
+        draft = applyCityCommand(draft, command).state;
+        commands.push(command);
       }
     }
-    if (placed) commit(current);
+    const placed = commands.length;
+    if (placed) commitCommands(commands);
     setTool('select');
     showNotice(placed ? `Built ${placed} ${kind}${placed === 1 ? '' : 's'}.` : 'No open lots or funds were available for that plan.');
     setCommand('');
@@ -368,9 +368,9 @@ function App() {
               <div className="goal-card"><div className="goal-icon"><Icon name="sparkle" size={17} /></div><div><strong>One street at a time</strong><p>Connect homes to roads, then make room for parks and places to gather.</p></div></div>
               <div className="quick-heading"><span>QUICK BUILD</span><span>SELECT A TOOL</span></div>
               <div className="quick-build-list">
-                <button onClick={() => setTool('villa')}><span className="quick-thumb villa-thumb"><i /></span><span><strong>Coastal villa</strong><small>2 × 2 tiles</small></span><b>$120</b></button>
-                <button onClick={() => setTool('park')}><span className="quick-thumb park-thumb"><i /><i /><i /></span><span><strong>Garden park</strong><small>4 × 4 tiles</small></span><b>$80</b></button>
-                <button onClick={() => setTool('clubhouse')}><span className="quick-thumb club-thumb"><i /></span><span><strong>Clubhouse</strong><small>3 × 3 tiles</small></span><b>$220</b></button>
+                <button onClick={() => setTool('villa')}><span className="quick-thumb villa-thumb"><i /></span><span><strong>Coastal villa</strong><small>2 × 2 tiles</small></span><b>${BUILDINGS.villa.cost}</b></button>
+                <button onClick={() => setTool('park')}><span className="quick-thumb park-thumb"><i /><i /><i /></span><span><strong>Garden park</strong><small>4 × 4 tiles</small></span><b>${BUILDINGS.park.cost}</b></button>
+                <button onClick={() => setTool('clubhouse')}><span className="quick-thumb club-thumb"><i /></span><span><strong>Clubhouse</strong><small>3 × 3 tiles</small></span><b>${BUILDINGS.clubhouse.cost}</b></button>
               </div>
             </>
           )}
