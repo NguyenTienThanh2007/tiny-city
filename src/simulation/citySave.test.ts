@@ -51,9 +51,9 @@ describe('compatible browser saves', () => {
     expect(loadCitySave(localStorage).city.buildings.at(-1)?.createdAt).toBe(12345);
   });
 
-  it('loads legacy v1 map data with a new paused simulation', () => {
+  it.each([undefined, 1])('loads legacy v1 map data with envelope version %s', (saveVersion) => {
     const legacy = { ...initialCity, funds: 1234 };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(legacy));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...legacy, ...(saveVersion === undefined ? {} : { saveVersion }) }));
     const loaded = loadCitySave(localStorage);
     expect(loaded.city).toEqual(legacy);
     expect(loaded.world.clock.tick).toBe(0);
@@ -115,5 +115,35 @@ describe('compatible browser saves', () => {
     const otherCity = { ...initialCity, buildings: [] };
     expect(() => saveCity(localStorage, initialCity, createCityWorld(otherCity))).toThrow(/layouts.*must match/);
     expect(localStorage.getItem(SAVE_KEY)).toBeNull();
+  });
+});
+
+
+describe('save recovery feedback', () => {
+  it('clamps future construction timestamps without losing authoritative map data', () => {
+    const city = { ...initialCity, buildings: initialCity.buildings.map((building) => ({ ...building, createdAt: 1e100 })) };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(city));
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.city.buildings).toHaveLength(city.buildings.length);
+    expect(loaded.city.buildings[0].createdAt).toBeLessThanOrEqual(Date.now());
+    expect(loaded.world.plan.buildings[0].id).toBe(city.buildings[0].id);
+  });
+
+  it('reports a broken canonical snapshot without silently claiming full restoration', () => {
+    const raw = JSON.stringify({ ...initialCity, saveVersion: 3, simulation: { schemaVersion: 2 } });
+    localStorage.setItem(SAVE_KEY, raw);
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.city).toEqual(initialCity);
+    expect(loaded.notice).toContain('Simulation history could not be restored');
+    expect(localStorage.getItem(SAVE_KEY)).toBe(raw);
+  });
+
+  it('does not downgrade an unsupported future envelope to a legacy save', () => {
+    const raw = JSON.stringify({ ...initialCity, funds: 1, saveVersion: 999 });
+    localStorage.setItem(SAVE_KEY, raw);
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.notice).toContain('saved city could not be loaded');
+    expect(loaded.city).toEqual(initialCity);
+    expect(localStorage.getItem(SAVE_KEY)).toBe(raw);
   });
 });

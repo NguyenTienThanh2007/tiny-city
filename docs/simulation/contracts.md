@@ -89,7 +89,7 @@ Road-required buildings need an orthogonally adjacent road along any footprint e
 
 Each successful city command increments revision; time/citizen ticks do not. Rejections consume no budget, IDs, revision, or RNG. Atomic batches publish only their indexed rejection if any member fails; empty batches are no-ops. Queued city/citizen commands retain FIFO tick execution. Immediate edits do not advance the clock or consume queued commands.
 
-`validateBuildingPlacement` / `validateRoadPlacement` return `PlacementValidation` with cost or a `CityRejectionReason`. `applyCityCommand` / `applyCityCommandBatch` are pure previews using the exact commit rules; `Simulation.execute` / `executeBatch` own live state publication. Worlds passed to previews must be valid snapshots.
+`validateBuildingPlacement` / `validateBuildingMove` / `validateRoadPlacement` return `PlacementValidation` with cost or a `CityRejectionReason`. `applyCityCommand` / `applyCityCommandBatch` are pure previews using the exact commit rules; `Simulation.execute` / `executeBatch` own live state publication. Worlds passed to previews must be valid snapshots.
 
 `OccupancyGrid.get(position)` returns building ID, road, blocked, or null; `isInBounds` requires integer cells. `footprintTiles` and `footprintPerimeter` return immutable arrays. `RoadGraph` exposes immutable neighbors/components, component IDs, `areConnected`, and `getAdjacentComponents`. Edges are orthogonal; neighbors/components are sorted deterministically regardless of input road order. These are topology queries, not NPC pathfinding. Indexes stay out of snapshots.
 
@@ -124,3 +124,6 @@ The returned event array and its objects are frozen. Events are transient output
 Demo fixtures consume seeded draws for spawn offsets and retain the resulting `randomState`. Phase 0 ticks do not consume random draws. Later systems must explicitly use and retain the returned state instead of using `Math.random`.
 
 `serializeWorld` writes deterministic contract-only JSON with canonical object keys and preserved collection order. `deserializeWorld` validates schema 2 or migrates schema 1. `LegacyWorldOptions` supplies old editor roads, blocked tiles, and current funds as the opening balance; missing context defaults to empty tiles/zero funds. Known catalog types are inferred, but past spending is not guessed. Invalid or unsupported snapshots throw RangeError before publication. Valid schema-2 restoration preserves clock remainder, RNG, budget, revision, ID cursor, and collection order; indexes rebuild from the canonical plan. Pending commands live on the runner and are excluded from `WorldState`; save after draining them, or retain a separate command journal. Restoring a snapshot starts with an empty command queue.
+
+
+Phase 1 acceptance extends `CONSTRUCTION_COSTS` to all nine catalog types, keeping the existing dollar amounts. The world remains schema 2 and city command/event payloads remain unchanged. See [acceptance audit](./phase-1-acceptance.md) for coverage and renderer/persistence integration decisions.

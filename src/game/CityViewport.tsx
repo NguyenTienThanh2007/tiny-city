@@ -1,16 +1,15 @@
-import { Application, Container, Graphics, Rectangle, Text } from 'pixi.js';
-import { useEffect, useRef } from 'react';
+import { Application, Container, Graphics, Text } from 'pixi.js';
+import { useEffect, useRef, useState } from 'react';
 import type { CityPlan, WorldState } from '@tiny-city/simulation';
 import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
-import { BUILDINGS, cellKey, isLandCell, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
+import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
 
-const TILE_W = 56;
-const TILE_H = 28;
-const HALF_W = TILE_W / 2;
-const HALF_H = TILE_H / 2;
-const MAP_OFFSET_X = 32 * TILE_W;
+import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
+import { rejectionFeedback } from '../simulation/feedback';
+
+export type CameraRequest = { id: number; cell?: Cell };
 
 type Props = {
   city: CityState;
@@ -26,14 +25,10 @@ type Props = {
   onAddRoad: (cell: Cell) => void;
   onBulldoze: (cell: Cell) => void;
   onCameraFootprintChange: (points: Point[]) => void;
+  cameraRequest?: CameraRequest;
+  onBeginGesture?: () => void;
+  onEndGesture?: () => void;
 };
-
-type Point = { x: number; y: number };
-
-const iso = (x: number, y: number): Point => ({
-  x: MAP_OFFSET_X + (x - y) * HALF_W,
-  y: (x + y) * HALF_H,
-});
 
 function polygon(graphics: Graphics, points: Point[], color: number, alpha = 1, stroke?: number) {
   graphics.poly(points.flatMap((point) => [point.x, point.y])).fill({ color, alpha });
@@ -42,10 +37,6 @@ function polygon(graphics: Graphics, points: Point[], color: number, alpha = 1, 
 
 function tileDiamond(x: number, y: number): Point[] {
   return [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)];
-}
-
-function footprint(x: number, y: number, width: number, height: number): Point[] {
-  return [iso(x, y), iso(x + width, y), iso(x + width, y + height), iso(x, y + height)];
 }
 
 function drawTerrain(layer: Container, size: number) {
@@ -92,14 +83,12 @@ function drawVilla(graphics: Graphics, building: Building, progress: number) {
   polygon(graphics, top, progress < 0.62 ? 0xb9a587 : 0xb86e54, 1, 0x89513e);
 
   const center = iso(building.x + 1, building.y + 1);
-  const window = new Graphics();
+  const window = graphics;
   window.roundRect(center.x - 7, center.y - 23, 5, 7, 1).fill(0xa7d1ca);
   window.roundRect(center.x + 3, center.y - 23, 5, 7, 1).fill(0xa7d1ca);
-  graphics.addChild(window);
-  const tree = new Graphics();
+  const tree = graphics;
   tree.rect(center.x + 16, center.y - 11, 2, 8).fill(0x765a3f);
   tree.circle(center.x + 17, center.y - 15, 6).fill(0x4f8d63);
-  graphics.addChild(tree);
 }
 
 function drawPark(graphics: Graphics, building: Building) {
@@ -111,7 +100,7 @@ function drawPark(graphics: Graphics, building: Building) {
   polygon(graphics, [ground[1], ground[2], upper[2], upper[1]], 0x648b62);
   polygon(graphics, upper, 0x85ad76, 1, 0x608362);
 
-  const path = new Graphics();
+  const path = graphics;
   const a = iso(building.x + 1.6, building.y + 0.7);
   const b = iso(building.x + 2.4, building.y + 3.3);
   path.moveTo(a.x, a.y - 5).lineTo(b.x, b.y - 5).stroke({ color: 0xdccba2, width: 5, alpha: 0.9 });
@@ -121,7 +110,6 @@ function drawPark(graphics: Graphics, building: Building) {
     path.circle(tree.x, tree.y - 18, 8).fill(0x3e7958);
     path.circle(tree.x - 4, tree.y - 16, 4).fill(0x568d61);
   }
-  graphics.addChild(path);
 }
 
 function drawClubhouse(graphics: Graphics, building: Building) {
@@ -153,7 +141,7 @@ function drawBlock(graphics: Graphics, building: Building, progress: number, opt
   const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
   const rowGap = Math.max(8, lift / (floors + 1));
   const columns = Math.max(2, Math.min(5, Math.floor(spec.width * 1.25)));
-  const windows = new Graphics();
+  const windows = graphics;
   for (let row = 0; row < floors; row += 1) {
     for (let column = 0; column < columns; column += 1) {
       const offsetX = (column - (columns - 1) / 2) * Math.min(11, 32 / columns);
@@ -166,7 +154,6 @@ function drawBlock(graphics: Graphics, building: Building, progress: number, opt
     windows.moveTo(center.x - 17, center.y - lift + 7).lineTo(center.x + 17, center.y - lift + 7)
       .stroke({ color: 0xe9f6ef, width: 2, alpha: 0.58 });
   }
-  graphics.addChild(windows);
 }
 
 function drawPool(graphics: Graphics, building: Building) {
@@ -177,13 +164,12 @@ function drawPool(graphics: Graphics, building: Building) {
   polygon(graphics, [ground[0], ground[1], upper[1], upper[0]], 0xd8d3b8);
   polygon(graphics, [ground[1], ground[2], upper[2], upper[1]], 0xbeb89e);
   polygon(graphics, upper, 0x56aeb8, 1, 0xf4f0d9);
-  const water = new Graphics();
+  const water = graphics;
   const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
   water.moveTo(center.x - 24, center.y - 4).quadraticCurveTo(center.x, center.y - 10, center.x + 24, center.y - 3)
     .stroke({ color: 0xd8f4ea, width: 2, alpha: 0.8 });
   water.moveTo(center.x - 20, center.y + 5).quadraticCurveTo(center.x, center.y, center.x + 20, center.y + 6)
     .stroke({ color: 0xd8f4ea, width: 1.4, alpha: 0.7 });
-  graphics.addChild(water);
 }
 
 function drawBuildingArt(graphics: Graphics, building: Building, progress: number) {
@@ -243,11 +229,15 @@ function redrawCity(terrain: Container, roads: Container, buildings: Container, 
     drawTerrain(terrain, plan.width);
   }
   roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
-  buildings.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   drawRoads(roads, city);
+  redrawBuildings(buildings, city, plan, selectedId);
+}
+
+function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null) {
+  buildings.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   getRenderBuildings(city, plan).sort((a, b) => a.x + a.y - (b.x + b.y)).forEach((building) => {
     const age = Date.now() - building.createdAt;
-    drawBuilding(buildings, building, building.id === selectedId, Math.min(1, age / 5200));
+    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)));
   });
 }
 
@@ -294,7 +284,7 @@ export function buildingAtPoint(city: CityState, point: Point): Building | undef
   for (const building of byDrawOrder) {
     const spec = BUILDINGS[building.kind];
     const ground = footprint(building.x, building.y, spec.width, spec.height);
-    const progress = Math.min(1, (Date.now() - building.createdAt) / 5200);
+    const progress = Math.max(0, Math.min(1, (Date.now() - building.createdAt) / 5200));
     const lift = buildingLift(building, progress);
     const top = ground.map((vertex) => ({ x: vertex.x, y: vertex.y - lift }));
     const visibleFaces = [
@@ -309,12 +299,6 @@ export function buildingAtPoint(city: CityState, point: Point): Building | undef
   return buildingAt(city, cell.x, cell.y);
 }
 
-function toCell(worldPoint: Point): Cell {
-  const a = (worldPoint.x - MAP_OFFSET_X) / HALF_W;
-  const b = worldPoint.y / HALF_H;
-  return { x: Math.floor((a + b) / 2), y: Math.floor((b - a) / 2) };
-}
-
 export default function CityViewport(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -322,14 +306,30 @@ export default function CityViewport(props: Props) {
   const roadsRef = useRef<Container | null>(null);
   const buildingsRef = useRef<Container | null>(null);
   const propsRef = useRef(props);
+  const refreshRef = useRef<(() => void) | null>(null);
+  const cameraRef = useRef<((request: CameraRequest) => void) | null>(null);
+  const [preview, setPreview] = useState('');
+  const [renderError, setRenderError] = useState(false);
 
-  useEffect(() => { propsRef.current = props; }, [props]);
+  useEffect(() => {
+    const previous = propsRef.current;
+    propsRef.current = props;
+    if (previous.tool !== props.tool || previous.movingBuildingId !== props.movingBuildingId) {
+      props.onEndGesture?.();
+    }
+    refreshRef.current?.();
+  }, [props]);
+
+  useEffect(() => {
+    if (props.cameraRequest) cameraRef.current?.(props.cameraRequest);
+  }, [props.cameraRequest]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     let disposed = false;
     const app = new Application();
+    let cleanup = () => {};
 
     void (async () => {
       await app.init({
@@ -353,15 +353,18 @@ export default function CityViewport(props: Props) {
       ghost.addChild(ghostShape);
       world.addChild(terrain, roads, buildings, ghost);
       app.stage.addChild(world);
-      world.eventMode = 'static';
-      world.hitArea = new Rectangle(-10_000, -10_000, 20_000, 20_000);
+      // Pixi v8 skips listeners on passive containers, including the default stage.
+      app.stage.eventMode = 'static';
+      app.stage.hitArea = app.screen;
+      world.eventMode = 'none';
       terrainRef.current = terrain;
       roadsRef.current = roads;
       buildingsRef.current = buildings;
       redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true);
 
-      const view = { x: 0, y: 0, scale: 0.86 };
-      const center = iso(18, 20);
+      const home = cityView(propsRef.current.city, app.screen.width, app.screen.height);
+      const view = { x: 0, y: -25, scale: home.scale };
+      let center = home.center;
       const updateCamera = () => {
         world.scale.set(view.scale);
         world.position.set(app.screen.width / 2 - center.x * view.scale + view.x, app.screen.height / 2 - center.y * view.scale + view.y);
@@ -374,31 +377,46 @@ export default function CityViewport(props: Props) {
         const footprintPoints = screenCorners.map((corner) => {
           const localX = (corner.x - world.position.x) / view.scale;
           const localY = (corner.y - world.position.y) / view.scale;
-          const a = (localX - MAP_OFFSET_X) / HALF_W;
-          const b = localY / HALF_H;
-          return { x: (a + b) / 2, y: (b - a) / 2 };
+          return toGrid({ x: localX, y: localY });
         });
         propsRef.current.onCameraFootprintChange(footprintPoints);
       };
-      updateCamera();
+      cameraRef.current = (request) => {
+        if (request.cell) center = iso(request.cell.x, request.cell.y);
+        else {
+          const next = cityView(propsRef.current.city, app.screen.width, app.screen.height);
+          center = next.center; view.scale = next.scale;
+        }
+        view.x = 0; view.y = -25;
+        updateCamera();
+        refreshRef.current?.();
+      };
+      if (propsRef.current.cameraRequest) cameraRef.current(propsRef.current.cameraRequest);
+      else updateCamera();
 
       let pointerAction: 'paint' | 'bulldoze' | 'pan' | null = null;
       let lastPointer = { x: 0, y: 0 };
-      let shiftPressed = false;
-      const updateShift = (event: KeyboardEvent) => { shiftPressed = event.shiftKey; };
-      window.addEventListener('keydown', updateShift);
-      window.addEventListener('keyup', updateShift);
+      let lastCell: Cell | null = null;
+      let hoverPoint: Point | null = null;
+      let gestureTool = propsRef.current.tool;
+      const endGesture = () => {
+        pointerAction = null; lastCell = null;
+        propsRef.current.onEndGesture?.();
+      };
+      const leave = () => {
+        endGesture(); hoverPoint = null;
+        ghostShape.clear(); setPreview('');
+      };
       const getLocalPoint = (event: { global: Point }) => world.toLocal(event.global);
-      const handleCell = (cell: Cell, localPoint: Point) => {
+      const handleCell = (cell: Cell, localPoint?: Point) => {
         const current = propsRef.current;
         if (pointerAction === 'bulldoze') {
-          const building = buildingAtPoint(current.city, localPoint);
+          const building = localPoint ? buildingAtPoint(current.city, localPoint) : buildingAt(current.city, cell.x, cell.y);
           if (building) {
             current.onBulldoze({ x: building.x, y: building.y });
             return;
           }
         }
-        if (!isLandCell(cell.x, cell.y, current.city.size)) return;
         if (pointerAction === 'paint') {
           current.onAddRoad(cell);
         } else if (pointerAction === 'bulldoze') {
@@ -411,14 +429,19 @@ export default function CityViewport(props: Props) {
         const cell = toCell(localPoint);
         lastPointer = { x: event.global.x, y: event.global.y };
         const current = propsRef.current;
-        if (event.button === 1 || event.button === 2 || shiftPressed) {
+        gestureTool = current.tool;
+        lastCell = cell;
+        hoverPoint = { x: event.global.x, y: event.global.y };
+        if (event.button === 1 || event.button === 2 || event.shiftKey) {
           pointerAction = 'pan';
           return;
         }
         if (current.tool === 'road') {
+          current.onBeginGesture?.();
           pointerAction = 'paint';
           handleCell(cell, localPoint);
         } else if (current.tool === 'bulldoze') {
+          current.onBeginGesture?.();
           pointerAction = 'bulldoze';
           handleCell(cell, localPoint);
         } else if (current.tool === 'move') {
@@ -435,109 +458,141 @@ export default function CityViewport(props: Props) {
           current.onPlaceBuilding(kind, cell.x, cell.y);
         }
       });
+      const refreshPreview = () => {
+        ghostShape.clear();
+        if (!hoverPoint) return;
+        const localPoint = world.toLocal(hoverPoint);
+        const cell = toCell(localPoint);
+        const current = propsRef.current;
+        if (gestureTool !== current.tool) endGesture();
+        let label = '';
+        if (current.tool === 'road') {
+          const validation = validateRoadPlacement(current.world, cell);
+          label = validation.valid ? 'Road · Ready to build · $8' : rejectionFeedback[validation.reason];
+          polygon(ghostShape, tileDiamond(cell.x, cell.y), validation.valid ? 0x8ba8ac : 0xd97962,
+            0.64, validation.valid ? 0xe9f0d5 : 0xb84c43);
+        } else if (Object.hasOwn(BUILDINGS, current.tool)) {
+          const kind = current.tool as BuildingKind;
+          const spec = BUILDINGS[kind];
+          const validation = validateBuildingPlacement(current.world, kind, cell);
+          label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
+          polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xf3da98 : 0xd97962,
+            0.58, validation.valid ? 0xf9f2d5 : 0xb84c43);
+        } else if (current.tool === 'move' && current.movingBuildingId) {
+          const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
+          if (building) {
+            const spec = BUILDINGS[building.kind];
+            const validation = validateBuildingMove(current.world, building.id, cell);
+            label = validation.valid ? 'Ready to move · No cost' : rejectionFeedback[validation.reason];
+            polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xb9e8c2 : 0xd97962,
+              0.62, validation.valid ? 0x4d9662 : 0xb84c43);
+          }
+        } else if (current.tool === 'move' || current.tool === 'bulldoze') {
+          const building = buildingAtPoint(current.city, localPoint);
+          if (building) {
+            const spec = BUILDINGS[building.kind];
+            label = `${current.tool === 'move' ? 'Move' : 'Demolish'} ${building.name}`;
+            polygon(ghostShape, footprint(building.x, building.y, spec.width, spec.height),
+              current.tool === 'move' ? 0xb9e8c2 : 0xd97962, 0.5);
+          } else {
+            label = current.tool === 'move' ? 'Choose a building to move.' : 'Choose a building or road to demolish.';
+            polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.18, 0xfff4d5);
+          }
+        }
+        setPreview(label);
+      };
+      refreshRef.current = refreshPreview;
       app.stage.on('globalpointermove', (event) => {
+        if (event.nativeEvent.target !== app.canvas || event.global.x < 0 || event.global.y < 0 ||
+            event.global.x >= app.screen.width || event.global.y >= app.screen.height) {
+          leave();
+          return;
+        }
+        hoverPoint = { x: event.global.x, y: event.global.y };
         const localPoint = getLocalPoint(event);
         const cell = toCell(localPoint);
         const current = propsRef.current;
+        if (gestureTool !== current.tool) endGesture();
         if (pointerAction === 'pan') {
           view.x += event.global.x - lastPointer.x;
           view.y += event.global.y - lastPointer.y;
           lastPointer = { x: event.global.x, y: event.global.y };
           updateCamera();
         } else if (pointerAction === 'paint' || pointerAction === 'bulldoze') {
-          handleCell(cell, localPoint);
+          const cells = lastCell ? tileStroke(lastCell, cell, current.city.size) : [cell];
+          for (const tile of cells) handleCell(tile, tile.x === cell.x && tile.y === cell.y ? localPoint : undefined);
+          lastCell = cell;
         }
-        ghostShape.clear();
-        if (current.tool === 'road' && isLandCell(cell.x, cell.y, current.city.size)) {
-          const validation = validateRoadPlacement(current.world, cell);
-          if (validation.valid || validation.reason !== 'road-already-exists') {
-            const invalid = !validation.valid;
-            polygon(ghostShape, tileDiamond(cell.x, cell.y), invalid ? 0xd97962 : 0x8ba8ac, 0.72, invalid ? 0xb84c43 : 0xe9f0d5);
-          }
-        } else if (current.tool === 'road') {
-          polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xd97962, 0.64, 0xb84c43);
-        } else if (Object.hasOwn(BUILDINGS, current.tool)) {
-          const kind = current.tool as BuildingKind;
-          const spec = BUILDINGS[kind];
-          const valid = validateBuildingPlacement(current.world, kind, cell).valid;
-          polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), valid ? 0xf3da98 : 0xd97962, 0.58, valid ? 0xf9f2d5 : 0xb84c43);
-        } else if (current.tool === 'move' && current.movingBuildingId) {
-          const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
-          if (building) {
-            const spec = BUILDINGS[building.kind];
-            const valid = validateBuildingMove(current.world, building.id, cell).valid;
-            polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), valid ? 0xb9e8c2 : 0xd97962,
-              0.62, valid ? 0x4d9662 : 0xb84c43);
-          }
-        } else if (current.tool === 'move') {
-          const building = buildingAtPoint(current.city, localPoint);
-          if (building) {
-            const spec = BUILDINGS[building.kind];
-            polygon(ghostShape, footprint(building.x, building.y, spec.width, spec.height), 0xb9e8c2, 0.34, 0x4d9662);
-          } else polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.18, 0xfff4d5);
-        } else if (current.tool === 'bulldoze') {
-          const building = buildingAtPoint(current.city, localPoint);
-          if (building) {
-            const spec = BUILDINGS[building.kind];
-            polygon(ghostShape, footprint(building.x, building.y, spec.width, spec.height), 0xd97962, 0.5, 0xb84c43);
-          } else {
-            const road = current.city.roads.some((entry) => entry.x === cell.x && entry.y === cell.y);
-            polygon(ghostShape, tileDiamond(cell.x, cell.y), road ? 0xd97962 : 0xffe8a2,
-              road ? 0.55 : 0.18, road ? 0xb84c43 : 0xfff4d5);
-          }
-        } else {
-          polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.24, 0xfff4d5);
-        }
+        refreshPreview();
       });
-      app.stage.on('pointerup', () => { pointerAction = null; });
-      app.stage.on('pointerupoutside', () => { pointerAction = null; });
+      app.stage.on('pointerup', endGesture);
+      app.stage.on('pointerupoutside', endGesture);
+      app.canvas.addEventListener('pointerleave', leave);
+      window.addEventListener('pointerup', endGesture);
+      window.addEventListener('blur', leave);
+      const preventContextMenu = (event: Event) => event.preventDefault();
+      app.canvas.addEventListener('contextmenu', preventContextMenu);
 
       const onWheel = (event: WheelEvent) => {
         event.preventDefault();
         const bounds = app.canvas.getBoundingClientRect();
         const mouse = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
         const oldScale = view.scale;
-        const nextScale = Math.max(0.38, Math.min(1.55, oldScale * (event.deltaY < 0 ? 1.1 : 0.91)));
+        const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, oldScale * (event.deltaY < 0 ? 1.1 : 0.91)));
         const worldX = (mouse.x - world.x) / oldScale;
         const worldY = (mouse.y - world.y) / oldScale;
         view.scale = nextScale;
         view.x = mouse.x - worldX * nextScale - (app.screen.width / 2 - center.x * nextScale);
         view.y = mouse.y - worldY * nextScale - (app.screen.height / 2 - center.y * nextScale);
         updateCamera();
+        refreshPreview();
       };
       app.canvas.addEventListener('wheel', onWheel, { passive: false });
-      const resizeObserver = new ResizeObserver(updateCamera);
+      const resizeObserver = new ResizeObserver(() => {
+        // Pixi queues window resize on RAF; update it before deriving pointer/minimap transforms.
+        app.resize();
+        app.stage.hitArea = app.screen;
+        updateCamera();
+        refreshPreview();
+      });
       resizeObserver.observe(host);
       const disconnectSimulation = connectSimulationTicker(app.ticker, (elapsedMs) => propsRef.current.onSimulationFrame(elapsedMs));
+      // Geometry, labels, and scaffolding must finish even while simulation time is paused.
+      let wasConstructing = false;
+      let lastConstructionDraw = 0;
       app.ticker.add(() => {
         const now = Date.now();
-        const orderedBuildings = getRenderBuildings(propsRef.current.city, propsRef.current.world.plan).sort((a, b) => a.x + a.y - (b.x + b.y));
-        buildings.children.forEach((item, index) => {
-          const building = orderedBuildings[index];
-          if (!building) return;
-          const age = now - building.createdAt;
-          if (age < 5200) item.alpha = 0.72 + Math.min(0.28, age / 5200 * 0.28);
-          else item.alpha = 1;
-        });
+        const current = propsRef.current;
+        const constructing = current.city.buildings.some((building) => now - building.createdAt < 5200);
+        if ((constructing && now - lastConstructionDraw >= 100) || (wasConstructing && !constructing)) {
+          redrawBuildings(buildings, current.city, current.world.plan, current.selectedBuildingId);
+          lastConstructionDraw = now;
+        }
+        wasConstructing = constructing;
       });
 
-      (app as Application & { __cleanup?: () => void }).__cleanup = () => {
+      cleanup = () => {
         disconnectSimulation();
         app.canvas.removeEventListener('wheel', onWheel);
-        window.removeEventListener('keydown', updateShift);
-        window.removeEventListener('keyup', updateShift);
+        app.canvas.removeEventListener('pointerleave', leave);
+        app.canvas.removeEventListener('contextmenu', preventContextMenu);
+        window.removeEventListener('pointerup', endGesture);
+        window.removeEventListener('blur', leave);
         resizeObserver.disconnect();
       };
-    })();
+    })().catch(() => {
+      if (!disposed) setRenderError(true);
+    });
 
     return () => {
       disposed = true;
-      const running = appRef.current;
-      if (running) {
-        (running as Application & { __cleanup?: () => void }).__cleanup?.();
-        running.destroy(true, true);
+      cleanup();
+      if (appRef.current === app) {
+        app.destroy(true, { children: true });
         appRef.current = null;
       }
+      refreshRef.current = null;
+      cameraRef.current = null;
       host.replaceChildren();
       terrainRef.current = null;
       roadsRef.current = null;
@@ -553,6 +608,9 @@ export default function CityViewport(props: Props) {
     redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false);
   }, [props.city, props.world.plan, props.selectedBuildingId]);
 
-  return <div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''}`}
-    aria-label="Isometric 64 by 64 city map" />;
+  return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''}`}
+    aria-label="Isometric 64 by 64 city map" />
+    {preview && <output className="placement-feedback" aria-label="Placement preview">{preview}</output>}
+    {renderError && <div className="render-error" role="alert">The city renderer could not start. Reload to retry; your saved city is still on this device.</div>}
+  </>;
 }

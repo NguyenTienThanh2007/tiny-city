@@ -1,4 +1,4 @@
-name: Phase 0 CI
+name: Phase 1 acceptance
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: phase-0-${{ github.ref }}
+  group: phase-1-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -50,3 +50,24 @@ jobs:
           cache-dependency-glob: apps/api/uv.lock
       - run: uv sync --locked --extra dev
       - run: uv run --locked --extra dev python -m pytest -q -W error
+
+  gameplay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: gameplay-failure-traces
+          path: test-results/
+          retention-days: 7
