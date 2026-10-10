@@ -21,6 +21,9 @@ vi.mock('./game/CityViewport', () => ({
     <button onClick={() => props.onAddRoad({ x: 40, y: 39 })}>Test adjacent road</button>
     <button onClick={() => props.onBulldoze({ x: 40, y: 39 })}>Test remove road</button>
     <button onClick={() => props.onAddRoad({ x: 42, y: 42 })}>Test paint road</button>
+    <button onClick={() => props.onCameraFootprintChange([
+      { x: 16, y: 16 }, { x: 48, y: 16 }, { x: 48, y: 48 }, { x: 16, y: 48 },
+    ])}>Test camera footprint</button>
   </div>,
 }));
 
@@ -30,6 +33,15 @@ function click(name: string) { fireEvent.click(screen.getByRole('button', { name
 function expectSynchronized() { expect(world().plan).toEqual(toCityPlan(editorCity())); }
 
 describe('frontend city/simulation integration', () => {
+  it('maps building centers and the live camera footprint onto the minimap', () => {
+    render(<App />);
+    expect(screen.getByTestId('minimap-building-villa-seed-1')).toHaveAttribute('cx', '23.4375');
+    expect(screen.getByTestId('minimap-building-villa-seed-1')).toHaveAttribute('cy', '23.4375');
+    expect(screen.getByTestId('minimap-road-first')).toHaveAttribute('cy', '16.40625');
+    click('Test camera footprint');
+    expect(screen.getByTestId('minimap-camera')).toHaveAttribute('points', '25,25 75,25 75,75 25,75');
+  });
+
   it('rejects isolated homes and charges only authoritative successful commands', () => {
     render(<App />);
     click('Test isolated villa');

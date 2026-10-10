@@ -9,6 +9,7 @@ import { projectCity } from './simulation/cityAdapter';
 import { BUILDINGS, type BuildingKind, type CityState, type Cell, type Tool } from './types';
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
+type CameraFootprintPoint = { x: number; y: number };
 
 const buildingKinds = Object.keys(BUILDINGS) as BuildingKind[];
 const toolLabels: Record<BuildingKind, string> = {
@@ -53,17 +54,28 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...common}>{paths[name] ?? paths.sparkle}</svg>;
 }
 
-function MiniMap({ city }: { city: CityState }) {
+function MiniMap({ city, cameraFootprint }: { city: CityState; cameraFootprint: CameraFootprintPoint[] | null }) {
   const buildingMarks = city.buildings.map((building) => {
-    const role = BUILDINGS[building.kind].role;
+    const spec = BUILDINGS[building.kind];
+    const role = spec.role;
     const color = role === 'home' ? '#e6ad73' : role === 'park' ? '#d8edaa' : '#9bbfc1';
-    return <circle key={building.id} cx={`${((building.x + 1) / 64) * 100}%`} cy={`${((building.y + 1) / 64) * 100}%`} r="2.2" fill={color} />;
+    const x = ((building.x + spec.width / 2) / city.size) * 100;
+    const y = ((building.y + spec.height / 2) / city.size) * 100;
+    return <circle key={building.id} data-testid={`minimap-building-${building.id}`} cx={x} cy={y} r="1.45" fill={color} />;
   });
   return <div className="minimap"><div className="minimap-grid" />
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Neighborhood overview">
-      <g fill="#d9e2c8">{city.roads.map(({ x, y }, index) => <circle key={`${x}-${y}-${index}`} cx={(x / 64) * 100} cy={(y / 64) * 100} r="0.9" />)}</g>
+      <g fill="#d9e2c8">{city.roads.map(({ x, y }, index) => <circle key={`${x}-${y}-${index}`} data-testid={index === 0 ? 'minimap-road-first' : undefined} cx={((x + 0.5) / city.size) * 100} cy={((y + 0.5) / city.size) * 100} r="0.72" />)}</g>
       <g>{buildingMarks}</g>
-      <rect x="23" y="19" width="38" height="38" rx="2" fill="none" stroke="#f6e5af" strokeWidth="1.3" />
+      {cameraFootprint && <polygon
+        data-testid="minimap-camera"
+        points={cameraFootprint.map(({ x, y }) => `${(x / city.size) * 100},${(y / city.size) * 100}`).join(' ')}
+        fill="#f6e5af"
+        fillOpacity="0.13"
+        stroke="#f6e5af"
+        strokeWidth="1.15"
+        vectorEffect="non-scaling-stroke"
+      />}
     </svg>
     <span>VILLA GARDENS</span>
   </div>;
@@ -84,6 +96,7 @@ function App() {
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState(false);
   const [constructionClock, setConstructionClock] = useState(Date.now());
+  const [cameraFootprint, setCameraFootprint] = useState<CameraFootprintPoint[] | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
 
   const advanceSimulation = useCallback((elapsedMs: number) => {
@@ -357,6 +370,7 @@ function App() {
             onMoveBuilding={moveBuilding}
             onAddRoad={addRoad}
             onBulldoze={bulldoze}
+            onCameraFootprintChange={setCameraFootprint}
           />
           <div className="stage-heading">
             <div className="eyebrow">YOUR NEIGHBORHOOD <span>·</span> COASTAL DISTRICT</div>
@@ -371,7 +385,7 @@ function App() {
           </div>
           <div className="map-controls"><span className="control-dot" /> {keyboardHelp}<span className="control-separator">·</span> Scroll to zoom <span className="control-separator">·</span> Shift + drag to pan</div>
           <div className="map-coordinate">WORLD GRID <b>64 × 64</b></div>
-          <MiniMap city={city} />
+          <MiniMap city={city} cameraFootprint={cameraFootprint} />
           <form className="planner-bar" onSubmit={plannerSubmit}>
             <div className="planner-sparkle"><Icon name="sparkle" size={19} /></div>
             <div className="planner-copy"><strong>Build with a prompt</strong><span>Try “build 3 villas” · “thêm 5 đường”</span></div>
