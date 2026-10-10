@@ -47,3 +47,9 @@ GitHub Actions runs the same frontend, simulation, API, and Chromium gameplay ch
 ## Prototype boundary
 
 The prompt bar remains a local phrase parser. Phase 1 makes `@tiny-city/simulation` authoritative for city commands, footprints, roads, construction spending, IDs, and deterministic saves. Pixi remains the single frame driver; only styles and construction timestamps remain presentation metadata. The existing UI and controls are preserved. No Gemini, NPC pathfinding, traffic, recurring economy, Life Mode, or God Mode is implemented. See [Phase 1A contracts](docs/simulation/phase-1a.md), [Phase 1B tools](docs/simulation/phase-1b.md), and the [final acceptance audit](docs/simulation/phase-1-acceptance.md).
+
+## Phase 2A AI architect backend
+
+`@tiny-city/ai-architect` adds deterministic proposals and explicit approval/application through the existing simulation. FastAPI uses the official Google Gen AI SDK for bilingual intent interpretation. Developer B owns the future frontend interface; the current prompt bar remains the Phase 1 local demo.
+
+See [API contracts](docs/ai-architect/phase-2a-contracts.md), [integration and startup](docs/ai-architect/phase-2a-integration.md), and [acceptance evidence](docs/ai-architect/phase-2a-acceptance.md). Build with `npm run build:architect`; test with `npm run test:architect` and `npm run security`. Credentials belong only in ignored `apps/api/.env`; `.env.example` lists defaults. Ordinary CI uses mocked providers and the real TS planner.

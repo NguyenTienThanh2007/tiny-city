@@ -165,7 +165,9 @@ test('zoom and pan preserve pointer coordinates; minimap navigation and home rec
   const beforeMinimap = await page.getByTestId('minimap-camera').getAttribute('points');
   await page.getByRole('button', { name: 'Navigate neighborhood overview' }).click();
   await expect(page.getByTestId('minimap-camera')).not.toHaveAttribute('points', beforeMinimap!);
+  const beforeHome = await page.getByTestId('minimap-camera').getAttribute('points');
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
+  await expect(page.getByTestId('minimap-camera')).not.toHaveAttribute('points', beforeHome!);
   await selectRoof(page, 'park', 30, 23);
   await expect(page.locator('.building-details')).toContainText('30, 23');
 });
@@ -185,7 +187,9 @@ test('small viewport keeps all tools, selection and inspector actions reachable'
   await page.setViewportSize({ width: 390, height: 844 });
   await openCity(page);
   await choose(page, 'park');
+  const beforeSmallNavigation = await page.getByTestId('minimap-camera').getAttribute('points');
   await page.getByRole('button', { name: 'Navigate neighborhood overview' }).click();
+  await expect(page.getByTestId('minimap-camera')).not.toHaveAttribute('points', beforeSmallNavigation!);
   // Center map's unoccupied middle area, so a full park fits behind the compact HUD.
   await clickTile(page, 31, 31);
   await expect(page.locator('.building-details')).toContainText('4 × 4 tiles');
@@ -210,7 +214,9 @@ test('missing roads, insufficient funds, water and map boundaries produce explic
   expect((await saveData(page)).funds).toBe(0);
   await choose(page, 'park');
   const minimap = (await page.getByRole('button', { name: 'Navigate neighborhood overview' }).boundingBox())!;
+  const beforeCoastNavigation = await page.getByTestId('minimap-camera').getAttribute('points');
   await page.mouse.click(minimap.x + minimap.width * 61 / 64, minimap.y + minimap.height * 61 / 64);
+  await expect(page.getByTestId('minimap-camera')).not.toHaveAttribute('points', beforeCoastNavigation!);
   await clickTile(page, 60, 60);
   await expect(page.getByRole('status', { name: 'City notice' })).toContainText('Water tiles');
   await clickTile(page, 62, 62);
