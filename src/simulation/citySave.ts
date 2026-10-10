@@ -10,6 +10,7 @@ export const SAVE_KEY = 'tiny-city-imagine-save-v1';
 export interface LoadedCity {
   city: CityState;
   world: WorldState;
+  notice?: string;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -30,21 +31,34 @@ function isCity(value: unknown): value is CityState {
     typeof building.createdAt === 'number' && Number.isFinite(building.createdAt) && building.createdAt >= 0);
 }
 
+function restoreAppearances(city: CityState): CityState {
+  const now = Date.now();
+  return { ...city, buildings: city.buildings.map((building) => ({
+    ...building, createdAt: Math.min(now, building.createdAt),
+  })) };
+}
+
 /** Keep the original save key and top-level map fields for v1 compatibility. */
 export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
+  let recovery = false;
   try {
     const saved = (storage ?? localStorage).getItem(SAVE_KEY);
     const parsed: unknown = saved === null ? null : JSON.parse(saved);
-    if (record(parsed) && parsed.saveVersion === 3 && parsed.simulation !== undefined) {
+    const version = record(parsed) ? parsed.saveVersion : undefined;
+    if (version !== undefined && version !== 1 && version !== 2 && version !== 3) {
+      throw new Error('unsupported save envelope');
+    }
+    if (record(parsed) && parsed.saveVersion === 3) {
+      recovery = true;
       try {
         const world = deserializeWorld(JSON.stringify(parsed.simulation));
-        const city = projectCity(world, isCity(parsed) ? parsed : undefined);
+        const city = projectCity(world, isCity(parsed) ? restoreAppearances(parsed) : undefined);
         if (world.citizens.length === 0 && city.size === MAP_SIZE && world.plan.height === MAP_SIZE &&
             plansMatch(world.plan, toCityPlan(city))) return { city, world };
       } catch { /* fall back to the compatible editor map below */ }
     }
     if (isCity(parsed)) {
-      const city: CityState = { size: parsed.size, roads: parsed.roads, buildings: parsed.buildings, funds: parsed.funds };
+      const city = restoreAppearances({ size: parsed.size, roads: parsed.roads, buildings: parsed.buildings, funds: parsed.funds });
       const fallbackWorld = createCityWorld(city);
       if (record(parsed) && parsed.saveVersion === 2 && parsed.simulation !== undefined) {
         try {
@@ -55,10 +69,15 @@ export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
           if (world.citizens.length === 0 && world.budget.balance === city.funds && plansMatch(world.plan, plan)) return { city, world };
         } catch { /* preserve a valid map even when its optional simulation snapshot is corrupt */ }
       }
-      return { city, world: fallbackWorld };
+      return { city, world: fallbackWorld, ...(recovery || version === 2 ? {
+        notice: 'Recovered your city layout. Simulation history could not be restored; the original save is unchanged until you save again.',
+      } : {}) };
     }
-  } catch { /* missing/unavailable/corrupt storage starts with the existing sample */ }
-  return { city: initialCity, world: createCityWorld(initialCity) };
+    if (parsed !== null) recovery = true;
+  } catch { recovery = true; }
+  return { city: initialCity, world: createCityWorld(initialCity), ...(recovery ? {
+    notice: 'The saved city could not be loaded. Showing the sample city; the original save is unchanged until you save again.',
+  } : {}) };
 }
 
 export function saveCity(storage: Pick<Storage, 'setItem'>, city: CityState, world: WorldState): void {

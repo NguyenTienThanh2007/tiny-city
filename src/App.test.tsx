@@ -11,6 +11,10 @@ import App from './App';
 // Keep WebGL out of UI tests. Call the real editor handlers and frame boundary.
 vi.mock('./game/CityViewport', () => ({
   default: (props: ComponentProps<typeof CityViewport>) => <div>
+    <output data-testid="moving-building">{props.movingBuildingId ?? "none"}</output>
+    <button onClick={() => props.onBeginGesture?.()}>Test begin gesture</button>
+    <button onClick={() => props.onEndGesture?.()}>Test end gesture</button>
+    <button onClick={() => props.onBeginMoveBuilding(props.city.buildings.at(-1)!.id)}>Test begin move</button>
     <output data-testid="editor-city">{JSON.stringify(props.city)}</output>
     <output data-testid="simulation-world">{JSON.stringify(props.world)}</output>
     <button onClick={() => props.onSimulationFrame(100)}>Test frame</button>
@@ -230,5 +234,34 @@ describe('frontend city/simulation integration', () => {
     visibility.mockRestore();
     click('Test frame');
     expect(world().clock.tick).toBe(1);
+  });
+});
+
+
+describe('acceptance history and move lifecycle', () => {
+  it('cancels an abandoned move after undo instead of retaining a removed building ID', () => {
+    render(<App />);
+    click('Test place park');
+    click('Test begin move');
+    expect(screen.getByTestId('moving-building')).toHaveTextContent('building-1');
+    click('Undo');
+    expect(screen.getByTestId('moving-building')).toHaveTextContent('none');
+    expect(editorCity().buildings.some((building: { id: string }) => building.id === 'building-1')).toBe(false);
+    click('Redo');
+    expect(screen.getByTestId('moving-building')).toHaveTextContent('none');
+  });
+
+  it('records an entire pointer stroke in one history entry', () => {
+    render(<App />);
+    click('Test begin gesture');
+    click('Test paint road');
+    click('Test adjacent road');
+    click('Test end gesture');
+    expect(editorCity().funds).toBe(initialCity.funds - 16);
+    click('Undo');
+    expect(editorCity().roads).toEqual(initialCity.roads);
+    expect(editorCity().funds).toBe(initialCity.funds);
+    click('Redo');
+    expect(editorCity().roads).toHaveLength(initialCity.roads.length + 2);
   });
 });

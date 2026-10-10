@@ -15,11 +15,12 @@
     "dev": "vite",
     "prebuild": "npm run build:simulation",
     "build": "tsc -b && vite build",
-    "typecheck": "npm run typecheck --workspace @tiny-city/simulation && npm run build:simulation && tsc -b --pretty false",
+    "typecheck": "npm run typecheck --workspace @tiny-city/simulation && npm run build:simulation && tsc -b --pretty false && tsc -p tsconfig.e2e.json",
     "pretest": "npm run build:simulation",
     "test": "vitest run",
     "test:simulation": "npm test --workspace @tiny-city/simulation",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tiny-city/simulation": "*",
@@ -28,8 +29,10 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.1.2",

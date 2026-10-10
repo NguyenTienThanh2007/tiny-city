@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { applyCityCommand, CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
+import { applyCityCommand, CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, RoadGraph, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
 import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import CityViewport from './game/CityViewport';
+import type { CameraRequest } from './game/CityViewport';
+import { rejectionFeedback } from './simulation/feedback';
 import { loadCitySave, saveCity } from './simulation/citySave';
 import { useCitySimulation } from './simulation/useCitySimulation';
 import { projectCity } from './simulation/cityAdapter';
@@ -54,7 +56,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...common}>{paths[name] ?? paths.sparkle}</svg>;
 }
 
-function MiniMap({ city, cameraFootprint }: { city: CityState; cameraFootprint: CameraFootprintPoint[] | null }) {
+function MiniMap({ city, cameraFootprint, onNavigate }: { city: CityState; cameraFootprint: CameraFootprintPoint[] | null; onNavigate: (cell: Cell) => void }) {
   const buildingMarks = city.buildings.map((building) => {
     const spec = BUILDINGS[building.kind];
     const role = spec.role;
@@ -63,7 +65,14 @@ function MiniMap({ city, cameraFootprint }: { city: CityState; cameraFootprint: 
     const y = ((building.y + spec.height / 2) / city.size) * 100;
     return <circle key={building.id} data-testid={`minimap-building-${building.id}`} cx={x} cy={y} r="1.45" fill={color} />;
   });
-  return <div className="minimap"><div className="minimap-grid" />
+  return <div className="minimap" role="button" tabIndex={0} aria-label="Navigate neighborhood overview"
+    title="Click to center the camera on a map location"
+    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onNavigate({ x: city.size / 2, y: city.size / 2 }); } }}
+    onClick={(event) => {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      onNavigate({ x: Math.max(0, Math.min(city.size, (event.clientX - bounds.left) / bounds.width * city.size)),
+        y: Math.max(0, Math.min(city.size, (event.clientY - bounds.top) / bounds.height * city.size)) });
+    }}><div className="minimap-grid" />
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Neighborhood overview">
       <g fill="#d9e2c8">{city.roads.map(({ x, y }, index) => <circle key={`${x}-${y}-${index}`} data-testid={index === 0 ? 'minimap-road-first' : undefined} cx={((x + 0.5) / city.size) * 100} cy={((y + 0.5) / city.size) * 100} r="0.72" />)}</g>
       <g>{buildingMarks}</g>
@@ -93,10 +102,17 @@ function App() {
   const [movingBuildingId, setMovingBuildingId] = useState<string | null>(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(loaded.notice ?? '');
   const [saved, setSaved] = useState(false);
   const [constructionClock, setConstructionClock] = useState(Date.now());
   const [cameraFootprint, setCameraFootprint] = useState<CameraFootprintPoint[] | null>(null);
+  const [cameraRequest, setCameraRequest] = useState<CameraRequest>();
+  const gestureRef = useRef<{ active: boolean; recorded: boolean }>({ active: false, recorded: false });
+  const beginGesture = useCallback(() => { gestureRef.current = { active: true, recorded: false }; }, []);
+  const endGesture = useCallback(() => { gestureRef.current.active = false; }, []);
+  const navigateCamera = useCallback((cell?: Cell) => {
+    setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, ...(cell ? { cell } : {}) }));
+  }, []);
   const noticeTimerRef = useRef<number | null>(null);
 
   const advanceSimulation = useCallback((elapsedMs: number) => {
@@ -124,20 +140,17 @@ function App() {
     if (!result.applied) {
       const rejection = result.events.find((event) => event.type === 'city.command-rejected');
       if (rejection?.type === 'city.command-rejected') {
-        const reason = rejection.reason;
-        if (reason === 'road-required') showNotice('This building must touch a road along one of its edges.');
-        else if (reason === 'insufficient-funds') showNotice('Not enough funds to complete that edit.');
-        else if (reason === 'building-in-use') showNotice('This building is referenced by a resident schedule.');
-        else if (reason === 'building-not-found') showNotice('That building is no longer in the city.');
-        else if (reason === 'unchanged-position') showNotice('Choose a different open tile for this building.');
-        else if (reason !== 'road-already-exists' && reason !== 'road-not-found') {
-          showNotice('That lot is occupied or outside the buildable area.');
+        if (rejection.reason !== 'road-already-exists' && rejection.reason !== 'road-not-found') {
+          showNotice(rejectionFeedback[rejection.reason]);
         }
       }
       return result;
     }
     const next = projectCity(result.state, cityRef.current, Date.now());
-    setHistory((current) => [...current.slice(-39), previous]);
+    if (!gestureRef.current.active || !gestureRef.current.recorded) {
+      setHistory((current) => [...current.slice(-39), previous]);
+      gestureRef.current.recorded = true;
+    }
     setRedoHistory([]);
     cityRef.current = next;
     setCity(next);
@@ -178,11 +191,15 @@ function App() {
     const occupant = new OccupancyGrid(getSnapshot().plan).get(cell);
     if (occupant?.type === 'building') {
       const result = commitCommands([{ type: 'city.demolish', buildingId: occupant.buildingId }]);
-      if (result.applied && selectedBuildingId === occupant.buildingId) setSelectedBuildingId(null);
+      if (result.applied) {
+        if (selectedBuildingId === occupant.buildingId) setSelectedBuildingId(null);
+        if (movingBuildingId === occupant.buildingId) { setMovingBuildingId(null); setTool('select'); }
+      }
     } else if (occupant?.type === 'road') commitCommands([{ type: 'city.edit-roads', add: [], remove: [cell] }]);
-  }, [commitCommands, getSnapshot, selectedBuildingId]);
+  }, [commitCommands, getSnapshot, selectedBuildingId, movingBuildingId]);
 
   const undo = useCallback(() => {
+    endGesture(); setMovingBuildingId(null); setTool('select');
     const previous = history.at(-1);
     if (!previous) return;
     const currentCity = { snapshot: getCitySnapshot(), city: cityRef.current };
@@ -194,9 +211,10 @@ function App() {
     setCity(next);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [history, restoreCity, getSnapshot, getCitySnapshot]);
+  }, [history, restoreCity, getSnapshot, getCitySnapshot, endGesture]);
 
   const redo = useCallback(() => {
+    endGesture(); setMovingBuildingId(null); setTool('select');
     const next = redoHistory.at(-1);
     if (!next) return;
     const currentCity = { snapshot: getCitySnapshot(), city: cityRef.current };
@@ -208,7 +226,7 @@ function App() {
     setCity(restored);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [redoHistory, restoreCity, getSnapshot, getCitySnapshot]);
+  }, [redoHistory, restoreCity, getSnapshot, getCitySnapshot, endGesture]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -252,6 +270,9 @@ function App() {
   const parks = city.buildings.filter((building) => building.kind === 'park').length;
   const selectedBuilding = city.buildings.find((building) => building.id === selectedBuildingId) ?? null;
   const selectedSpec = selectedBuilding ? BUILDINGS[selectedBuilding.kind] : null;
+  const roadGraph = useMemo(() => new RoadGraph(world.plan.roads), [world.plan.roads]);
+  const selectedWorldBuilding = world.plan.buildings.find((building) => building.id === selectedBuildingId);
+  const roadConnected = selectedWorldBuilding ? roadGraph.getAdjacentComponents(selectedWorldBuilding).length > 0 : false;
   const selectedTool = tools.find((item) => item.id === tool);
   const gameTime = getGameTime(world.clock);
   const gameDay = String(gameTime.day + 1).padStart(2, '0');
@@ -311,7 +332,8 @@ function App() {
     }
     const placed = commands.length;
     if (placed) commitCommands(commands);
-    setTool('select');
+    setTool('select'); setMovingBuildingId(null);
+    if (placed) navigateCamera();
     showNotice(placed ? `Built ${placed} ${kind}${placed === 1 ? '' : 's'}.` : 'No open lots or funds were available for that plan.');
     setCommand('');
   };
@@ -371,6 +393,9 @@ function App() {
             onAddRoad={addRoad}
             onBulldoze={bulldoze}
             onCameraFootprintChange={setCameraFootprint}
+            cameraRequest={cameraRequest}
+            onBeginGesture={beginGesture}
+            onEndGesture={endGesture}
           />
           <div className="stage-heading">
             <div className="eyebrow">YOUR NEIGHBORHOOD <span>·</span> COASTAL DISTRICT</div>
@@ -385,7 +410,8 @@ function App() {
           </div>
           <div className="map-controls"><span className="control-dot" /> {keyboardHelp}<span className="control-separator">·</span> Scroll to zoom <span className="control-separator">·</span> Shift + drag to pan</div>
           <div className="map-coordinate">WORLD GRID <b>64 × 64</b></div>
-          <MiniMap city={city} cameraFootprint={cameraFootprint} />
+          <button className="camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => navigateCamera()}>Center city</button>
+          <MiniMap city={city} cameraFootprint={cameraFootprint} onNavigate={navigateCamera} />
           <form className="planner-bar" onSubmit={plannerSubmit}>
             <div className="planner-sparkle"><Icon name="sparkle" size={19} /></div>
             <div className="planner-copy"><strong>Build with a prompt</strong><span>Try “build 3 villas” · “thêm 5 đường”</span></div>
@@ -395,8 +421,9 @@ function App() {
           {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check">✓</span>{notice}</div>}
         </section>
 
-        <aside className="inspector">
+        <aside className={`inspector ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''}`}>
           <div className="inspector-topline"><span>NEIGHBORHOOD</span><button className="more-button" aria-label="Neighborhood information" title="Neighborhood information" onClick={() => showNotice('Villa Gardens is a locally saved coastal district.')}>•••</button></div>
+          {selectedBuilding && <button className="inspector-close" aria-label="Close building inspector" onClick={() => { setSelectedBuildingId(null); setMovingBuildingId(null); setTool('select'); }}>×</button>}
           <h2>{selectedBuilding ? selectedBuilding.name : 'Build something lovely.'}</h2>
           <p className="inspector-subtitle">{selectedBuilding ? 'BUILDING INSPECTOR' : 'YOUR CITY, YOUR STORY'}</p>
           <div className={`inspector-scene ${selectedBuilding ? `is-${selectedBuilding.kind}` : ''}`}>
@@ -416,6 +443,7 @@ function App() {
               <div className="detail-line"><span>Map location</span><strong>{selectedBuilding.x}, {selectedBuilding.y}</strong></div>
               <div className="detail-line"><span>Build cost</span><strong>${selectedSpec.cost.toLocaleString()}</strong></div>
               <div className="detail-line"><span>Road access</span><strong>{selectedSpec.requiresRoad ? 'Required' : 'Optional'}</strong></div>
+              <div className="detail-line"><span>Road connection</span><strong>{roadConnected ? 'Connected' : selectedSpec.requiresRoad ? 'Disconnected' : 'Optional'}</strong></div>
               <div className="detail-line"><span>Condition</span><strong className="condition"><i /> {constructionClock < selectedBuilding.createdAt + 5200 ? 'Under construction' : 'Ready'}</strong></div>
               <div className="inspector-buttons">
                 <button className="outline-action details-action" aria-label="Building details" onClick={() => {
