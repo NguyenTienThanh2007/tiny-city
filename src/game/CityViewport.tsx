@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Rectangle, Text } from 'pixi.js';
 import { useEffect, useRef } from 'react';
 import type { CityPlan, WorldState } from '@tiny-city/simulation';
-import { validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
+import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, isLandCell, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
@@ -18,8 +18,11 @@ type Props = {
   onSimulationFrame: (elapsedMs: number) => void;
   tool: Tool;
   selectedBuildingId: string | null;
+  movingBuildingId: string | null;
   onSelectBuilding: (id: string | null) => void;
   onPlaceBuilding: (kind: BuildingKind, x: number, y: number) => void;
+  onBeginMoveBuilding: (id: string) => void;
+  onMoveBuilding: (id: string, x: number, y: number) => void;
   onAddRoad: (cell: Cell) => void;
   onBulldoze: (cell: Cell) => void;
 };
@@ -133,6 +136,69 @@ function drawClubhouse(graphics: Graphics, building: Building) {
   graphics.rect(front.x - 13, front.y - 34, 26, 4).fill(0xf4d08f);
 }
 
+function drawBlock(graphics: Graphics, building: Building, progress: number, options: {
+  height: number; roof: number; sideA: number; sideB: number; window: number; floors?: number; glass?: boolean;
+}) {
+  const spec = BUILDINGS[building.kind];
+  const ground = footprint(building.x, building.y, spec.width, spec.height);
+  const lift = 5 + options.height * Math.max(0.08, progress);
+  const top = ground.map((point) => ({ x: point.x, y: point.y - lift }));
+  polygon(graphics, ground, 0x657669, 0.24);
+  polygon(graphics, [ground[0], ground[1], top[1], top[0]], options.sideA);
+  polygon(graphics, [ground[1], ground[2], top[2], top[1]], options.sideB);
+  polygon(graphics, top, options.roof, 1, 0x665d49);
+
+  const floors = options.floors ?? 2;
+  const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
+  const rowGap = Math.max(8, lift / (floors + 1));
+  const columns = Math.max(2, Math.min(5, Math.floor(spec.width * 1.25)));
+  const windows = new Graphics();
+  for (let row = 0; row < floors; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const offsetX = (column - (columns - 1) / 2) * Math.min(11, 32 / columns);
+      const offsetY = row * rowGap;
+      windows.roundRect(center.x + offsetX - 2.6, center.y - lift + 9 + offsetY, 5.2, Math.min(7, rowGap * 0.58), 1)
+        .fill(options.window);
+    }
+  }
+  if (options.glass) {
+    windows.moveTo(center.x - 17, center.y - lift + 7).lineTo(center.x + 17, center.y - lift + 7)
+      .stroke({ color: 0xe9f6ef, width: 2, alpha: 0.58 });
+  }
+  graphics.addChild(windows);
+}
+
+function drawPool(graphics: Graphics, building: Building) {
+  const spec = BUILDINGS.pool;
+  const ground = footprint(building.x, building.y, spec.width, spec.height);
+  const upper = ground.map((point) => ({ x: point.x, y: point.y - 5 }));
+  polygon(graphics, ground, 0x677669, 0.25);
+  polygon(graphics, [ground[0], ground[1], upper[1], upper[0]], 0xd8d3b8);
+  polygon(graphics, [ground[1], ground[2], upper[2], upper[1]], 0xbeb89e);
+  polygon(graphics, upper, 0x56aeb8, 1, 0xf4f0d9);
+  const water = new Graphics();
+  const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
+  water.moveTo(center.x - 24, center.y - 4).quadraticCurveTo(center.x, center.y - 10, center.x + 24, center.y - 3)
+    .stroke({ color: 0xd8f4ea, width: 2, alpha: 0.8 });
+  water.moveTo(center.x - 20, center.y + 5).quadraticCurveTo(center.x, center.y, center.x + 20, center.y + 6)
+    .stroke({ color: 0xd8f4ea, width: 1.4, alpha: 0.7 });
+  graphics.addChild(water);
+}
+
+function drawBuildingArt(graphics: Graphics, building: Building, progress: number) {
+  switch (building.kind) {
+    case 'villa': drawVilla(graphics, building, progress); break;
+    case 'duplex': drawBlock(graphics, building, progress, { height: 35, roof: 0xc58b5c, sideA: 0xe0c9a2, sideB: 0xc4a57d, window: 0xa7d1ca, floors: 2 }); break;
+    case 'townhouse': drawBlock(graphics, building, progress, { height: 40, roof: 0xa96d54, sideA: 0xdfc6a1, sideB: 0xc6a47d, window: 0xa7d1ca, floors: 3 }); break;
+    case 'apartment': drawBlock(graphics, building, progress, { height: 82, roof: 0x7c9a9a, sideA: 0xb6c7ba, sideB: 0x8fa8a3, window: 0x83b7bd, floors: 6, glass: true }); break;
+    case 'park': drawPark(graphics, building); break;
+    case 'clubhouse': drawClubhouse(graphics, building); break;
+    case 'pool': drawPool(graphics, building); break;
+    case 'mall': drawBlock(graphics, building, progress, { height: 34, roof: 0xd4d8c9, sideA: 0xc0d2cc, sideB: 0x94b6b3, window: 0x78aeb1, floors: 2, glass: true }); break;
+    case 'office': drawBlock(graphics, building, progress, { height: 96, roof: 0x7e9bac, sideA: 0xa9c3c7, sideB: 0x7899a4, window: 0x5d8fa0, floors: 7, glass: true }); break;
+  }
+}
+
 function drawBuilding(layer: Container, building: Building, selected: boolean, progress: number) {
   const item = new Container();
   const spec = BUILDINGS[building.kind];
@@ -142,9 +208,7 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   item.addChild(base);
 
   const sprite = new Graphics();
-  if (building.kind === 'villa') drawVilla(sprite, building, progress);
-  else if (building.kind === 'park') drawPark(sprite, building);
-  else drawClubhouse(sprite, building);
+  drawBuildingArt(sprite, building, progress);
   item.addChild(sprite);
 
   if (progress < 1) {
@@ -165,7 +229,8 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   });
   name.anchor.set(0.5);
   name.x = labelPoint.x;
-  name.y = labelPoint.y - (building.kind === 'clubhouse' ? 48 : building.kind === 'villa' ? 36 : 8);
+  name.y = labelPoint.y - (building.kind === 'office' ? 100 : building.kind === 'apartment' ? 85 :
+    building.kind === 'mall' ? 43 : building.kind === 'clubhouse' ? 48 : building.kind === 'villa' ? 36 : 18);
   item.addChild(name);
   item.eventMode = 'none';
   layer.addChild(item);
@@ -283,6 +348,13 @@ export default function CityViewport(props: Props) {
         } else if (current.tool === 'bulldoze') {
           pointerAction = 'bulldoze';
           handleCell(cell);
+        } else if (current.tool === 'move') {
+          if (current.movingBuildingId) current.onMoveBuilding(current.movingBuildingId, cell.x, cell.y);
+          else {
+            const building = buildingAt(current.city, cell.x, cell.y);
+            if (building) current.onBeginMoveBuilding(building.id);
+            else current.onSelectBuilding(null);
+          }
         } else if (current.tool === 'select') {
           current.onSelectBuilding(buildingAt(current.city, cell.x, cell.y)?.id ?? null);
         } else {
@@ -310,11 +382,25 @@ export default function CityViewport(props: Props) {
           }
         } else if (current.tool === 'road') {
           polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xd97962, 0.64, 0xb84c43);
-        } else if (current.tool === 'villa' || current.tool === 'park' || current.tool === 'clubhouse') {
-          const kind = current.tool;
+        } else if (Object.hasOwn(BUILDINGS, current.tool)) {
+          const kind = current.tool as BuildingKind;
           const spec = BUILDINGS[kind];
           const valid = validateBuildingPlacement(current.world, kind, cell).valid;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), valid ? 0xf3da98 : 0xd97962, 0.58, valid ? 0xf9f2d5 : 0xb84c43);
+        } else if (current.tool === 'move' && current.movingBuildingId) {
+          const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
+          if (building) {
+            const spec = BUILDINGS[building.kind];
+            const valid = validateBuildingMove(current.world, building.id, cell).valid;
+            polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), valid ? 0xb9e8c2 : 0xd97962,
+              0.62, valid ? 0x4d9662 : 0xb84c43);
+          }
+        } else if (current.tool === 'move') {
+          const building = buildingAt(current.city, cell.x, cell.y);
+          if (building) {
+            const spec = BUILDINGS[building.kind];
+            polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), 0xb9e8c2, 0.34, 0x4d9662);
+          } else polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.18, 0xfff4d5);
         } else {
           polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.24, 0xfff4d5);
         }
@@ -383,5 +469,6 @@ export default function CityViewport(props: Props) {
     redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false);
   }, [props.city, props.world.plan, props.selectedBuildingId]);
 
-  return <div ref={hostRef} className="city-viewport" aria-label="Isometric 64 by 64 city map" />;
+  return <div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''}`}
+    aria-label="Isometric 64 by 64 city map" />;
 }

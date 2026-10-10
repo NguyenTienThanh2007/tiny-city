@@ -5,11 +5,20 @@ import { RoadGraph } from './roads.js';
 import type { Building, BuildingType, CityCommand, CityCommandResult, CityRejectionReason, PlacementValidation, Position, SimulationEvent, WorldState } from './types.js';
 import { cloneWorld, freeze, validateWorld } from './world.js';
 
-export function validateBuildingPlacement(world: WorldState, type: BuildingType, position: Position): PlacementValidation {
+function validatePlacement(
+  world: WorldState,
+  type: BuildingType,
+  position: Position,
+  options: { readonly ignoreBuildingId?: string; readonly ignoreBudget?: boolean } = {},
+): PlacementValidation {
   if (!isBuildingType(type)) return { valid: false, reason: 'invalid-building-type' };
   if (!isGridPosition(position)) return { valid: false, reason: 'invalid-position' };
   const definition = BUILDING_CATALOG[type];
-  const grid = new OccupancyGrid(world.plan);
+  const plan = options.ignoreBuildingId === undefined ? world.plan : {
+    ...world.plan,
+    buildings: world.plan.buildings.filter((building) => building.id !== options.ignoreBuildingId),
+  };
+  const grid = new OccupancyGrid(plan);
   if (position.x < 0 || position.y < 0 || position.x + definition.footprint.width > world.plan.width ||
       position.y + definition.footprint.height > world.plan.height) return { valid: false, reason: 'out-of-bounds' };
   const candidate = { position, footprint: definition.footprint };
@@ -20,8 +29,38 @@ export function validateBuildingPlacement(world: WorldState, type: BuildingType,
   if (definition.requiresRoad && !footprintPerimeter(candidate).some((tile) => grid.get(tile)?.type === 'road')) {
     return { valid: false, reason: 'road-required' };
   }
-  if (world.budget.balance < definition.cost) return { valid: false, reason: 'insufficient-funds' };
-  return { valid: true, cost: definition.cost };
+  if (!options.ignoreBudget && world.budget.balance < definition.cost) return { valid: false, reason: 'insufficient-funds' };
+  return { valid: true, cost: options.ignoreBudget ? 0 : definition.cost };
+}
+
+export function validateBuildingPlacement(world: WorldState, type: BuildingType, position: Position): PlacementValidation {
+  return validatePlacement(world, type, position);
+}
+
+export function validateBuildingMove(world: WorldState, buildingId: string, position: Position): PlacementValidation {
+  const building = world.plan.buildings.find((entry) => entry.id === buildingId);
+  if (!building) return { valid: false, reason: 'building-not-found' };
+  if (!isGridPosition(position)) return { valid: false, reason: 'invalid-position' };
+  if (position.x === building.position.x && position.y === building.position.y) {
+    return { valid: false, reason: 'unchanged-position' };
+  }
+  if (building.type !== undefined) {
+    return validatePlacement(world, building.type, position, { ignoreBuildingId: buildingId, ignoreBudget: true });
+  }
+
+  // Legacy authored buildings have explicit dimensions, so preserve those when moving them.
+  const grid = new OccupancyGrid({ ...world.plan, buildings: world.plan.buildings.filter((entry) => entry.id !== buildingId) });
+  if (position.x < 0 || position.y < 0 || position.x + building.footprint.width > world.plan.width ||
+      position.y + building.footprint.height > world.plan.height) return { valid: false, reason: 'out-of-bounds' };
+  const candidate = { position, footprint: building.footprint };
+  for (const tile of footprintTiles(candidate)) {
+    const occupant = grid.get(tile);
+    if (occupant) return { valid: false, reason: occupant.type === 'blocked' ? 'blocked-tile' : 'occupied-tile' };
+  }
+  if (building.kind !== 'park' && !footprintPerimeter(candidate).some((tile) => grid.get(tile)?.type === 'road')) {
+    return { valid: false, reason: 'road-required' };
+  }
+  return { valid: true, cost: 0 };
 }
 
 export function validateRoadPlacement(world: WorldState, position: Position): PlacementValidation {
@@ -78,7 +117,7 @@ export function applyCityCommand(world: WorldState, command: CityCommand): CityC
       const count = world.plan.buildings.filter((building) => building.type === command.buildingType ||
         (building.type === undefined && building.kind === definition.kind)).length + 1;
       const building: Building = { id: `building-${cursor}`, type: command.buildingType, kind: definition.kind,
-        name: command.name?.trim() ?? (command.buildingType === 'villa' ? `Villa ${String(count).padStart(2, '0')}` : definition.label),
+        name: command.name?.trim() ?? `${definition.label} ${String(count).padStart(2, '0')}`,
         position: { ...command.position }, footprint: { ...definition.footprint }, capacity: definition.capacity };
       cost = validation.cost;
       next = freeze({ ...world, revision, nextBuildingId: cursor + 1, budget: spendBudget(world.budget, cost),
@@ -94,6 +133,18 @@ export function applyCityCommand(world: WorldState, command: CityCommand): CityC
       }
       next = freeze({ ...world, revision, plan: { ...world.plan, buildings: world.plan.buildings.filter((building) => building.id !== command.buildingId) } });
       event = { type: 'city.building-demolished', tick, revision, buildingId: command.buildingId };
+      break;
+    }
+    case 'city.move-building': {
+      const building = world.plan.buildings.find((entry) => entry.id === command.buildingId);
+      if (!building) return reject(world, command, 'building-not-found');
+      const validation = validateBuildingMove(world, command.buildingId, command.position);
+      if (!validation.valid) return reject(world, command, validation.reason);
+      const from = { ...building.position };
+      const to = { ...command.position };
+      next = freeze({ ...world, revision, plan: { ...world.plan, buildings: world.plan.buildings.map((entry) =>
+        entry.id === command.buildingId ? { ...entry, position: to } : entry) } });
+      event = { type: 'city.building-moved', tick, revision, buildingId: command.buildingId, from, to };
       break;
     }
     case 'city.edit-roads': {
@@ -150,6 +201,8 @@ export function copyCityCommand(command: CityCommand): CityCommand {
     case 'city.build': return { type: command.type, buildingType: command.buildingType,
       position: { x: command.position.x, y: command.position.y }, ...(command.name === undefined ? {} : { name: command.name }) };
     case 'city.demolish': return { type: command.type, buildingId: command.buildingId };
+    case 'city.move-building': return { type: command.type, buildingId: command.buildingId,
+      position: { x: command.position.x, y: command.position.y } };
     case 'city.edit-roads': return { type: command.type, add: command.add.map((tile) => ({ x: tile.x, y: tile.y })),
       remove: command.remove.map((tile) => ({ x: tile.x, y: tile.y })) };
   }

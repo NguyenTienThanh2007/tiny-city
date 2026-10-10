@@ -5,7 +5,7 @@ export interface Position {
 }
 
 export type BuildingKind = 'home' | 'workplace' | 'park';
-export type BuildingType = 'villa' | 'park' | 'clubhouse';
+export type BuildingType = 'villa' | 'duplex' | 'townhouse' | 'apartment' | 'park' | 'clubhouse' | 'pool' | 'mall' | 'office';
 
 export interface Building {
   readonly id: string;
@@ -101,6 +101,7 @@ export type CitizenCommand =
 export type CityCommand =
   | { readonly type: 'city.build'; readonly buildingType: BuildingType; readonly position: Position; readonly name?: string }
   | { readonly type: 'city.demolish'; readonly buildingId: string }
+  | { readonly type: 'city.move-building'; readonly buildingId: string; readonly position: Position }
   | { readonly type: 'city.edit-roads'; readonly add: readonly Position[]; readonly remove: readonly Position[] };
 
 export type WorldCommand = CitizenCommand | CityCommand;
@@ -108,7 +109,7 @@ export type WorldCommand = CitizenCommand | CityCommand;
 export type CityRejectionReason = 'invalid-building-type' | 'invalid-position' | 'out-of-bounds' |
   'blocked-tile' | 'occupied-tile' | 'road-required' | 'insufficient-funds' | 'invalid-name' |
   'building-not-found' | 'building-in-use' | 'road-already-exists' | 'road-not-found' |
-  'duplicate-road-edit' | 'conflicting-road-edit' | 'empty-road-edit' | 'state-limit-reached';
+  'duplicate-road-edit' | 'conflicting-road-edit' | 'empty-road-edit' | 'unchanged-position' | 'state-limit-reached';
 
 export type PlacementValidation = { readonly valid: true; readonly cost: number } |
   { readonly valid: false; readonly reason: CityRejectionReason };
@@ -120,6 +121,7 @@ export type SimulationEvent =
   | { readonly type: 'command.rejected'; readonly tick: number; readonly commandType: CitizenCommand['type']; readonly citizenId: string; readonly reason: CommandRejectionReason }
   | { readonly type: 'city.building-built'; readonly tick: number; readonly revision: number; readonly building: Building }
   | { readonly type: 'city.building-demolished'; readonly tick: number; readonly revision: number; readonly buildingId: string }
+  | { readonly type: 'city.building-moved'; readonly tick: number; readonly revision: number; readonly buildingId: string; readonly from: Position; readonly to: Position }
   | { readonly type: 'city.roads-edited'; readonly tick: number; readonly revision: number; readonly added: readonly Position[]; readonly removed: readonly Position[] }
   | { readonly type: 'city.budget-changed'; readonly tick: number; readonly revision: number; readonly spent: number; readonly balance: number }
   | { readonly type: 'city.road-network-changed'; readonly tick: number; readonly revision: number; readonly componentCount: number; readonly isolatedBuildingIds: readonly string[] }

@@ -1,4 +1,4 @@
-# TINY CITY — Phase 1A simulation and city logic
+# TINY CITY — City simulation and builder
 
 The headless simulation lives in `packages/simulation`. It has no runtime dependencies on a UI framework, renderer, browser, API, or wall clock. The existing React/PixiJS frontend consumes its public contracts through `src/simulation`. The minimal FastAPI scaffold lives in `apps/api` and is independent of the simulation runtime.
 
@@ -31,6 +31,7 @@ The root npm and API uv lockfiles pin the integrated dependency graphs. The simu
 
 - [Interfaces and behavior](./contracts.md)
 - [Phase 1A contract coordination](./phase-1a.md)
+- [Phase 1B interactive city builder](./phase-1b.md)
 - [Developer B / PixiJS integration](./integration.md)
 - [API setup](../../apps/api/README.md)
 
@@ -41,6 +42,7 @@ The root npm and API uv lockfiles pin the integrated dependency graphs. The simu
 - Seeded random helpers with serializable state.
 - FIFO commands and typed event batches, with predictable rejection reasons.
 - Authoritative build/demolish/road commands, atomic batches, occupancy validation, road topology, and a central budget/catalog.
+- Architect Mode catalog with residential, civic, leisure, retail, and office buildings; placement previews, move, demolish, inspect, and construction animation.
 - Validated city history snapshots retaining time/RNG/queues and the building-ID high-water mark.
 - Schema-2 deterministic serialization and Phase 0/browser-save migration.
 - Daily activity/target selection at tick boundaries and two reproducible fixtures.
@@ -51,6 +53,6 @@ Daily schedules still select activity/target without movement. Capacity remains 
 
 ## Ownership and coordination
 
-Contracts remain package-local. The frontend imports public types/rules instead of duplicating authority; old editor roads/funds/buildings are derived compatibility projections. Only visual styles/construction timestamps are editor metadata. Review the Phase 1A coordination document before extending contracts or exposing HTTP transport.
+Contracts remain package-local. The frontend imports public types/rules instead of duplicating authority; old editor roads/funds/buildings are derived compatibility projections. Only visual styles/construction timestamps are editor metadata. Review the Phase 1A coordination and Phase 1B builder documents before extending contracts or exposing HTTP transport.
 
 No storage backend or persistence package has been selected. The simulation owns validated deterministic snapshots and migration; the browser retains its local save flow.

@@ -10,12 +10,16 @@ import { BUILDINGS, type BuildingKind, type CityState, type Cell, type Tool } fr
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
 
+const buildingKinds = Object.keys(BUILDINGS) as BuildingKind[];
+const toolLabels: Record<BuildingKind, string> = {
+  villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt',
+  park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office',
+};
 const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
   { id: 'select', label: 'Select', shortcut: 'V' },
   { id: 'road', label: 'Road', shortcut: 'R', cost: CONSTRUCTION_COSTS.road },
-  { id: 'villa', label: 'Villa', shortcut: '1', cost: BUILDINGS.villa.cost },
-  { id: 'park', label: 'Park', shortcut: '2', cost: BUILDINGS.park.cost },
-  { id: 'clubhouse', label: 'Clubhouse', shortcut: '3', cost: BUILDINGS.clubhouse.cost },
+  { id: 'move', label: 'Move', shortcut: 'M' },
+  ...buildingKinds.map((kind, index) => ({ id: kind, label: toolLabels[kind], shortcut: String(index + 1), cost: BUILDINGS[kind].cost })),
   { id: 'bulldoze', label: 'Bulldoze', shortcut: 'X' },
 ];
 
@@ -24,9 +28,16 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
     select: <><path d="m5 3 13 10-6 1.2L9 20 5 3Z" /><path d="m12 14 4 5" /></>,
     road: <><path d="m7 3-3 18M17 3l3 18" /><path d="M12 4v3m0 4v3m0 4v3" /></>,
+    move: <><path d="M12 3v18M3 12h18" /><path d="m9 6 3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3" /></>,
     villa: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-7h6v7" /></>,
+    duplex: <><path d="m2 10 10-7 10 7" /><path d="M4 9v11h16V9M8 20v-7h3v7m2-7h3v7" /></>,
+    townhouse: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M8 12h2m4 0h2m-8 3h2m4 0h2" /></>,
+    apartment: <><path d="M5 21V4h14v17M3 21h18" /><path d="M8 7h2m4 0h2M8 11h2m4 0h2M8 15h2m4 0h2m-4 6v-4" /></>,
     park: <><path d="M12 21v-8" /><path d="M8 14a4 4 0 1 1 7.6-1.7A3.2 3.2 0 1 1 16 18H8a2 2 0 0 1 0-4Z" /></>,
     clubhouse: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /><path d="M9 9h.01M15 9h.01" /></>,
+    pool: <><path d="M3 15c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2" /><path d="M3 19c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M7 5v6m5-8v8m5-6v6" /></>,
+    mall: <><path d="M3 9h18v12H3zM2 9l2-5h16l2 5" /><path d="M8 21v-7h8v7M7 7h.01M12 7h.01M17 7h.01" /></>,
+    office: <><path d="M5 21V4h14v17M3 21h18" /><path d="M8 7h2m4 0h2M8 11h2m4 0h2M8 15h2m4 0h2" /></>,
     bulldoze: <><path d="M3 16h18M6 16l2-7h7l3 7" /><path d="M8 9V5h7l3 4" /><circle cx="8" cy="18" r="1" /><circle cx="17" cy="18" r="1" /></>,
     save: <><path d="M5 3h12l4 4v14H3V3h2Z" /><path d="M7 3v6h10V3M7 21v-8h10v8" /></>,
     undo: <><path d="M9 14 4 9l5-5" /><path d="M4 9h9a6 6 0 0 1 0 12h-2" /></>,
@@ -44,7 +55,8 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
 
 function MiniMap({ city }: { city: CityState }) {
   const buildingMarks = city.buildings.map((building) => {
-    const color = building.kind === 'villa' ? '#e6ad73' : building.kind === 'park' ? '#d8edaa' : '#f4d18d';
+    const role = BUILDINGS[building.kind].role;
+    const color = role === 'home' ? '#e6ad73' : role === 'park' ? '#d8edaa' : '#9bbfc1';
     return <circle key={building.id} cx={`${((building.x + 1) / 64) * 100}%`} cy={`${((building.y + 1) / 64) * 100}%`} r="2.2" fill={color} />;
   });
   return <div className="minimap"><div className="minimap-grid" />
@@ -66,6 +78,7 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [redoHistory, setRedoHistory] = useState<HistoryEntry[]>([]);
   const [tool, setTool] = useState<Tool>('select');
+  const [movingBuildingId, setMovingBuildingId] = useState<string | null>(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
   const [notice, setNotice] = useState('');
@@ -99,10 +112,12 @@ function App() {
       const rejection = result.events.find((event) => event.type === 'city.command-rejected');
       if (rejection?.type === 'city.command-rejected') {
         const reason = rejection.reason;
-        if (reason === 'road-required') showNotice('Villas and clubhouses must touch a road along an edge.');
+        if (reason === 'road-required') showNotice('This building must touch a road along one of its edges.');
         else if (reason === 'insufficient-funds') showNotice('Not enough funds to complete that edit.');
         else if (reason === 'building-in-use') showNotice('This building is referenced by a resident schedule.');
-        else if (reason !== 'road-already-exists' && reason !== 'road-not-found' && reason !== 'building-not-found') {
+        else if (reason === 'building-not-found') showNotice('That building is no longer in the city.');
+        else if (reason === 'unchanged-position') showNotice('Choose a different open tile for this building.');
+        else if (reason !== 'road-already-exists' && reason !== 'road-not-found') {
           showNotice('That lot is occupied or outside the buildable area.');
         }
       }
@@ -128,8 +143,23 @@ function App() {
     if (!result.applied) return;
     const event = result.events.find((entry) => entry.type === 'city.building-built');
     if (event?.type === 'city.building-built') setSelectedBuildingId(event.building.id);
-    setTool('select');
   }, [commitCommands]);
+
+  const beginMoveBuilding = useCallback((buildingId: string) => {
+    setSelectedBuildingId(buildingId);
+    setMovingBuildingId(buildingId);
+    setTool('move');
+    showNotice('Choose an open destination tile for the selected building.');
+  }, [showNotice]);
+
+  const moveBuilding = useCallback((buildingId: string, x: number, y: number) => {
+    const result = commitCommands([{ type: 'city.move-building', buildingId, position: { x, y } }]);
+    if (!result.applied) return;
+    setMovingBuildingId(null);
+    setSelectedBuildingId(buildingId);
+    setTool('select');
+    showNotice('Building moved.');
+  }, [commitCommands, showNotice]);
 
   const bulldoze = useCallback((cell: Cell) => {
     const occupant = new OccupancyGrid(getSnapshot().plan).get(cell);
@@ -184,10 +214,11 @@ function App() {
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const shortcuts: Record<string, Tool> = { v: 'select', r: 'road', '1': 'villa', '2': 'park', '3': 'clubhouse', x: 'bulldoze' };
+      const shortcuts: Record<string, Tool> = { v: 'select', r: 'road', m: 'move', x: 'bulldoze',
+        ...Object.fromEntries(buildingKinds.map((kind, index) => [String(index + 1), kind])) };
       const next = shortcuts[key];
-      if (next) setTool(next);
-      if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); }
+      if (next) { setTool(next); if (next !== 'move') setMovingBuildingId(null); }
+      if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); setMovingBuildingId(null); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -204,7 +235,7 @@ function App() {
   };
 
   const roads = city.roads.length;
-  const villas = city.buildings.filter((building) => building.kind === 'villa').length;
+  const villas = city.buildings.filter((building) => BUILDINGS[building.kind].role === 'home').length;
   const parks = city.buildings.filter((building) => building.kind === 'park').length;
   const selectedBuilding = city.buildings.find((building) => building.id === selectedBuildingId) ?? null;
   const selectedSpec = selectedBuilding ? BUILDINGS[selectedBuilding.kind] : null;
@@ -224,9 +255,9 @@ function App() {
     event.preventDefault();
     const text = command.trim();
     if (!text) return;
-    const match = text.match(/(\d+)?\s*(?:căn\s+|những\s+)?(villas?|homes?|biệt\s*thự|nhà|parks?|công\s*viên|clubhouses?|roads?|đường)/i);
+    const match = text.match(/(\d+)?\s*(?:căn\s+|những\s+)?(biệt\s*thự\s*song\s*lập|song\s*lập|duplex(?:es)?|townhouses?|nhà\s*phố|apartments?|chung\s*cư|biệt\s*thự|villas?|homes?|nhà|parks?|công\s*viên|clubhouses?|hồ\s*bơi|pools?|trung\s*tâm\s*thương\s*mại|malls?|văn\s*phòng|offices?|roads?|đường)/i);
     if (!match) {
-      showNotice('Planner demo understands villas, parks, clubhouses, and roads.');
+      showNotice('Try villas, townhouses, apartments, parks, pools, malls, offices, clubhouses, or roads.');
       return;
     }
     const count = Math.max(1, Math.min(12, Number(match[1] ?? 1)));
@@ -247,7 +278,14 @@ function App() {
       setCommand('');
       return;
     }
-    const kind: BuildingKind = subject.startsWith('park') || subject.startsWith('công') ? 'park' : subject.startsWith('club') ? 'clubhouse' : 'villa';
+    const kind: BuildingKind = subject.startsWith('song') || subject.startsWith('biệt thự song') || subject.startsWith('duplex') ? 'duplex'
+      : subject.startsWith('town') || subject.startsWith('nhà phố') ? 'townhouse'
+      : subject.startsWith('apartment') || subject.startsWith('chung') ? 'apartment'
+      : subject.startsWith('park') || subject.startsWith('công') ? 'park'
+      : subject.startsWith('club') ? 'clubhouse'
+      : subject.startsWith('hồ') || subject.startsWith('pool') ? 'pool'
+      : subject.startsWith('trung') || subject.startsWith('mall') ? 'mall'
+      : subject.startsWith('văn') || subject.startsWith('office') ? 'office' : 'villa';
     const commands: CityCommand[] = [];
     let draft = getSnapshot();
     for (let y = 8; y <= 55 && commands.length < count; y += 1) {
@@ -293,8 +331,11 @@ function App() {
         <nav className="tool-rail" aria-label="Build tools">
           <div className="rail-label">TOOLS</div>
           {tools.map((item) => (
-              <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => setTool(item.id)} title={`${item.label} · ${item.shortcut}`}>
-              <span className={`tool-icon tool-${item.id}`}><Icon name={item.id === 'bulldoze' ? 'bulldoze' : item.id} size={19} /></span>
+              <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => {
+                if (item.id !== 'move') setMovingBuildingId(null);
+                setTool(item.id);
+              }} title={`${item.label} · ${item.shortcut}`}>
+              <span className={`tool-icon tool-${item.id}`}><Icon name={item.id} size={19} /></span>
               <span className="tool-label">{item.label}</span>
               {item.cost !== undefined && <span className="tool-cost">${item.cost}</span>}
             </button>
@@ -309,8 +350,11 @@ function App() {
             onSimulationFrame={advanceSimulation}
             tool={tool}
             selectedBuildingId={selectedBuildingId}
+            movingBuildingId={movingBuildingId}
             onSelectBuilding={setSelectedBuildingId}
             onPlaceBuilding={placeBuilding}
+            onBeginMoveBuilding={beginMoveBuilding}
+            onMoveBuilding={moveBuilding}
             onAddRoad={addRoad}
             onBulldoze={bulldoze}
           />
@@ -344,33 +388,43 @@ function App() {
           <div className={`inspector-scene ${selectedBuilding ? `is-${selectedBuilding.kind}` : ''}`}>
             <div className="scene-sun" /><div className="scene-cloud cloud-one" /><div className="scene-cloud cloud-two" />
             <div className="scene-ground" />
-            {selectedBuilding?.kind !== 'park' && <div className={`scene-house ${selectedBuilding?.kind === 'clubhouse' ? 'is-clubhouse' : ''}`}><span className="house-roof" /><span className="house-wall" /><span className="house-window one" /><span className="house-window two" /><span className="house-door" /></div>}
+            {selectedBuilding && !['park', 'pool'].includes(selectedBuilding.kind) && <div className={`scene-house is-${selectedBuilding.kind}`}><span className="house-roof" /><span className="house-wall" /><span className="house-window one" /><span className="house-window two" /><span className="house-door" /></div>}
             <div className="scene-tree tree-one"><i /><b /></div><div className="scene-tree tree-two"><i /><b /></div>
             {selectedBuilding?.kind === 'park' && <div className="scene-path" />}
+            {selectedBuilding?.kind === 'pool' && <div className="scene-pool" />}
             <div className="scene-caption"><span>{selectedBuilding?.name ?? 'VILLA GARDENS'}</span><b>{selectedBuilding ? `${selectedBuilding.x} · ${selectedBuilding.y}` : `${villas} HOMES`}</b></div>
           </div>
           {selectedBuilding && selectedSpec ? (
             <div className="building-details">
               <div className="detail-line"><span>Type</span><strong>{selectedSpec.label}</strong></div>
               <div className="detail-line"><span>Footprint</span><strong>{selectedSpec.width} × {selectedSpec.height} tiles</strong></div>
+              <div className="detail-line"><span>Capacity</span><strong>{selectedSpec.capacity} places</strong></div>
               <div className="detail-line"><span>Map location</span><strong>{selectedBuilding.x}, {selectedBuilding.y}</strong></div>
-              <div className="detail-line"><span>Condition</span><strong className="condition"><i /> {constructionClock < selectedBuilding.createdAt + 5200 ? 'Under construction' : 'New'}</strong></div>
+              <div className="detail-line"><span>Build cost</span><strong>${selectedSpec.cost.toLocaleString()}</strong></div>
+              <div className="detail-line"><span>Road access</span><strong>{selectedSpec.requiresRoad ? 'Required' : 'Optional'}</strong></div>
+              <div className="detail-line"><span>Condition</span><strong className="condition"><i /> {constructionClock < selectedBuilding.createdAt + 5200 ? 'Under construction' : 'Ready'}</strong></div>
               <div className="inspector-buttons">
-                <button className="outline-action" onClick={() => {
+                <button className="outline-action details-action" aria-label="Building details" onClick={() => {
                   const building = world.plan.buildings.find((entry) => entry.id === selectedBuilding.id);
                   if (building) showNotice(`${building.name} · ${building.kind} · capacity ${building.capacity}`);
-                }}>Building details <Icon name="arrow" size={15} /></button>
-                <button className="small-destruct" aria-label="Bulldoze selected building" onClick={() => bulldoze({ x: selectedBuilding.x, y: selectedBuilding.y })}><Icon name="bulldoze" size={16} /></button>
+                }}>Details</button>
+                <button className="outline-action" onClick={() => beginMoveBuilding(selectedBuilding.id)}><Icon name="move" size={15} /> Move</button>
+                <button className="small-destruct" aria-label="Bulldoze selected building" title="Demolish building" onClick={() => bulldoze({ x: selectedBuilding.x, y: selectedBuilding.y })}><Icon name="bulldoze" size={16} /></button>
               </div>
             </div>
           ) : (
             <>
               <div className="goal-card"><div className="goal-icon"><Icon name="sparkle" size={17} /></div><div><strong>One street at a time</strong><p>Connect homes to roads, then make room for parks and places to gather.</p></div></div>
-              <div className="quick-heading"><span>QUICK BUILD</span><span>SELECT A TOOL</span></div>
+              <div className="quick-heading"><span>BUILD CATALOG</span><span>SELECT TO PLACE</span></div>
               <div className="quick-build-list">
-                <button onClick={() => setTool('villa')}><span className="quick-thumb villa-thumb"><i /></span><span><strong>Coastal villa</strong><small>2 × 2 tiles</small></span><b>${BUILDINGS.villa.cost}</b></button>
-                <button onClick={() => setTool('park')}><span className="quick-thumb park-thumb"><i /><i /><i /></span><span><strong>Garden park</strong><small>4 × 4 tiles</small></span><b>${BUILDINGS.park.cost}</b></button>
-                <button onClick={() => setTool('clubhouse')}><span className="quick-thumb club-thumb"><i /></span><span><strong>Clubhouse</strong><small>3 × 3 tiles</small></span><b>${BUILDINGS.clubhouse.cost}</b></button>
+                {buildingKinds.map((kind) => {
+                  const spec = BUILDINGS[kind];
+                  return <button key={kind} onClick={() => { setMovingBuildingId(null); setTool(kind); }}>
+                    <span className={`quick-thumb ${kind}-thumb`}><i /></span>
+                    <span><strong>{spec.label}</strong><small>{spec.width} × {spec.height} tiles</small></span>
+                    <b>${spec.cost.toLocaleString()}</b>
+                  </button>;
+                })}
               </div>
             </>
           )}

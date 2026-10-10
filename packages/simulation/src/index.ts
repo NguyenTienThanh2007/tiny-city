@@ -14,6 +14,6 @@ export { createBudget, validateBudget, spendBudget } from './budget.js';
 export { OccupancyGrid, footprintTiles, footprintPerimeter, tileKey } from './grid.js';
 export type { TileOccupant } from './grid.js';
 export { RoadGraph } from './roads.js';
-export { applyCityCommand, applyCityCommandBatch, validateBuildingPlacement, validateRoadPlacement } from './cityCommands.js';
+export { applyCityCommand, applyCityCommandBatch, validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from './cityCommands.js';
 export { serializeWorld, deserializeWorld } from './serialization.js';
 export type { LegacyWorldOptions } from './serialization.js';

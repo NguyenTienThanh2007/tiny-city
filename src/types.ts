@@ -1,6 +1,9 @@
+import { BUILDING_CATALOG } from '@tiny-city/simulation';
+import type { BuildingType } from '@tiny-city/simulation';
+
 export const MAP_SIZE = 64;
 
-export type Tool = 'select' | 'road' | 'villa' | 'park' | 'clubhouse' | 'bulldoze';
+export type Tool = 'select' | 'road' | 'move' | 'bulldoze' | BuildingType;
 export type BuildingKind = BuildingType;
 
 export interface Cell {
@@ -15,6 +18,9 @@ export interface BuildingSpec {
   height: number;
   cost: number;
   tint: number;
+  capacity: number;
+  role: 'home' | 'workplace' | 'park';
+  requiresRoad: boolean;
 }
 
 export interface Building {
@@ -33,11 +39,19 @@ export interface CityState {
   funds: number;
 }
 
-export const BUILDINGS: Record<BuildingKind, BuildingSpec> = {
-  villa: { kind: 'villa', label: BUILDING_CATALOG.villa.label, width: BUILDING_CATALOG.villa.footprint.width, height: BUILDING_CATALOG.villa.footprint.height, cost: BUILDING_CATALOG.villa.cost, tint: 0xe9d3a3 },
-  park: { kind: 'park', label: BUILDING_CATALOG.park.label, width: BUILDING_CATALOG.park.footprint.width, height: BUILDING_CATALOG.park.footprint.height, cost: BUILDING_CATALOG.park.cost, tint: 0x74a979 },
-  clubhouse: { kind: 'clubhouse', label: BUILDING_CATALOG.clubhouse.label, width: BUILDING_CATALOG.clubhouse.footprint.width, height: BUILDING_CATALOG.clubhouse.footprint.height, cost: BUILDING_CATALOG.clubhouse.cost, tint: 0xe7a66d },
+const buildingTints: Record<BuildingType, number> = {
+  villa: 0xe9d3a3, duplex: 0xe7cda0, townhouse: 0xd9b886, apartment: 0x9db9bb,
+  park: 0x74a979, clubhouse: 0xe7a66d, pool: 0x63b9c5, mall: 0x9fb7ba, office: 0x91aabd,
 };
+
+export const BUILDINGS: Record<BuildingKind, BuildingSpec> = Object.fromEntries(
+  Object.entries(BUILDING_CATALOG).map(([key, definition]) => {
+    const kind = key as BuildingType;
+    return [kind, { kind, label: definition.label, width: definition.footprint.width,
+      height: definition.footprint.height, cost: definition.cost, tint: buildingTints[kind],
+      capacity: definition.capacity, role: definition.kind, requiresRoad: definition.requiresRoad }];
+  }),
+) as Record<BuildingKind, BuildingSpec>;
 
 export const cellKey = (x: number, y: number) => `${x},${y}`;
 
@@ -53,6 +67,3 @@ export function occupiedCells(building: Building): Cell[] {
   }
   return cells;
 }
-
-import { BUILDING_CATALOG } from '@tiny-city/simulation';
-import type { BuildingType } from '@tiny-city/simulation';

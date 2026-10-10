@@ -399,6 +399,51 @@ button:focus-visible, input:focus-visible { outline: 3px solid #8dac86; outline-
   .simulation-controls { top: 145px; left: 72px; width: min(260px, calc(100% - 86px)); grid-template-columns: auto 105px; gap: 6px 8px; }
 }
 
+/* Phase 1B: expanded builder catalog and move workflow. */
+html, body, #root { min-width: 360px; min-height: 500px; }
+.tool-rail { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #d9e2d5 transparent; }
+.tool-button { flex: 0 0 54px; height: 54px; margin-bottom: 4px; }
+.tool-move.active { color: #527c8a; border-color: #d4e5e7; background: #edf5f4; box-shadow: inset 3px 0 #729aa2, 0 3px 9px #34553b10; }
+.tool-duplex .tool-icon, .tool-townhouse .tool-icon, .tool-apartment .tool-icon { color: #967653; }
+.tool-pool .tool-icon { color: #3e91a2; }
+.tool-mall .tool-icon, .tool-office .tool-icon { color: #658391; }
+.tool-bulldoze .tool-icon { color: #a66f5b; }
+.city-viewport.is-moving { cursor: move; }
+.city-viewport.is-demolishing { cursor: not-allowed; }
+.quick-build-list button { min-height: 50px; }
+.quick-thumb.duplex-thumb { background: #eee5d3; }
+.quick-thumb.townhouse-thumb { background: #eee0cf; }
+.quick-thumb.apartment-thumb, .quick-thumb.office-thumb { background: #dce8e7; }
+.quick-thumb.pool-thumb { background: #d6edf0; }
+.quick-thumb.mall-thumb { background: #e2eae6; }
+.duplex-thumb i, .townhouse-thumb i, .apartment-thumb i, .office-thumb i, .mall-thumb i {
+  position: relative; width: 25px; height: 17px; margin-top: 10px; border: 1px solid #c6b392; background: #e8d5b2;
+}
+.duplex-thumb i::before, .townhouse-thumb i::before, .apartment-thumb i::before, .office-thumb i::before, .mall-thumb i::before {
+  content: ''; position: absolute; left: -4px; top: -8px; width: 31px; height: 9px; background: #b97757;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.townhouse-thumb i { height: 22px; margin-top: 5px; background: #d9c09a; }
+.apartment-thumb i, .office-thumb i { width: 20px; height: 29px; margin-top: 0; border-color: #819da1; background: repeating-linear-gradient(90deg, #7ca4a8 0 3px, #d8e9e4 3px 6px); }
+.apartment-thumb i::before, .office-thumb i::before { display: none; }
+.mall-thumb i { width: 31px; height: 16px; margin-top: 10px; border-color: #8ba7a4; background: #a8c6c1; }
+.mall-thumb i::before { top: -5px; height: 5px; background: #d3d9c8; clip-path: none; }
+.pool-thumb i { width: 28px; height: 17px; border: 3px solid #f1f0dc; border-radius: 3px; background: repeating-linear-gradient(0deg, #58b1bd 0 3px, #a9dce0 3px 5px); }
+.pool-thumb i::before { display: none; }
+.inspector-scene.is-pool { background: linear-gradient(180deg, #b9d6d3 0%, #d4e2d2 62%, #91b99e 100%); }
+.scene-pool { position: absolute; z-index: 1; left: 74px; top: 91px; width: 108px; height: 35px; transform: skewY(-12deg); border: 5px solid #f3ecd1; border-radius: 5px; background: repeating-linear-gradient(0deg, #58b1bd 0 5px, #75c6cc 5px 8px); box-shadow: 0 4px #668a75; }
+.inspector-scene.is-apartment .scene-house { transform: scale(1.2); transform-origin: bottom center; }
+.inspector-scene.is-apartment .house-wall, .inspector-scene.is-office .house-wall { background: #9eb8b9; box-shadow: inset -13px 0 #829fa2; }
+.inspector-scene.is-apartment .house-roof, .inspector-scene.is-office .house-roof { background: #7899a4; clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%); }
+.inspector-scene.is-mall .house-roof { background: #92aaa6; clip-path: polygon(0 12%, 100% 12%, 100% 100%, 0 100%); }
+.inspector-scene.is-duplex .house-roof { background: #c08a5d; }
+.inspector-scene.is-townhouse .house-roof { background: #a96d54; }
+.inspector-buttons .outline-action { justify-content: center; gap: 5px; }
+.inspector-buttons .small-destruct { flex: 0 0 36px; }
+@media (max-width: 640px) {
+  .tool-button { flex-basis: 48px; height: 48px; margin-bottom: 3px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

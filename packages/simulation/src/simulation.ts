@@ -13,6 +13,7 @@ function copyCommand(command: WorldCommand): WorldCommand {
       return { ...command, schedule: { entries: command.schedule.entries.map((entry) => ({ ...entry })) } };
     case 'city.build':
     case 'city.demolish':
+    case 'city.move-building':
     case 'city.edit-roads': return copyCityCommand(command);
     default:
       throw new TypeError('unsupported command type');
@@ -151,7 +152,7 @@ export class Simulation {
     const time = getGameTime(clock);
     this.state = freeze({ ...this.state, clock });
     for (const command of this.commands) {
-      if (command.type === 'city.build' || command.type === 'city.demolish' || command.type === 'city.edit-roads') {
+      if (command.type === 'city.build' || command.type === 'city.demolish' || command.type === 'city.move-building' || command.type === 'city.edit-roads') {
         const result = applyCityCommand(this.state, command);
         this.state = result.state;
         events.push(...result.events);

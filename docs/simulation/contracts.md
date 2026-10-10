@@ -18,7 +18,7 @@ All interface properties and arrays are readonly. Worlds created by `createWorld
 | `ScheduleEntry` | `startMinute`, `activity`, nullable `targetBuildingId` |
 | `ClockState` | `tick`, `fixedStepMs`, `minutesPerTick`, `accumulatedMs`, `paused` |
 
-`BuildingKind` is `home | workplace | park`. `CitizenActivity` is `sleep | home | work | leisure | idle`. Nullable references use explicit `null`; required fields are never omitted. Building IDs and citizen IDs are unique within their respective collections. References must resolve to existing buildings. Buildings, roads, and blocked tiles cannot overlap. Maps are limited to one million tiles. Optional `BuildingType` is `villa | park | clubhouse`; catalog-backed buildings must match the catalog role, footprint, and capacity. Authored legacy buildings may omit `type` and retain their explicit footprints. Capacity remains descriptive metadata.
+`BuildingKind` is `home | workplace | park`. `CitizenActivity` is `sleep | home | work | leisure | idle`. Nullable references use explicit `null`; required fields are never omitted. Building IDs and citizen IDs are unique within their respective collections. References must resolve to existing buildings. Buildings, roads, and blocked tiles cannot overlap. Maps are limited to one million tiles. `BuildingType` is `villa | duplex | townhouse | apartment | park | clubhouse | pool | mall | office`; catalog-backed buildings must match the catalog role, footprint, and capacity. Authored legacy buildings may omit `type` and retain their explicit footprints. Capacity remains descriptive metadata.
 
 Coordinates use x to the right and y downward. The plan spans `[0, width) × [0, height)`. Building positions are footprint origins, while citizen positions are points. The renderer chooses screen projection, scale, anchors, colors, sprites, and textures. No visual metadata is stored in the world.
 
@@ -82,9 +82,10 @@ See [Phase 1A coordination](./phase-1a.md) for compatibility and rule choices.
 | --- | --- |
 | `city.build` | `buildingType`, integer `position`, optional `name`; derive role/footprint/capacity/cost from `BUILDING_CATALOG`, generate `building-N`, spend funds, and increment revision |
 | `city.demolish` | `buildingId`; reject missing or citizen-referenced buildings, release footprint, no fee/refund |
+| `city.move-building` | `buildingId`, integer destination `position`; preserve identity and citizen references, validate the footprint/road rule, no fee |
 | `city.edit-roads` | Required `add`/`remove` tile arrays; validate every cell and unique/disjoint sets; charge only additions |
 
-Villas and clubhouses need an orthogonally adjacent road along any footprint edge. Parks do not. Corner-only contact does not qualify. All footprint cells must be in bounds, buildable, and vacant. Road removals may isolate existing buildings; graph/events report this without traffic or NPC routing. Catalog prices are villa 120, park 80, clubhouse 220, road tile 8 integer dollars. Budget balance plus totalSpent must equal openingBalance.
+Road-required buildings need an orthogonally adjacent road along any footprint edge; parks do not, while pools, homes, clubhouses, malls, and offices do. Corner-only contact does not qualify. All footprint cells must be in bounds, buildable, and vacant. Road removals may isolate existing buildings; graph/events report this without traffic or NPC routing. Catalog prices are villa 120, duplex 180, townhouse 160, apartment 480, park 80, clubhouse 220, pool 180, mall 900, office 640, and road tile 8 integer dollars. Budget balance plus totalSpent must equal openingBalance.
 
 Each successful city command increments revision; time/citizen ticks do not. Rejections consume no budget, IDs, revision, or RNG. Atomic batches publish only their indexed rejection if any member fails; empty batches are no-ops. Queued city/citizen commands retain FIFO tick execution. Immediate edits do not advance the clock or consume queued commands.
 
@@ -105,6 +106,7 @@ Every event has a `type` and its simulation `tick`. Within each executed tick, o
 | `clock.ticked` | `day`, `minuteOfDay` |
 | `city.building-built` | `revision`, immutable `building` |
 | `city.building-demolished` | `revision`, `buildingId` |
+| `city.building-moved` | `revision`, `buildingId`, previous `from` and destination `to` |
 | `city.roads-edited` | `revision`, `added`, `removed` |
 | `city.budget-changed` | `revision`, `spent`, new `balance` |
 | `city.road-network-changed` | `revision`, `componentCount`, `isolatedBuildingIds` |
