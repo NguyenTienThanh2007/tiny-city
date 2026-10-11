@@ -467,3 +467,99 @@ html, body, #root { min-width: 360px; min-height: 500px; }
   .camera-home { right: 11px; bottom: 170px; }
   .placement-feedback { left: 10px; bottom: 205px; max-width: calc(100% - 20px); }
 }
+
+/* Phase 2B: AI Architect is a planning surface; the map stays authoritative until approval. */
+.planner-bar textarea {
+  width: 100%; min-width: 0; height: 46px; max-height: 60px; resize: none; overflow-y: auto;
+  padding: 12px 14px; border: 1px solid #e4e8df; border-radius: 10px; outline: none;
+  color: #32463a; background: #f9faf6; font: 400 12px/1.5 'DM Sans', sans-serif;
+}
+.planner-bar textarea::placeholder { color: #8d988d; }
+.planner-bar textarea:focus { border-color: #78977b; box-shadow: 0 0 0 3px #dce9d8; }
+.planner-bar textarea:disabled { opacity: .75; }
+.planner-bar.is-busy { border-color: #d4e3d0; }
+.planner-submit.cancel-planning { background: #a96959; font-size: 23px; line-height: 1; }
+.planner-submit.cancel-planning:hover { background: #8d4e42; }
+.planner-submit:focus-visible, .approve-plan:focus-visible, .reject-plan:focus-visible,
+.history-prompt:focus-visible, .architect-options input:focus-visible { outline: 3px solid #a8c9a5; outline-offset: 2px; }
+
+.architect-panel {
+  display: flex; flex-direction: column; gap: 11px; margin: 0 0 18px; padding: 13px;
+  border: 1px solid #e3e9df; border-radius: 13px; background: #f8faf4;
+}
+.architect-heading-row { display: flex; align-items: center; gap: 9px; }
+.architect-sparkle { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 31px; border-radius: 9px; color: #54765b; background: #e9f1e3; }
+.architect-heading-row h2 { margin: 0; font-size: 15px; letter-spacing: -.03em; }
+.architect-heading-row p { margin: 3px 0 0; color: #849082; font-size: 7px; font-weight: 800; letter-spacing: .13em; }
+.architect-intro { margin: 0; color: #718071; font-size: 10px; line-height: 1.45; }
+.architect-options { display: grid; gap: 7px; min-width: 0; margin: 0; padding: 9px 10px; border: 1px solid #e7ebe1; border-radius: 9px; }
+.architect-options legend { padding: 0 4px; color: #7a887b; font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.architect-options label { display: flex; align-items: flex-start; gap: 7px; color: #58695b; font-size: 9px; line-height: 1.35; cursor: pointer; }
+.architect-options input { width: 13px; height: 13px; flex: 0 0 13px; margin: 0; accent-color: #52775b; }
+.architect-options:disabled { opacity: .62; }
+.architect-options small { color: #8b7760; font-size: 8px; line-height: 1.35; }
+.architect-state { display: grid; grid-template-columns: 7px minmax(0, 1fr); align-items: start; gap: 5px 7px; padding: 8px 9px; border: 1px solid #e4e9df; border-radius: 8px; color: #617162; background: #fffefa; font-size: 9px; line-height: 1.4; }
+.architect-state small { grid-column: 2; color: #8b9388; font-size: 8px; overflow-wrap: anywhere; }
+.architect-state-dot { width: 6px; height: 6px; margin-top: 3px; border-radius: 50%; background: #8da47d; }
+.state-requesting .architect-state-dot, .state-validating .architect-state-dot, .state-applying .architect-state-dot { background: #d29d50; animation: architect-pulse 1s ease-in-out infinite alternate; }
+.state-error, .state-stale { border-color: #efd8cc; color: #9a5847; background: #fff8f3; }
+.state-error .architect-state-dot, .state-stale .architect-state-dot { background: #bd6955; }
+.state-applied { border-color: #d7e8d2; color: #47734f; background: #f2f8ef; }
+.state-rejected, .state-cancelled { color: #788477; }
+@keyframes architect-pulse { to { opacity: .35; } }
+.proposal-card { display: grid; gap: 8px; padding: 10px; border: 1px solid #e5e8dd; border-radius: 10px; background: #fffefa; }
+.proposal-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.proposal-card-heading strong { color: #394c3e; font-size: 10px; line-height: 1.4; }
+.proposal-card-heading span { flex: 0 0 auto; padding: 3px 5px; border-radius: 5px; color: #567655; background: #edf4e8; font-size: 7px; font-weight: 800; letter-spacing: .08em; }
+.proposal-card > p { margin: 0; color: #778275; font-size: 9px; line-height: 1.4; }
+.proposal-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.proposal-metrics > div { display: grid; gap: 2px; padding: 7px; border-radius: 7px; background: #f5f6ef; }
+.proposal-metrics small { color: #899287; font-size: 7px; font-weight: 800; letter-spacing: .08em; }
+.proposal-metrics strong { color: #435747; font-size: 10px; }
+.proposal-counts { display: flex; flex-wrap: wrap; gap: 5px; }
+.proposal-counts span { padding: 4px 6px; border: 1px solid #edf0e8; border-radius: 6px; color: #657466; background: #fafbf7; font-size: 8px; }
+.proposal-placements, .proposal-warnings { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.proposal-placements li { display: flex; justify-content: space-between; gap: 6px; padding-bottom: 5px; border-bottom: 1px solid #f0f0e9; color: #596a5c; font-size: 8px; }
+.proposal-placements small { color: #879185; font-size: 7px; white-space: nowrap; }
+.proposal-partial { padding: 7px 8px; border-radius: 7px; color: #8b6841 !important; background: #fbf3e6; }
+.proposal-warnings li { padding-left: 13px; color: #866d4e; font-size: 8px; line-height: 1.35; }
+.proposal-warnings li::before { content: '•'; margin-left: -10px; margin-right: 5px; color: #c28b48; }
+.proposal-actions, .destructive-confirmation > div { display: flex; gap: 6px; }
+.approve-plan, .reject-plan { min-height: 34px; border: 1px solid transparent; border-radius: 8px; padding: 0 9px; font-size: 9px; font-weight: 700; cursor: pointer; }
+.approve-plan { flex: 1; color: #fffefa; background: #4e7256; }
+.approve-plan:hover { background: #385c41; }
+.reject-plan { color: #6d786c; border-color: #e2e7dd; background: #f8faf5; }
+.reject-plan:hover { background: #eef2e9; }
+.destructive-confirmation { display: grid; gap: 7px; padding: 10px; border: 1px solid #e8b7a7; border-radius: 9px; color: #8d4f43; background: #fff5ef; }
+.destructive-confirmation > strong { font-size: 10px; }
+.destructive-confirmation p { margin: 0; font-size: 8px; line-height: 1.4; }
+.destructive-confirmation ul { display: grid; gap: 4px; max-height: 100px; overflow: auto; margin: 0; padding-left: 17px; font-size: 8px; }
+.destructive-approve { background: #a85c49; }
+.destructive-approve:hover { background: #874636; }
+.proposal-applying { padding: 7px; border-radius: 7px; color: #806a47; background: #f9f3e4; font-size: 8px; }
+.prompt-history { border-top: 1px solid #e7ebe2; padding-top: 8px; }
+.prompt-history summary { display: flex; justify-content: space-between; color: #667565; font-size: 9px; font-weight: 700; cursor: pointer; }
+.prompt-history summary span { color: #92998c; font-size: 8px; }
+.prompt-history ol { display: grid; gap: 9px; max-height: 190px; overflow-y: auto; margin: 9px 0 0; padding: 0; list-style: none; }
+.prompt-history li { display: grid; gap: 3px; padding-bottom: 7px; border-bottom: 1px solid #ebeee7; }
+.history-prompt { padding: 0; border: 0; color: #455c4b; background: transparent; text-align: left; font-size: 9px; line-height: 1.35; cursor: pointer; }
+.history-prompt:hover { text-decoration: underline; }
+.prompt-history li > span, .prompt-history li > small { color: #899286; font-size: 7px; line-height: 1.35; overflow-wrap: anywhere; }
+
+@media (max-width: 1150px) {
+  .planner-bar { grid-template-columns: 38px 145px minmax(60px, 1fr) 38px; }
+}
+@media (max-width: 930px) {
+  .inspector > :not(.simulation-controls):not(.architect-panel) { display: none; }
+  .architect-panel { position: absolute; z-index: 7; top: 142px; right: 8px; width: min(286px, calc(100% - 84px)); max-height: calc(100% - 250px); overflow-y: auto; padding: 10px; box-shadow: 0 7px 22px #324a3433; }
+  .inspector.has-selection > :not(.simulation-controls):not(.architect-panel) { display: none; }
+  .planner-bar { grid-template-columns: 34px minmax(0, 1fr) 36px; gap: 7px; }
+  .planner-copy { display: none; }
+  .planner-bar textarea { height: 42px; padding: 10px; }
+}
+@media (max-width: 640px) {
+  .architect-panel { top: 150px; right: 7px; width: min(280px, calc(100% - 78px)); max-height: calc(100% - 235px); }
+  .planner-bar { height: 68px; }
+  .planner-bar textarea { height: 40px; font-size: 11px; }
+  .architect-heading-row h2 { font-size: 14px; }
+}
