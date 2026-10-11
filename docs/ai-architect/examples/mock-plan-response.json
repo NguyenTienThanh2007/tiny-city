@@ -1,0 +1,475 @@
+{
+  "requestId": "offline-example",
+  "proposal": {
+    "contractVersion": 1,
+    "planId": "plan-10e0b41aa62b2c1686072632affbd07c0c7cb94772ff80c9529d73ed9751ea64",
+    "digest": "10e0b41aa62b2c1686072632affbd07c0c7cb94772ff80c9529d73ed9751ea64",
+    "sourceWorldId": "villa-gardens-world",
+    "sourceRevision": 0,
+    "sourceFingerprint": "eb08251710142bd3d0217d62b5cb3ac9ce1e202ad9eb1002efc979f26119ee76",
+    "seed": 7,
+    "status": "VALIDATED",
+    "intent": {
+      "summary": "Build two villas and a park",
+      "language": "en",
+      "style": "compact",
+      "near": "existing",
+      "region": null,
+      "budgetLimit": 1000,
+      "connectRoads": true,
+      "builds": [
+        {
+          "buildingType": "villa",
+          "quantity": 2,
+          "preferredPosition": null
+        },
+        {
+          "buildingType": "park",
+          "quantity": 1,
+          "preferredPosition": null
+        }
+      ],
+      "moves": [],
+      "demolish": [],
+      "roadAdd": [],
+      "roadRemove": [],
+      "preserveBuildingIds": [],
+      "unsupportedRequests": [],
+      "ambiguities": []
+    },
+    "constraints": {
+      "allowPartial": false,
+      "allowDestructive": false,
+      "allowedDemolitions": [],
+      "allowedRoadRemovals": [],
+      "preserveBuildingIds": [],
+      "budgetLimit": null,
+      "maxOperations": 128
+    },
+    "summary": "Build two villas and a park",
+    "explanation": "Deterministic compact district; legal lots and shortest free road links are validated by the Phase 1 simulation.",
+    "placements": [
+      {
+        "buildingId": "building-1",
+        "buildingType": "villa",
+        "position": {
+          "x": 22,
+          "y": 21
+        },
+        "footprint": {
+          "width": 2,
+          "height": 2
+        },
+        "operation": "build"
+      },
+      {
+        "buildingId": "building-2",
+        "buildingType": "villa",
+        "position": {
+          "x": 20,
+          "y": 21
+        },
+        "footprint": {
+          "width": 2,
+          "height": 2
+        },
+        "operation": "build"
+      },
+      {
+        "buildingId": "building-3",
+        "buildingType": "park",
+        "position": {
+          "x": 21,
+          "y": 23
+        },
+        "footprint": {
+          "width": 4,
+          "height": 4
+        },
+        "operation": "build"
+      }
+    ],
+    "roads": {
+      "add": [
+        {
+          "x": 24,
+          "y": 22
+        },
+        {
+          "x": 24,
+          "y": 21
+        }
+      ],
+      "remove": []
+    },
+    "projectedPlan": {
+      "id": "villa-gardens-plan",
+      "name": "Villa Gardens",
+      "width": 64,
+      "height": 64,
+      "roads": [
+        {
+          "x": 5,
+          "y": 20
+        },
+        {
+          "x": 6,
+          "y": 20
+        },
+        {
+          "x": 7,
+          "y": 20
+        },
+        {
+          "x": 8,
+          "y": 20
+        },
+        {
+          "x": 9,
+          "y": 20
+        },
+        {
+          "x": 10,
+          "y": 20
+        },
+        {
+          "x": 11,
+          "y": 20
+        },
+        {
+          "x": 12,
+          "y": 20
+        },
+        {
+          "x": 13,
+          "y": 20
+        },
+        {
+          "x": 14,
+          "y": 20
+        },
+        {
+          "x": 15,
+          "y": 20
+        },
+        {
+          "x": 16,
+          "y": 20
+        },
+        {
+          "x": 17,
+          "y": 20
+        },
+        {
+          "x": 18,
+          "y": 20
+        },
+        {
+          "x": 19,
+          "y": 20
+        },
+        {
+          "x": 20,
+          "y": 20
+        },
+        {
+          "x": 21,
+          "y": 20
+        },
+        {
+          "x": 22,
+          "y": 20
+        },
+        {
+          "x": 23,
+          "y": 20
+        },
+        {
+          "x": 24,
+          "y": 20
+        },
+        {
+          "x": 25,
+          "y": 20
+        },
+        {
+          "x": 26,
+          "y": 20
+        },
+        {
+          "x": 27,
+          "y": 20
+        },
+        {
+          "x": 28,
+          "y": 20
+        },
+        {
+          "x": 29,
+          "y": 20
+        },
+        {
+          "x": 30,
+          "y": 20
+        },
+        {
+          "x": 31,
+          "y": 20
+        },
+        {
+          "x": 32,
+          "y": 20
+        },
+        {
+          "x": 33,
+          "y": 20
+        },
+        {
+          "x": 34,
+          "y": 20
+        },
+        {
+          "x": 35,
+          "y": 20
+        },
+        {
+          "x": 36,
+          "y": 20
+        },
+        {
+          "x": 37,
+          "y": 20
+        },
+        {
+          "x": 38,
+          "y": 20
+        },
+        {
+          "x": 39,
+          "y": 20
+        },
+        {
+          "x": 40,
+          "y": 20
+        },
+        {
+          "x": 24,
+          "y": 22
+        },
+        {
+          "x": 24,
+          "y": 21
+        }
+      ],
+      "blockedTiles": [
+        {
+          "x": 63,
+          "y": 57
+        },
+        {
+          "x": 62,
+          "y": 58
+        },
+        {
+          "x": 63,
+          "y": 58
+        },
+        {
+          "x": 61,
+          "y": 59
+        },
+        {
+          "x": 62,
+          "y": 59
+        },
+        {
+          "x": 63,
+          "y": 59
+        },
+        {
+          "x": 60,
+          "y": 60
+        },
+        {
+          "x": 61,
+          "y": 60
+        },
+        {
+          "x": 62,
+          "y": 60
+        },
+        {
+          "x": 63,
+          "y": 60
+        },
+        {
+          "x": 59,
+          "y": 61
+        },
+        {
+          "x": 60,
+          "y": 61
+        },
+        {
+          "x": 61,
+          "y": 61
+        },
+        {
+          "x": 62,
+          "y": 61
+        },
+        {
+          "x": 63,
+          "y": 61
+        },
+        {
+          "x": 58,
+          "y": 62
+        },
+        {
+          "x": 59,
+          "y": 62
+        },
+        {
+          "x": 60,
+          "y": 62
+        },
+        {
+          "x": 61,
+          "y": 62
+        },
+        {
+          "x": 62,
+          "y": 62
+        },
+        {
+          "x": 63,
+          "y": 62
+        },
+        {
+          "x": 57,
+          "y": 63
+        },
+        {
+          "x": 58,
+          "y": 63
+        },
+        {
+          "x": 59,
+          "y": 63
+        },
+        {
+          "x": 60,
+          "y": 63
+        },
+        {
+          "x": 61,
+          "y": 63
+        },
+        {
+          "x": 62,
+          "y": 63
+        },
+        {
+          "x": 63,
+          "y": 63
+        }
+      ],
+      "buildings": [
+        {
+          "id": "building-1",
+          "type": "villa",
+          "kind": "home",
+          "name": "Villa 01",
+          "position": {
+            "x": 22,
+            "y": 21
+          },
+          "footprint": {
+            "width": 2,
+            "height": 2
+          },
+          "capacity": 2
+        },
+        {
+          "id": "building-2",
+          "type": "villa",
+          "kind": "home",
+          "name": "Villa 02",
+          "position": {
+            "x": 20,
+            "y": 21
+          },
+          "footprint": {
+            "width": 2,
+            "height": 2
+          },
+          "capacity": 2
+        },
+        {
+          "id": "building-3",
+          "type": "park",
+          "kind": "park",
+          "name": "Park 01",
+          "position": {
+            "x": 21,
+            "y": 23
+          },
+          "footprint": {
+            "width": 4,
+            "height": 4
+          },
+          "capacity": 20
+        }
+      ]
+    },
+    "estimatedCost": 336,
+    "projectedBudget": 4664,
+    "validation": {
+      "valid": true,
+      "fulfilled": true,
+      "operationCount": 5
+    },
+    "warnings": [],
+    "commands": [
+      {
+        "type": "city.build",
+        "buildingType": "villa",
+        "position": {
+          "x": 22,
+          "y": 21
+        }
+      },
+      {
+        "type": "city.build",
+        "buildingType": "villa",
+        "position": {
+          "x": 20,
+          "y": 21
+        }
+      },
+      {
+        "type": "city.edit-roads",
+        "add": [
+          {
+            "x": 24,
+            "y": 22
+          },
+          {
+            "x": 24,
+            "y": 21
+          }
+        ],
+        "remove": []
+      },
+      {
+        "type": "city.build",
+        "buildingType": "park",
+        "position": {
+          "x": 21,
+          "y": 23
+        }
+      }
+    ]
+  }
+}

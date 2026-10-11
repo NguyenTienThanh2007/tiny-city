@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "packages/simulation"
+    "packages/simulation",
+    "packages/ai-architect"
   ],
   "engines": {
     "node": ">=22.12.0"
@@ -15,12 +16,15 @@
     "dev": "vite",
     "prebuild": "npm run build:simulation",
     "build": "tsc -b && vite build",
-    "typecheck": "npm run typecheck --workspace @tiny-city/simulation && npm run build:simulation && tsc -b --pretty false && tsc -p tsconfig.e2e.json",
+    "typecheck": "npm run typecheck --workspace @tiny-city/simulation && npm run build:simulation && tsc -b --pretty false && tsc -p tsconfig.e2e.json && npm run typecheck --workspace @tiny-city/ai-architect",
     "pretest": "npm run build:simulation",
     "test": "vitest run",
     "test:simulation": "npm test --workspace @tiny-city/simulation",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:architect": "npm run build:simulation && npm run build --workspace @tiny-city/ai-architect",
+    "test:architect": "npm run build:architect && npm test --workspace @tiny-city/ai-architect",
+    "security": "python3 scripts/check_secrets.py"
   },
   "dependencies": {
     "@tiny-city/simulation": "*",
