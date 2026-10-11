@@ -1,12 +1,13 @@
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CityPlan, WorldState } from '@tiny-city/simulation';
+import type { PlanProposal } from '@tiny-city/ai-architect';
 import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
 
-import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
+import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
 import { rejectionFeedback } from '../simulation/feedback';
 
 export type CameraRequest = { id: number; cell?: Cell };
@@ -14,6 +15,7 @@ export type CameraRequest = { id: number; cell?: Cell };
 type Props = {
   city: CityState;
   world: WorldState;
+  proposal?: PlanProposal | null;
   onSimulationFrame: (elapsedMs: number) => void;
   tool: Tool;
   selectedBuildingId: string | null;
@@ -233,6 +235,34 @@ function redrawCity(terrain: Container, roads: Container, buildings: Container, 
   redrawBuildings(buildings, city, plan, selectedId);
 }
 
+function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null | undefined, sourcePlan: CityPlan) {
+  layer.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
+  layer.eventMode = 'none';
+  if (!proposal || proposal.status === 'REJECTED') return;
+
+  const geometry = proposalOverlayGeometry(proposal, sourcePlan);
+  const roads = new Graphics();
+  for (const points of geometry.roadAdds) polygon(roads, points, 0x50c8a3, 0.62, 0x16785f);
+  for (const points of geometry.roadRemovals) {
+    polygon(roads, points, 0xe36f73, 0.58, 0xa33449);
+    const center = { x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+      y: points.reduce((sum, point) => sum + point.y, 0) / points.length };
+    roads.moveTo(center.x - 7, center.y - 4).lineTo(center.x + 7, center.y + 4)
+      .moveTo(center.x + 7, center.y - 4).lineTo(center.x - 7, center.y + 4)
+      .stroke({ color: 0x8f263c, width: 2.4, alpha: 0.95 });
+  }
+  layer.addChild(roads);
+
+  const buildings = new Graphics();
+  for (const demolition of geometry.demolitions) polygon(buildings, demolition.points, 0xe36f73, 0.5, 0xa33449);
+  for (const placement of geometry.placements) {
+    if (placement.from) polygon(buildings, placement.from, 0xe7a66f, 0.4, 0xb2633f);
+    polygon(buildings, placement.points, placement.operation === 'move' ? 0x64b8d1 : 0x62c797,
+      0.56, placement.operation === 'move' ? 0x287d99 : 0x287a50);
+  }
+  layer.addChild(buildings);
+}
+
 function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null) {
   buildings.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   getRenderBuildings(city, plan).sort((a, b) => a.x + a.y - (b.x + b.y)).forEach((building) => {
@@ -305,6 +335,7 @@ export default function CityViewport(props: Props) {
   const terrainRef = useRef<Container | null>(null);
   const roadsRef = useRef<Container | null>(null);
   const buildingsRef = useRef<Container | null>(null);
+  const proposalOverlayRef = useRef<Container | null>(null);
   const propsRef = useRef(props);
   const refreshRef = useRef<(() => void) | null>(null);
   const cameraRef = useRef<((request: CameraRequest) => void) | null>(null);
@@ -348,10 +379,11 @@ export default function CityViewport(props: Props) {
       const terrain = new Container();
       const roads = new Container();
       const buildings = new Container();
+      const proposalOverlay = new Container();
       const ghost = new Container();
       const ghostShape = new Graphics();
       ghost.addChild(ghostShape);
-      world.addChild(terrain, roads, buildings, ghost);
+      world.addChild(terrain, roads, buildings, proposalOverlay, ghost);
       app.stage.addChild(world);
       // Pixi v8 skips listeners on passive containers, including the default stage.
       app.stage.eventMode = 'static';
@@ -360,7 +392,9 @@ export default function CityViewport(props: Props) {
       terrainRef.current = terrain;
       roadsRef.current = roads;
       buildingsRef.current = buildings;
+      proposalOverlayRef.current = proposalOverlay;
       redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true);
+      redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan);
 
       const home = cityView(propsRef.current.city, app.screen.width, app.screen.height);
       const view = { x: 0, y: -25, scale: home.scale };
@@ -597,6 +631,7 @@ export default function CityViewport(props: Props) {
       terrainRef.current = null;
       roadsRef.current = null;
       buildingsRef.current = null;
+      proposalOverlayRef.current = null;
     };
   }, []);
 
@@ -604,9 +639,11 @@ export default function CityViewport(props: Props) {
     const terrain = terrainRef.current;
     const roads = roadsRef.current;
     const buildings = buildingsRef.current;
+    const proposalOverlay = proposalOverlayRef.current;
     if (!terrain || !roads || !buildings) return;
     redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false);
-  }, [props.city, props.world.plan, props.selectedBuildingId]);
+    if (proposalOverlay) redrawProposalOverlay(proposalOverlay, props.proposal, props.world.plan);
+  }, [props.city, props.world.plan, props.selectedBuildingId, props.proposal]);
 
   return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''}`}
     aria-label="Isometric 64 by 64 city map" />

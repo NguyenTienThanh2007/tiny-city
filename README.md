@@ -2,14 +2,25 @@
 
 A frontend prototype for the Architect Mode milestone. The map renderer uses React, Vite, TypeScript, and PixiJS 8. All first-pass roads and buildings are drawn from vector shapes in PixiJS, so the scene does not depend on downloaded art assets.
 
-## Start the Phase 1 baseline
+## Start the game and AI Architect
 
 Use Node.js 22.12+ (CI uses Node 24). The frontend and simulation are npm workspaces sharing the root lockfile.
 
 ```sh
 npm ci
+npm run build:architect
 npm run dev
 ```
+
+In another terminal, start the local planning API from `apps/api` after configuring `GEMINI_API_KEY` in the backend-only `apps/api/.env` file. Copy `.env.example` if that file does not exist; never put the Gemini key in a `VITE_` variable or browser storage.
+
+```sh
+cd apps/api
+uv sync --locked --extra dev
+uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8000
+```
+
+The frontend calls `http://127.0.0.1:8000/v1/city/plan` by default. Set `VITE_AI_ARCHITECT_API_URL` only when the API uses another base URL. The prompt produces a temporary map preview; only **Approve & build** applies the validated batch through the live simulation.
 
 ## Controls
 
@@ -17,7 +28,7 @@ npm run dev
 - Click or drag to paint road tiles. Click a building tool, then an empty lot to place it. Select a building to inspect it.
 - Click the minimap to navigate; Center city returns to the saved neighborhood. Use the mouse wheel to zoom. Hold Shift and drag, or use the middle mouse button, to pan.
 - Press `V` (Select), `R` (Road), `M` (Move), `1`–`9` (buildings), or `X` (Bulldoze) to switch tools. Press Escape to return to Select.
-- Use the prompt bar for the local planner demo (`build 3 villas`, `add a park`, `xây 3 biệt thự`, or `thêm 5 đường`). It places up to 12 buildings per command.
+- Use the AI Architect prompt bar to describe changes in Vietnamese or English. Preview and review cost/warnings first; approving applies one simulation batch. Manual build tools remain available.
 - Building and road placement uses the funds shown in the HUD; the sample starts with $24,680.
 - All catalog buildings except parks must touch a road along a footprint edge. Parks can be placed independently. The engine validates bounds, coast exclusions, and full tile occupancy.
 - Resume/Pause controls the fixed-timestep simulation; Step advances one game minute while paused. The inspector shows the clock and latest simulation event.
@@ -46,10 +57,10 @@ GitHub Actions runs the same frontend, simulation, API, and Chromium gameplay ch
 
 ## Prototype boundary
 
-The prompt bar remains a local phrase parser. Phase 1 makes `@tiny-city/simulation` authoritative for city commands, footprints, roads, construction spending, IDs, and deterministic saves. Pixi remains the single frame driver; only styles and construction timestamps remain presentation metadata. The existing UI and controls are preserved. No Gemini, NPC pathfinding, traffic, recurring economy, Life Mode, or God Mode is implemented. See [Phase 1A contracts](docs/simulation/phase-1a.md), [Phase 1B tools](docs/simulation/phase-1b.md), and the [final acceptance audit](docs/simulation/phase-1-acceptance.md).
+`@tiny-city/simulation` remains authoritative for city commands, footprints, roads, construction spending, IDs, and deterministic saves. AI responses are untrusted proposals; the frontend validates them with `PlanReview` before approval and commits only through the existing simulation/history path. Pixi remains the single frame driver; only styles and construction timestamps remain presentation metadata. NPC pathfinding, traffic, recurring economy, Life Mode, and God Mode are not implemented. See [Phase 1A contracts](docs/simulation/phase-1a.md), [Phase 1B tools](docs/simulation/phase-1b.md), the [Phase 2A frontend integration contract](docs/ai-architect/phase-2a-integration.md), and the [final Phase 1 acceptance audit](docs/simulation/phase-1-acceptance.md).
 
 ## Phase 2A AI architect backend
 
-`@tiny-city/ai-architect` adds deterministic proposals and explicit approval/application through the existing simulation. FastAPI uses the official Google Gen AI SDK for bilingual intent interpretation. Developer B owns the future frontend interface; the current prompt bar remains the Phase 1 local demo.
+`@tiny-city/ai-architect` adds deterministic proposals and explicit approval/application through the existing simulation. FastAPI uses the official Google Gen AI SDK for bilingual intent interpretation. The frontend sends natural-language prompts to the backend and keeps proposals in temporary preview state until the player approves them.
 
 See [API contracts](docs/ai-architect/phase-2a-contracts.md), [integration and startup](docs/ai-architect/phase-2a-integration.md), and [acceptance evidence](docs/ai-architect/phase-2a-acceptance.md). Build with `npm run build:architect`; test with `npm run test:architect` and `npm run security`. Credentials belong only in ignored `apps/api/.env`; `.env.example` lists defaults. Ordinary CI uses mocked providers and the real TS planner.

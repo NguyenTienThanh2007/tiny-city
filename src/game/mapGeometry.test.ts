@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cityView, footprint, iso, tileStroke, toCell, toGrid } from './mapGeometry';
+import { cityView, footprint, iso, proposalOverlayGeometry, tileStroke, toCell, toGrid } from './mapGeometry';
+import type { PlanProposal } from '@tiny-city/ai-architect';
 
 describe('map coordinates and recovery', () => {
   it.each([[0, 0], [63, 63], [17, 23], [31.25, 7.75], [-1.5, 70]])('roundtrips %s,%s without truncating minimap corners', (x, y) => {
@@ -44,5 +45,30 @@ describe('map coordinates and recovery', () => {
   it('bounds work for out-of-map pointer strokes and repeated samples', () => {
     expect(tileStroke({ x: 0, y: 0 }, { x: -1000000, y: 0 }, 64)).toEqual([{ x: -1000000, y: 0 }]);
     expect(tileStroke({ x: 3, y: 3 }, { x: 3, y: 3 }, 64)).toEqual([]);
+  });
+
+  it('converts proposal placements, moves, demolitions, and road edits to world-space overlay geometry', () => {
+    const sourcePlan = { id: 'test', name: 'Test', width: 64, height: 64, roads: [], blockedTiles: [], buildings: [
+      { id: 'move-me', name: 'Old home', kind: 'home' as const, type: 'villa' as const,
+        position: { x: 4, y: 5 }, footprint: { width: 2, height: 2 }, capacity: 2 },
+      { id: 'remove-me', name: 'Old office', kind: 'workplace' as const, type: 'office' as const,
+        position: { x: 8, y: 9 }, footprint: { width: 3, height: 3 }, capacity: 12 },
+    ] };
+    const proposal = {
+      placements: [
+        { buildingId: 'new-home', buildingType: 'villa', position: { x: 12, y: 13 }, footprint: { width: 2, height: 2 }, operation: 'build' },
+        { buildingId: 'move-me', buildingType: 'villa', position: { x: 16, y: 17 }, footprint: { width: 2, height: 2 }, operation: 'move' },
+      ],
+      roads: { add: [{ x: 20, y: 21 }], remove: [{ x: 22, y: 23 }] },
+      commands: [{ type: 'city.demolish', buildingId: 'remove-me' }],
+    } as unknown as PlanProposal;
+
+    const geometry = proposalOverlayGeometry(proposal, sourcePlan);
+    expect(geometry.placements[0]?.points).toEqual(footprint(12, 13, 2, 2));
+    expect(geometry.placements[1]?.from).toEqual(footprint(4, 5, 2, 2));
+    expect(geometry.placements[1]?.points).toEqual(footprint(16, 17, 2, 2));
+    expect(geometry.demolitions).toEqual([{ buildingId: 'remove-me', points: footprint(8, 9, 3, 3) }]);
+    expect(geometry.roadAdds).toEqual([footprint(20, 21, 1, 1)]);
+    expect(geometry.roadRemovals).toEqual([footprint(22, 23, 1, 1)]);
   });
 });
