@@ -1,4 +1,6 @@
 import { BUILDINGS, type Cell, type CityState } from '../types';
+import type { PlanProposal } from '@tiny-city/ai-architect';
+import type { BuildingType, CityPlan } from '@tiny-city/simulation';
 
 export type Point = { x: number; y: number };
 export const TILE_W = 56;
@@ -28,6 +30,39 @@ export function toCell(point: Point): Cell {
 
 export function footprint(x: number, y: number, width: number, height: number): Point[] {
   return [iso(x, y), iso(x + width, y), iso(x + width, y + height), iso(x, y + height)];
+}
+
+export interface ProposalOverlayGeometry {
+  placements: { buildingId: string; buildingType: BuildingType; operation: 'build' | 'move'; points: Point[]; from?: Point[] }[];
+  demolitions: { buildingId: string; points: Point[] }[];
+  roadAdds: Point[][];
+  roadRemovals: Point[][];
+}
+
+/** Pure world-space geometry. The caller renders this in the same transformed Pixi world as the city. */
+export function proposalOverlayGeometry(proposal: PlanProposal, sourcePlan: CityPlan): ProposalOverlayGeometry {
+  const placements = proposal.placements.map((placement) => {
+    const from = placement.operation === 'move' ? sourcePlan.buildings.find((building) => building.id === placement.buildingId) : undefined;
+    return {
+      buildingId: placement.buildingId,
+      buildingType: placement.buildingType,
+      operation: placement.operation,
+      points: footprint(placement.position.x, placement.position.y, placement.footprint.width, placement.footprint.height),
+      ...(from ? { from: footprint(from.position.x, from.position.y, from.footprint.width, from.footprint.height) } : {}),
+    };
+  });
+  const demolitions = proposal.commands.flatMap((command) => {
+    if (command.type !== 'city.demolish') return [];
+    const building = sourcePlan.buildings.find((entry) => entry.id === command.buildingId);
+    return building ? [{ buildingId: building.id,
+      points: footprint(building.position.x, building.position.y, building.footprint.width, building.footprint.height) }] : [];
+  });
+  return {
+    placements,
+    demolitions,
+    roadAdds: proposal.roads.add.map(({ x, y }) => footprint(x, y, 1, 1)),
+    roadRemovals: proposal.roads.remove.map(({ x, y }) => footprint(x, y, 1, 1)),
+  };
 }
 
 /** The initial/home view follows the actual saved neighborhood. */

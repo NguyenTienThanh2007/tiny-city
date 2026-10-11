@@ -1,0 +1,8 @@
+{
+  "requestId": "offline-error",
+  "error": {
+    "code": "PROVIDER_NOT_CONFIGURED",
+    "message": "Set GEMINI_API_KEY in the backend .env file.",
+    "retryable": false
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "model": "gemini-3.5-flash-lite",
+  "executedAt": "2026-10-11T03:47:17.923Z",
+  "results": [
+    {
+      "language": "vi",
+      "result": "PASS",
+      "httpStatus": 200,
+      "elapsedMs": 2380,
+      "requestId": "38bff775114b4a79a0ce42eeacc224b3",
+      "planId": "plan-6d3cd413d51f6509237cbaa173303d8fa157cf2f1608f4e84c0ca2e41bb7a154",
+      "quantities": {
+        "villa": 2,
+        "park": 1
+      },
+      "roadTilesAdded": 12,
+      "commands": 5,
+      "estimatedCost": 416,
+      "openingBudget": 4880,
+      "projectedBudget": 4464,
+      "roadComponents": 1,
+      "warnings": [
+        "RELOCATED"
+      ],
+      "previewMutation": false,
+      "approvalRequired": true,
+      "atomicApplication": true,
+      "failedBatchRollback": true,
+      "lowBudgetRejected": true,
+      "staleRejected": true,
+      "replayRejected": true
+    },
+    {
+      "language": "en",
+      "result": "PASS",
+      "httpStatus": 200,
+      "elapsedMs": 2405,
+      "requestId": "b4efbe4b7d0b432b9b67e98dfb5f9915",
+      "planId": "plan-96ea4521b9d9f769b0b6b4392599369cfd13a640d645f0cb6cab2e7eef2083fb",
+      "quantities": {
+        "villa": 2,
+        "park": 1
+      },
+      "roadTilesAdded": 12,
+      "commands": 5,
+      "estimatedCost": 416,
+      "openingBudget": 4880,
+      "projectedBudget": 4464,
+      "roadComponents": 1,
+      "warnings": [
+        "RELOCATED"
+      ],
+      "previewMutation": false,
+      "approvalRequired": true,
+      "atomicApplication": true,
+      "failedBatchRollback": true,
+      "lowBudgetRejected": true,
+      "staleRejected": true,
+      "replayRejected": true
+    }
+  ]
+}

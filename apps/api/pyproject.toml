@@ -1,9 +1,14 @@
 [project]
 name = "tiny-city-api"
-version = "0.0.0"
-description = "Phase 0 FastAPI scaffold for TINY CITY"
+version = "0.2.0"
+description = "Phase 2A AI city architect API for TINY CITY"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.143,<1", "uvicorn>=0.30,<1"]
+dependencies = [
+    "fastapi>=0.143,<1",
+    "google-genai>=1.0,<3",
+    "pydantic-settings>=2.0,<3",
+    "uvicorn>=0.30,<1",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx2"]
