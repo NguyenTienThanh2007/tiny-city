@@ -2,6 +2,7 @@ import { spendBudget } from './budget.js';
 import { BUILDING_CATALOG, CONSTRUCTION_COSTS, isBuildingType } from './catalog.js';
 import { footprintPerimeter, footprintTiles, isGridPosition, OccupancyGrid, tileKey } from './grid.js';
 import { RoadGraph } from './roads.js';
+import { reconcilePopulation } from './population.js';
 import type { Building, BuildingType, CityCommand, CityCommandResult, CityRejectionReason, PlacementValidation, Position, SimulationEvent, WorldState } from './types.js';
 import { cloneWorld, freeze, validateWorld } from './world.js';
 
@@ -127,7 +128,7 @@ export function applyCityCommand(world: WorldState, command: CityCommand): CityC
     }
     case 'city.demolish': {
       if (!world.plan.buildings.some((building) => building.id === command.buildingId)) return reject(world, command, 'building-not-found');
-      if (world.citizens.some((citizen) => citizen.homeBuildingId === command.buildingId || citizen.workBuildingId === command.buildingId ||
+      if (!world.population && world.citizens.some((citizen) => citizen.homeBuildingId === command.buildingId || citizen.workBuildingId === command.buildingId ||
         citizen.targetBuildingId === command.buildingId || citizen.schedule.entries.some((entry) => entry.targetBuildingId === command.buildingId))) {
         return reject(world, command, 'building-in-use');
       }
@@ -174,6 +175,15 @@ export function applyCityCommand(world: WorldState, command: CityCommand): CityC
   const events: SimulationEvent[] = [event];
   if (cost > 0) events.push({ type: 'city.budget-changed', tick, revision, spent: cost, balance: next.budget.balance });
   events.push(networkEvent(next));
+  let population: ReturnType<typeof reconcilePopulation>;
+  try { population = reconcilePopulation(next, world); }
+  catch(error) {
+    if(error instanceof RangeError && error.message==='citizen ID limit reached') return reject(world,command,'state-limit-reached');
+    throw error;
+  }
+  next = population.state;
+  events.push(...population.events);
+  validateWorld(next);
   return result(next, events, true);
 }
 

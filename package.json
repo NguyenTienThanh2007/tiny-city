@@ -20,6 +20,7 @@
     "pretest": "npm run build:architect",
     "test": "vitest run",
     "test:simulation": "npm test --workspace @tiny-city/simulation",
+    "bench:npc": "npm run build:simulation && node scripts/npc_benchmark.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "build:architect": "npm run build:simulation && npm run build --workspace @tiny-city/ai-architect",

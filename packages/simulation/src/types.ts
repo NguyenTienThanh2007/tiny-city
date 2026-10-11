@@ -43,9 +43,42 @@ export interface CitySnapshot {
   readonly plan: CityPlan;
   readonly budget: CityBudget;
   readonly nextBuildingId: number;
+  /** Managed resident identities/assignments for history; time and RNG never rewind. */
+  readonly citizens?: readonly Citizen[];
 }
 
-export type CitizenActivity = 'sleep' | 'home' | 'work' | 'leisure' | 'idle';
+export type CitizenActivity = 'sleep' | 'home' | 'work' | 'leisure' | 'idle' | 'travel';
+
+export interface PopulationOptions { readonly maxCitizens?: number }
+export interface PopulationState {
+  readonly version: 1;
+  readonly maxCitizens: number;
+  readonly nextCitizenId: number;
+}
+export interface CitizenAttributes {
+  readonly age: number;
+  /** Tiles per game minute, independent of wall-clock/frame rate. */
+  readonly walkingSpeed: number;
+  readonly scheduleOffset: number;
+}
+export interface CitizenMovement {
+  readonly status: 'inside' | 'travelling' | 'waiting';
+  /** Unit heading in tile coordinates, or {x:0,y:0} when stationary. */
+  readonly heading: Position;
+  readonly currentBuildingId: string | null;
+  readonly destinationBuildingId: string | null;
+  readonly arrivalActivity: CitizenActivity;
+  readonly route: readonly Position[];
+  readonly nextWaypoint: number;
+  /** -1 queues a retry; a failed route at the current revision waits for an edit. */
+  readonly plannedRevision: number;
+}
+export interface BuildingOccupancy {
+  readonly buildingId: string;
+  readonly residentIds: readonly string[];
+  readonly workerIds: readonly string[];
+  readonly visitorIds: readonly string[];
+}
 
 export interface ScheduleEntry {
   /** Integer minute in [0, 1440); entries are ascending and begin at 0. */
@@ -68,6 +101,9 @@ export interface Citizen {
   readonly activity: CitizenActivity;
   readonly targetBuildingId: string | null;
   readonly schedule: DailySchedule;
+  readonly attributes?: CitizenAttributes;
+  readonly movement?: CitizenMovement;
+  readonly scheduleMode?: 'generated' | 'custom';
 }
 
 export interface ClockState {
@@ -92,6 +128,8 @@ export interface WorldState {
   readonly budget: CityBudget;
   readonly revision: number;
   readonly nextBuildingId: number;
+  /** Absent in legacy Phase 0–2 saves. Explicit opt-in activates Phase 3A. */
+  readonly population?: PopulationState;
 }
 
 export type CitizenCommand =
@@ -117,6 +155,13 @@ export type PlacementValidation = { readonly valid: true; readonly cost: number 
 export type CommandRejectionReason = 'citizen-not-found' | 'invalid-position' | 'invalid-schedule';
 
 export type SimulationEvent =
+  | { readonly type: 'citizen.created'; readonly tick: number; readonly citizen: Citizen }
+  | { readonly type: 'citizen.removed'; readonly tick: number; readonly citizenId: string; readonly reason: 'housing-lost' | 'population-limit' }
+  | { readonly type: 'citizen.assignment-changed'; readonly tick: number; readonly citizenId: string; readonly homeBuildingId: string; readonly workBuildingId: string | null }
+  | { readonly type: 'citizen.moved'; readonly tick: number; readonly citizenId: string; readonly position: Position; readonly heading: Position }
+  | { readonly type: 'citizen.arrived'; readonly tick: number; readonly citizenId: string; readonly buildingId: string }
+  | { readonly type: 'citizen.route-blocked'; readonly tick: number; readonly citizenId: string; readonly destinationBuildingId: string; readonly reason: 'unreachable' | 'search-limit' }
+  | { readonly type: 'population.changed'; readonly tick: number; readonly count: number }
   | { readonly type: 'command.applied'; readonly tick: number; readonly commandType: CitizenCommand['type']; readonly citizenId: string }
   | { readonly type: 'command.rejected'; readonly tick: number; readonly commandType: CitizenCommand['type']; readonly citizenId: string; readonly reason: CommandRejectionReason }
   | { readonly type: 'city.building-built'; readonly tick: number; readonly revision: number; readonly building: Building }

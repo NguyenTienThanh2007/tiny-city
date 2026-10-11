@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { BUILDING_CATALOG, createWorld, serializeWorld, Simulation, OccupancyGrid, RoadGraph } from '@tiny-city/simulation';
+import { BUILDING_CATALOG, createWorld, serializeWorld, Simulation, OccupancyGrid, RoadGraph, validateWorld } from '@tiny-city/simulation';
 import type { BuildingType } from '@tiny-city/simulation';
 import { createProposal, PlanReview, cityFingerprint, decodeIntent } from '../src/index.js';
 import type { ArchitectIntent, PlanningConstraints, PlanningResponse } from '../src/index.js';
@@ -9,6 +9,26 @@ const intent=(patch:Partial<ArchitectIntent>={}):ArchitectIntent=>({summary:'Bui
   connectRoads:true,builds:[{buildingType:'villa',quantity:2,preferredPosition:null}],moves:[],demolish:[],roadAdd:[],roadRemove:[],preserveBuildingIds:[],unsupportedRequests:[],ambiguities:[],...patch});
 const world=(funds=5000,roads=true)=>createWorld({id:'test',seed:123,startingFunds:funds,clock:{paused:true},
   plan:{id:'test-plan',name:'Test',width:24,height:24,buildings:[],roads:roads?Array.from({length:16},(_,i)=>({x:4+i,y:12})):[],blockedTiles:[{x:23,y:23}]}});
+
+describe('Phase 3A managed world planning compatibility',()=>{
+  it('keeps NPCs/RNG unchanged during preview and creates population only at approval',async()=>{
+    const sim=new Simulation(world());sim.enablePopulation({maxCitizens:100});const before=serializeWorld(sim.getState());
+    const p=await createProposal(sim.getState(),sim.getState().revision,intent());expect(serializeWorld(sim.getState())).toBe(before);
+    const review=new PlanReview(sim,p);await review.preview();expect(serializeWorld(sim.getState())).toBe(before);review.approve(p.planId);
+    const r=await review.apply();expect(r.state.citizens).toHaveLength(4);expect(r.state.plan).toEqual(p.projectedPlan);expect(()=>validateWorld(r.state)).not.toThrow();
+    const built=sim.getCitySnapshot();sim.restoreCity({...built,plan:world().plan,budget:world().budget,citizens:[]});expect(sim.getPopulationCount()).toBe(0);
+    sim.restoreCity(built);expect(sim.getPopulationCount()).toBe(4);expect(()=>validateWorld(sim.getState())).not.toThrow();
+  });
+  it('preserves approval semantics across NPC-only ticks and safely demolishes occupied homes',async()=>{
+    const sim=new Simulation(world());sim.enablePopulation({maxCitizens:10});sim.executeBatch([
+      {type:'city.build',buildingType:'villa',position:{x:6,y:13}},
+      {type:'city.build',buildingType:'office',position:{x:12,y:13}}]);
+    const home=sim.getState().plan.buildings[0]!;
+    const p=await createProposal(sim.getState(),sim.getState().revision,intent({builds:[],demolish:[home.id]}),0,{allowDestructive:true,allowedDemolitions:[home.id]});
+    expect(p.validation.valid).toBe(true);const review=new PlanReview(sim,p);await review.preview();sim.step(450);
+    review.approve(p.planId,{allowDestructive:true});expect((await review.apply()).applied).toBe(true);expect(sim.getPopulationCount()).toBe(0);expect(()=>validateWorld(sim.getState())).not.toThrow();
+  });
+});
 
 for(const type of Object.keys(BUILDING_CATALOG) as BuildingType[]) it(`plans and applies ${type} using authoritative footprint, budget and road rules`,async()=>{
   const initial=world();const simulation=new Simulation(initial);

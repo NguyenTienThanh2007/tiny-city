@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import subprocess
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
@@ -27,6 +28,19 @@ class FakeProvider:
 
 def settings(**kwargs):
     return Settings(_env_file=None,gemini_api_key='',**kwargs)
+
+def test_managed_npc_world_uses_existing_mocked_planning_api_without_mutation():
+    root=Path(__file__).resolve().parents[3]
+    generated=subprocess.run(['node','--input-type=module','-e',
+        "import {createLivingWorldFixture} from './packages/simulation/dist/fixtures.js'; console.log(JSON.stringify(createLivingWorldFixture()));"],
+        cwd=root,capture_output=True,text=True,check=True)
+    data=request();data['world']=json.loads(generated.stdout);data['sourceRevision']=data['world']['revision']
+    before=copy.deepcopy(data)
+    with TestClient(create_app(settings=settings(),provider=FakeProvider())) as client:
+        result=client.post('/v1/city/plan',json=data)
+        assert result.status_code==200,result.text
+        assert result.json()['proposal']['validation']['valid']
+    assert data==before and len(data['world']['citizens'])==30
 
 @pytest.mark.parametrize('language,prompt',[('en','Build 2 villas and a park'),('vi','Xây thêm 2 biệt thự và một công viên; không phá công trình cũ')])
 def test_bilingual_provider_and_real_ts_planner(language,prompt):

@@ -5,6 +5,14 @@ import { createCityWorld, projectCity } from './cityAdapter';
 import { loadCitySave, saveCity, SAVE_KEY } from './citySave';
 
 describe('compatible browser saves', () => {
+  it('restores managed NPC snapshots without silently dropping the population', () => {
+    const sim=new Simulation(createCityWorld(initialCity));sim.enablePopulation({maxCitizens:100});sim.step(460);
+    expect(sim.getPopulationCount()).toBeGreaterThan(0);
+    const before=sim.getState(),city=projectCity(before,initialCity);
+    saveCity(localStorage,city,before);const loaded=loadCitySave(localStorage);
+    expect(loaded.notice).toBeUndefined();expect(loaded.world).toEqual(before);
+    expect(new Simulation(loaded.world).step(20)).toEqual(sim.step(20));
+  });
   it('loads a valid Phase 1 snapshot as authority even when legacy top-level fields are stale', () => {
     const simulation = new Simulation(createCityWorld(initialCity));
     simulation.execute({ type: 'city.edit-roads', add: [{ x: 40, y: 40 }], remove: [] });

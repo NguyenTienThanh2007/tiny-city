@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Simulation } from '@tiny-city/simulation';
-import type { CityCommand, CitySnapshot, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
+import type { CityCommand, CitySnapshot, PopulationOptions, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../types';
 import { createCityWorld } from './cityAdapter';
 
@@ -47,5 +47,6 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   }, [simulation, publish]);
 
   const getSnapshot = useCallback(() => simulation.getState(), [simulation]);
-  return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, step, getSnapshot };
+  const enablePopulation = useCallback((options: PopulationOptions = {}) => publish(simulation.enablePopulation(options)), [simulation,publish]);
+  return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, step, getSnapshot, enablePopulation };
 }
