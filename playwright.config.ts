@@ -11,7 +11,10 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: liveCheck ? '**/ai-architect-live.spec.ts' : '**/*.spec.ts',
   testIgnore: liveCheck ? [] : ['**/ai-architect-live.spec.ts'],
-  timeout: 45_000,
+  // SwiftShader canvas captures take 5–8s on hosted Linux runners; complete
+  // build/move/history/reload workflows need a larger bounded CI deadline.
+  timeout: process.env.CI ? 90_000 : 45_000,
+  expect: { timeout: process.env.CI ? 20_000 : 5_000 },
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

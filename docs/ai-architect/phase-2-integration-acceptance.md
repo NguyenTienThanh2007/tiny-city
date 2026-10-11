@@ -10,6 +10,7 @@ GitHub Actions [run 38121034947](https://github.com/NguyenTienThanh2007/tiny-cit
 | --- | --- | --- |
 | Blocker | Root scripts built only simulation before frontend imports of `@tiny-city/ai-architect`; missing declarations caused cascading implicit-any/unknown errors in App, client, viewport and map geometry. | Declare the root architect dependency and lock entry; dev/build/test/typecheck prepare simulation → architect → frontend. Cold typecheck passes with both package outputs absent. No compiler strictness was reduced. |
 | Blocker | Playwright's production build exited before webServer startup. | Correct dependency order fixes the build; fresh frontend and API servers are started with visible startup diagnostics. Gameplay CI installs the existing locked Python/uv environment. |
+| High | Hosted Linux software-rendered canvas captures exceeded the five-second assertion deadline, and nine complete building workflows reached the 45-second test deadline. | Traces from run 38141141898 show the green masterplan rendered and a 7.4-second screenshot capture; manual workflows passed their gameplay checks before timing out. CI uses bounded 20-second assertions, 90-second workflows and a 20-minute job, retaining every assertion and zero retries. Local deadlines remain unchanged. |
 | High | Native Cancel click reused a button that became Submit, launching another request after cancellation. | Distinct React button keys plus preventDefault stop the default submission. Browser regression gates a real API response and confirms exactly one POST, no late preview and unchanged city. |
 | High | Rejected identical deterministic proposals could never be reviewed again. | A new review may replace a rejected session. Session identity prevents retired async work from inheriting replacement approval. Applied IDs still block replay. Engine/UI/browser regressions cover rejection, regeneration and failure cleanup. |
 | High | Responsive AI panel covered narrow maps and CSS hid Phase 1 inspector actions. | Collapsible mobile panel, non-overlapping toggle and restored inspector content. Small-screen map/build/close-inspector and AI preview/approval cases pass. Desktop layout and Pixi geometry are retained. |
@@ -29,7 +30,7 @@ Map geometry retains the shared `BuildingType`, and the stable frontend commit a
 | AI planner/review Vitest | 29 passed |
 | React/client/geometry/frontend Vitest | 72 passed |
 | FastAPI/provider/smoke pytest, warnings as errors | 57 passed |
-| Production browser regressions | 22 passed: 16 Phase 1 + 6 integrated AI cases |
+| Production browser regressions | 22 passed: 16 Phase 1 + 6 integrated AI cases; full `CI=1` rerun also passed in 4.7 minutes |
 | Ordinary automated total | **335 passed** |
 | Separate paid Gemini production UI check | **1 passed**, excluded from the 335 CI-safe tests |
 | Secret/history scan and exact configured-key scan of frontend assets | PASS; no findings; backend .env is ignored |
