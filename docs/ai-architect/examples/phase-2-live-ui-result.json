@@ -1,0 +1,24 @@
+{
+  "result": "PASS",
+  "executedAt": "2026-10-11T12:47:33.025Z",
+  "provider": "Gemini",
+  "httpStatus": 200,
+  "elapsedMs": 2158,
+  "requestId": "5b20d98db9014f7cb61a28c0eb81f86d",
+  "planId": "plan-b29c46a905d7703aaa1ccf970a59fc1d1603dbe2c107a46a7519d9d5358c1ecd",
+  "buildingsAdded": 3,
+  "roadTilesAdded": 12,
+  "commands": 5,
+  "estimatedCost": 416,
+  "fundsBefore": 5000,
+  "fundsAfter": 4584,
+  "previewImmutable": true,
+  "previewRendered": true,
+  "atomicApproval": true,
+  "undoRedo": true,
+  "saveReload": true,
+  "preservedExisting": true,
+  "warnings": [
+    "RELOCATED"
+  ]
+}

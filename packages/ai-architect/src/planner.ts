@@ -28,7 +28,7 @@ export function decodeIntent(value: unknown): ArchitectIntent {
   if (intent.builds.reduce((sum,b) => sum + b.quantity,0) > LIMITS.buildings) throw new PlanError('CONTEXT_LIMIT', 'At most 32 buildings may be requested.');
   return intent;
 }
-export function decodeConstraints(value: Partial<PlanningConstraints> = {}): PlanningConstraints {
+export function decodeConstraints(value: unknown = {}): PlanningConstraints {
   if (!record(value) || Object.keys(value).some(k => !Object.hasOwn(DEFAULT_CONSTRAINTS,k))) throw new PlanError('INVALID_REQUEST','Invalid planning constraints.');
   const c = { ...DEFAULT_CONSTRAINTS, ...value };
   if (typeof c.allowPartial !== 'boolean' || typeof c.allowDestructive !== 'boolean' || !ids(c.allowedDemolitions) ||

@@ -1,4 +1,6 @@
 import type { WorldState } from '@tiny-city/simulation';
+import { isBuildingType } from '@tiny-city/simulation';
+import { decodeConstraints, decodeIntent, DEFAULT_CONSTRAINTS } from '@tiny-city/ai-architect';
 import type {
   ArchitectErrorResponse,
   PlanProposal,
@@ -29,6 +31,19 @@ function isPosition(value: unknown): boolean {
   return isRecord(value) && Number.isSafeInteger(value.x) && Number.isSafeInteger(value.y);
 }
 
+function isCommand(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  switch (value.type) {
+    case 'city.build': return isBuildingType(value.buildingType) && isPosition(value.position) &&
+      (value.name === undefined || typeof value.name === 'string');
+    case 'city.move-building': return typeof value.buildingId === 'string' && isPosition(value.position);
+    case 'city.demolish': return typeof value.buildingId === 'string';
+    case 'city.edit-roads': return Array.isArray(value.add) && value.add.every(isPosition) &&
+      Array.isArray(value.remove) && value.remove.every(isPosition);
+    default: return false;
+  }
+}
+
 function isProposal(value: unknown): value is PlanProposal {
   if (!isRecord(value) || value.contractVersion !== 1 ||
     !['VALIDATED', 'REJECTED'].includes(String(value.status)) ||
@@ -38,17 +53,22 @@ function isProposal(value: unknown): value is PlanProposal {
     typeof value.explanation !== 'string' || !Array.isArray(value.placements) ||
     !isRecord(value.roads) || !Array.isArray(value.roads.add) || !value.roads.add.every(isPosition) ||
     !Array.isArray(value.roads.remove) || !value.roads.remove.every(isPosition) ||
-    !isRecord(value.projectedPlan) || !Array.isArray(value.commands) ||
+    !isRecord(value.projectedPlan) || !Array.isArray(value.commands) || !value.commands.every(isCommand) ||
+    !Number.isSafeInteger(value.seed) || Number(value.seed) < 0 || Number(value.seed) > 2**32-1 ||
     !Number.isSafeInteger(value.estimatedCost) || !Number.isSafeInteger(value.projectedBudget) ||
     !isRecord(value.validation) || typeof value.validation.valid !== 'boolean' ||
     typeof value.validation.fulfilled !== 'boolean' || !Number.isSafeInteger(value.validation.operationCount) ||
     !Array.isArray(value.warnings) || !isRecord(value.intent) || !isRecord(value.constraints)) return false;
 
+  const constraints=value.constraints;
+  if (!Object.keys(DEFAULT_CONSTRAINTS).every(key=>Object.hasOwn(constraints,key))) return false;
+  try { decodeIntent(value.intent); decodeConstraints(constraints); } catch { return false; }
   return value.placements.every((placement) => isRecord(placement) &&
-    typeof placement.buildingId === 'string' && typeof placement.buildingType === 'string' &&
+    typeof placement.buildingId === 'string' && isBuildingType(placement.buildingType) &&
     ['build', 'move'].includes(String(placement.operation)) && isPosition(placement.position) &&
     isRecord(placement.footprint) && Number.isSafeInteger(placement.footprint.width) &&
-    Number.isSafeInteger(placement.footprint.height)) && value.warnings.every((warning) =>
+    Number.isSafeInteger(placement.footprint.height) && Number(placement.footprint.width)>0 &&
+    Number(placement.footprint.height)>0) && value.warnings.every((warning) =>
     isRecord(warning) && typeof warning.code === 'string' && typeof warning.message === 'string');
 }
 

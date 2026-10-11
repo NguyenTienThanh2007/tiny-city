@@ -11,6 +11,7 @@ from .architect_errors import ArchitectError
 from .config import Settings
 
 SYSTEM_INSTRUCTION = '''Interpret English and Vietnamese city-building requests as structured intent.
+Determine language only from userRequest, never from city names, catalog labels or cityContext. For an English request set language=en and write the summary in English. For a Vietnamese request set language=vi and write the summary in Vietnamese. Do not translate an English request into Vietnamese.
 Use only the nine building types supplied in the catalog. Describe unsupported requests and ambiguities explicitly.
 Extract quantities, neighborhood style, spatial preferences, region restrictions, budget caps and preservation rules.
 Do not invent extra buildings or silently change requested quantities. Do not authorize partial fulfillment.

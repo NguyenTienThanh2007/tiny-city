@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type CityViewport from './game/CityViewport';
 import type { ComponentProps } from 'react';
-import { createProposal } from '@tiny-city/ai-architect';
+import { createProposal, PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { ArchitectIntent, PlanningRequest } from '@tiny-city/ai-architect';
 import { CONSTRUCTION_COSTS } from '@tiny-city/simulation';
 import { initialCity } from './data/initialCity';
@@ -259,6 +259,39 @@ describe('frontend city/simulation integration', () => {
     expect(world().revision).toBe(0);
     expect(screen.getByTestId('architect-overlay')).toHaveTextContent('none');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects and regenerates the same plan, then preserves the atomic edit through undo, redo, save and reload', async () => {
+    const fetchMock=installPlanningFetch();
+    const first=render(<App />);
+    const initial=world();
+    fireEvent.change(screen.getByRole('textbox',{name:'Describe a city change'}),{target:{value:'Build three villas'}});
+    click('Generate AI plan');await screen.findByRole('button',{name:'Approve & build'});
+    click('Reject');await screen.findByText('Proposal rejected. Your city is unchanged.');
+    expect(world()).toEqual(initial);
+    click('Generate AI plan');await screen.findByRole('button',{name:'Approve & build'});
+    expect(world()).toEqual(initial);
+    click('Approve & build');await screen.findByText('AI city plan applied. Undo is available.');
+    const appliedPlan=world().plan;const appliedBudget=world().budget;
+    expect(appliedPlan.buildings).toHaveLength(initial.plan.buildings.length+3);
+    click('Undo');expect(world().plan).toEqual(initial.plan);expect(world().budget).toEqual(initial.budget);
+    click('Redo');expect(world().plan).toEqual(appliedPlan);expect(world().budget).toEqual(appliedBudget);
+    click('Save');const saved=JSON.parse(localStorage.getItem(SAVE_KEY)!);
+    first.unmount();render(<App />);
+    expect(world()).toEqual(saved.simulation);expectSynchronized();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases a failed approval session so the unchanged proposal can be regenerated', async () => {
+    installPlanningFetch();render(<App />);const initial=world();
+    const failure=vi.spyOn(PlanReview.prototype,'apply').mockRejectedValueOnce(new PlanError('PLAN_REJECTED','The simulation temporarily rejected this plan.'));
+    fireEvent.change(screen.getByRole('textbox',{name:'Describe a city change'}),{target:{value:'Build three villas'}});
+    click('Generate AI plan');await screen.findByRole('button',{name:'Approve & build'});
+    click('Approve & build');await screen.findByText('The simulation temporarily rejected this plan.');
+    expect(world()).toEqual(initial);
+    click('Generate AI plan');await screen.findByRole('button',{name:'Approve & build'});
+    click('Approve & build');await screen.findByText('AI city plan applied. Undo is available.');
+    expect(world().plan.buildings).toHaveLength(initial.plan.buildings.length+3);failure.mockRestore();
   });
 
   it('requires a second explicit confirmation before a destructive proposal can apply', async () => {

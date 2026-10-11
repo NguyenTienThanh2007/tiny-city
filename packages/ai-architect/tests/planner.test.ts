@@ -65,6 +65,25 @@ describe('deterministic preview and bounded repair',()=>{
 });
 
 describe('preview, approval and atomic application',()=>{
+  it('allows a new review of a rejected plan without reviving the rejected session',async()=>{
+    const s=new Simulation(world());const p=await createProposal(s.getState(),0,intent());
+    const old=new PlanReview(s,p);await old.preview();old.reject();
+    const replacement=new PlanReview(s,p);await replacement.preview();replacement.approve(p.planId);
+    old.reject();expect(replacement.status).toBe('APPROVED');
+    await expect(old.apply()).rejects.toMatchObject({code:'APPROVAL_REQUIRED'});
+    expect((await replacement.apply()).applied).toBe(true);
+    expect(()=>new PlanReview(s,p)).toThrow();
+  });
+  it('does not let a cancelled asynchronous apply use a replacement session approval',async()=>{
+    const s=new Simulation(world());const p=await createProposal(s.getState(),0,intent());
+    const old=new PlanReview(s,p);await old.preview();old.approve(p.planId);
+    const pending=old.apply();old.reject();
+    const blocked=expect(pending).rejects.toMatchObject({code:'APPROVAL_REQUIRED'});
+    const replacement=new PlanReview(s,p);
+    await replacement.preview();replacement.approve(p.planId);await blocked;
+    expect(s.getState().plan.buildings).toHaveLength(0);
+    expect((await replacement.apply()).applied).toBe(true);
+  });
   it('requires a real preview and exact approval, supports rejection with no mutation',async()=>{
     const s=new Simulation(world());const p=await createProposal(s.getState(),0,intent());const before=serializeWorld(s.getState());const r=new PlanReview(s,p);
     expect(()=>r.approve(p.planId)).toThrow();await expect(r.apply()).rejects.toMatchObject({code:'APPROVAL_REQUIRED'});

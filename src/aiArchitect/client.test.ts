@@ -2,20 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCityWorld } from '../simulation/cityAdapter';
 import { initialCity } from '../data/initialCity';
 import { createPlanningRequest, requestCityPlan } from './client';
-import type { PlanProposal, PlanningConstraints } from '@tiny-city/ai-architect';
+import { createProposal } from '@tiny-city/ai-architect';
+import type { ArchitectIntent, PlanProposal, PlanningConstraints } from '@tiny-city/ai-architect';
 
 const constraints: PlanningConstraints = {
   allowPartial: false, allowDestructive: false, allowedDemolitions: [], allowedRoadRemovals: [],
   preserveBuildingIds: ['villa-seed-1'], budgetLimit: null, maxOperations: 128,
 };
 
-const proposal = {
-  contractVersion: 1, planId: 'plan-test', digest: 'digest-test', sourceWorldId: 'villa-gardens-world',
-  sourceRevision: 0, sourceFingerprint: 'fingerprint', seed: 1, status: 'VALIDATED', summary: 'Add a park',
-  explanation: 'One park was placed.', intent: {}, constraints, placements: [], roads: { add: [], remove: [] },
-  projectedPlan: {}, estimatedCost: 80, projectedBudget: 24_600,
-  validation: { valid: true, fulfilled: true, operationCount: 1 }, warnings: [], commands: [],
-} as unknown as PlanProposal;
+const intent: ArchitectIntent = {summary:'Add a park',language:'en',style:'compact',near:'existing',region:null,
+  budgetLimit:null,connectRoads:true,builds:[{buildingType:'park',quantity:1,preferredPosition:null}],
+  moves:[],demolish:[],roadAdd:[],roadRemove:[],preserveBuildingIds:[],unsupportedRequests:[],ambiguities:[]};
+const fixture = () => {
+  const snapshot=createCityWorld(initialCity);
+  return createProposal(snapshot,snapshot.revision,intent,1,constraints);
+};
 
 describe('AI Architect HTTP client', () => {
   it('creates the versioned payload from one canonical snapshot and revision', () => {
@@ -28,6 +29,7 @@ describe('AI Architect HTTP client', () => {
   });
 
   it('posts to the configured planning endpoint and returns a runtime-checked proposal', async () => {
+    const proposal=await fixture();
     const snapshot = createCityWorld(initialCity);
     const request = createPlanningRequest('Add a park', snapshot, constraints);
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ requestId: 'req-1', proposal }), {
@@ -58,5 +60,20 @@ describe('AI Architect HTTP client', () => {
     }));
     await expect(requestCityPlan(createPlanningRequest('Add a park', createCityWorld(initialCity), constraints),
       new AbortController().signal, fetcher)).rejects.toMatchObject({ code: 'PROVIDER_INVALID_RESPONSE' });
+  });
+
+  it.each([
+    ['null command', (p:PlanProposal)=>({...p,commands:[null]})],
+    ['invalid road coordinates', (p:PlanProposal)=>({...p,commands:[{type:'city.edit-roads',add:[{x:'bad',y:0}],remove:[]}]})],
+    ['unknown building type', (p:PlanProposal)=>({...p,placements:[{...p.placements[0],buildingType:'airport'}]})],
+    ['malformed intent', (p:PlanProposal)=>({...p,intent:{...p.intent,builds:null}})],
+    ['invalid constraints', (p:PlanProposal)=>({...p,constraints:{...p.constraints,allowDestructive:'yes'}})],
+    ['invalid footprint', (p:PlanProposal)=>({...p,placements:[{...p.placements[0],footprint:{width:0,height:2}}]})],
+    ['invalid seed', (p:PlanProposal)=>({...p,seed:-1})],
+  ])('rejects %s before UI rendering', async (_name,patch) => {
+    const payload={requestId:'bad-data',proposal:patch(await fixture())};
+    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(payload),{status:200}));
+    await expect(requestCityPlan(createPlanningRequest('Add a park',createCityWorld(initialCity),constraints),
+      new AbortController().signal,fetcher)).rejects.toMatchObject({code:'PROVIDER_INVALID_RESPONSE'});
   });
 });

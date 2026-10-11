@@ -12,12 +12,12 @@
   },
   "scripts": {
     "build:simulation": "npm run build --workspace @tiny-city/simulation",
-    "predev": "npm run build:simulation",
+    "predev": "npm run build:architect",
     "dev": "vite",
-    "prebuild": "npm run build:simulation",
+    "prebuild": "npm run build:architect",
     "build": "tsc -b && vite build",
-    "typecheck": "npm run typecheck --workspace @tiny-city/simulation && npm run build:simulation && tsc -b --pretty false && tsc -p tsconfig.e2e.json && npm run typecheck --workspace @tiny-city/ai-architect",
-    "pretest": "npm run build:simulation",
+    "typecheck": "npm run typecheck --workspace @tiny-city/simulation && npm run build:architect && npm run typecheck --workspace @tiny-city/ai-architect && tsc -b --pretty false && tsc -p tsconfig.e2e.json",
+    "pretest": "npm run build:architect",
     "test": "vitest run",
     "test:simulation": "npm test --workspace @tiny-city/simulation",
     "preview": "vite preview",
@@ -27,6 +27,7 @@
     "security": "python3 scripts/check_secrets.py"
   },
   "dependencies": {
+    "@tiny-city/ai-architect": "*",
     "@tiny-city/simulation": "*",
     "pixi.js": "^8.20.1",
     "react": "^19.1.0",

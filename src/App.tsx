@@ -127,6 +127,7 @@ function App() {
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
   const [architectState, setArchitectState] = useState<ArchitectState>({ status: 'idle' });
+  const [architectPanelOpen, setArchitectPanelOpen] = useState(false);
   const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([]);
   const [allowPartial, setAllowPartial] = useState(false);
   const [protectExisting, setProtectExisting] = useState(true);
@@ -202,7 +203,7 @@ function App() {
   if (architectHostRef.current === null) {
     architectHostRef.current = {
       getState: () => latestSnapshotReaderRef.current(),
-      executeBatch: (commands) => latestCommitRef.current(commands),
+      executeBatch: (commands: readonly CityCommand[]) => latestCommitRef.current(commands),
     };
   }
 
@@ -414,6 +415,11 @@ function App() {
     event.preventDefault();
     const prompt = command.trim();
     if (!prompt || ['requesting', 'validating', 'applying'].includes(architectState.status)) return;
+    setArchitectPanelOpen(true);
+    setSelectedBuildingId(null);
+    setMovingBuildingId(null);
+    setTool('select');
+    endGesture();
 
     try { activeReviewRef.current?.reject(); } catch { /* The previous review is no longer applicable. */ }
     activeReviewRef.current = null;
@@ -526,6 +532,7 @@ function App() {
     if (!review || architectState.status !== 'preview-ready') return;
     review.reject();
     activeReviewRef.current = null;
+    setArchitectPanelOpen(false);
     setDestructiveConfirmation(false);
     setArchitectState({ status: 'rejected', proposal: architectState.proposal, requestId: architectState.requestId,
       message: 'Proposal rejected. Your city is unchanged.' });
@@ -549,12 +556,14 @@ function App() {
       const result = await review.apply();
       if (!result.applied) throw new PlanError('PLAN_REJECTED', 'The simulation did not apply this proposal.');
       activeReviewRef.current = null;
+      setArchitectPanelOpen(false);
       setArchitectState({ status: 'applied', proposal, requestId: architectState.requestId,
         message: 'Proposal applied to your city.' });
       const historyEntry = promptHistory.find((entry) => entry.requestId === architectState.requestId);
       if (historyEntry) updatePromptHistory(historyEntry.id, { status: 'Applied', summary: proposal.summary });
       showNotice('AI city plan applied. Undo is available.');
     } catch (error) {
+      try { review.reject(); } catch { /* An applied review stays terminal. */ }
       activeReviewRef.current = null;
       const code = error instanceof PlanError ? error.code : 'PLAN_REJECTED';
       const message = error instanceof PlanError ? error.message : 'The simulation could not apply the complete plan.';
@@ -603,6 +612,7 @@ function App() {
           <div className="rail-label">TOOLS</div>
           {tools.map((item) => (
               <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => {
+                setArchitectPanelOpen(false);
                 if (item.id !== 'move') setMovingBuildingId(null);
                 setTool(item.id);
               }} title={`${item.label} · ${item.shortcut}`}>
@@ -650,6 +660,9 @@ function App() {
           <button className="camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => navigateCamera()}>Center city</button>
           <MiniMap city={city} cameraFootprint={cameraFootprint} onNavigate={navigateCamera} />
           <form className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
+            <button type="button" className="architect-panel-toggle" aria-controls="architect-panel"
+              aria-expanded={architectPanelOpen} aria-label={architectPanelOpen ? 'Hide AI Architect panel' : 'Show AI Architect panel'}
+              onClick={() => setArchitectPanelOpen((open) => !open)}>AI options</button>
             <div className="planner-sparkle"><Icon name="sparkle" size={19} /></div>
             <div className="planner-copy"><strong>AI Architect</strong><span id="architect-prompt-help">Plan first · approve before building</span></div>
             <textarea value={command} onChange={(event) => setCommand(event.target.value)}
@@ -662,9 +675,12 @@ function App() {
               placeholder="Ask in English or Vietnamese, e.g. Xây 3 biệt thự gần công viên…"
               rows={1} disabled={architectBusy} />
             {planningRequestActive
-              ? <button className="planner-submit cancel-planning" type="button" onClick={cancelArchitectRequest}
+              ? <button key="cancel-request" className="planner-submit cancel-planning" type="button" onClick={(event) => {
+                event.preventDefault();
+                cancelArchitectRequest();
+              }}
                 aria-label="Cancel planning request" title="Cancel request">×</button>
-              : <button className="planner-submit" type="submit" aria-label={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate AI plan'}
+              : <button key="generate-request" className="planner-submit" type="submit" aria-label={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate AI plan'}
                 title={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate plan'}
                 disabled={!command.trim() || architectState.status === 'applying'}><Icon name="arrow" size={18} /></button>}
           </form>
@@ -672,7 +688,7 @@ function App() {
         </section>
 
         <aside className={`inspector ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''}`}>
-          <section className="architect-panel" aria-labelledby="architect-heading">
+          <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">
             <div className="architect-heading-row"><span className="architect-sparkle"><Icon name="sparkle" size={15} /></span>
               <div><h2 id="architect-heading">AI Architect</h2><p>YOUR IDEA, SAFELY PLANNED</p></div>
             </div>

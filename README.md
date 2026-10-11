@@ -8,7 +8,6 @@ Use Node.js 22.12+ (CI uses Node 24). The frontend and simulation are npm worksp
 
 ```sh
 npm ci
-npm run build:architect
 npm run dev
 ```
 
@@ -41,6 +40,7 @@ The frontend calls `http://127.0.0.1:8000/v1/city/plan` by default. Set `VITE_AI
 npm run typecheck
 npm test
 npm run test:simulation
+npm run test:architect
 npm run build
 npx playwright install chromium
 npm run test:e2e
@@ -54,6 +54,10 @@ uv run --locked --extra dev python -m pytest -q -W error
 ```
 
 GitHub Actions runs the same frontend, simulation, API, and Chromium gameplay checks on pull requests to `main` and pushes to `main`. [Integration details](docs/simulation/integration.md) describe the adapter, clock driver, and save format.
+
+Root development, build, tests and typechecking automatically build simulation → architect → frontend; no pre-existing `dist` folders are required. Browser E2E checks also need `uv` and the locked API environment (`uv sync --locked --extra dev --directory apps/api`). Playwright starts fresh production/frontend and FastAPI servers itself. Its API runs on port 8012 in explicit mock mode with an empty key override, so neither local E2E nor CI can make paid Gemini calls. The six AI browser cases cover preview/rejection, atomic approval, history/save/reload, errors, cancellation, stale plans and mobile access. See [Phase 2 integration acceptance](docs/ai-architect/phase-2-integration-acceptance.md).
+
+An optional, separately paid production UI smoke is `TINY_CITY_LIVE_UI=1 npm run test:e2e` after configuring the backend key. It runs one dedicated live spec and is forbidden when CI is set. Keep this flag out of ordinary CI. On narrow screens, **AI options** shows/hides the planning panel so the map and manual inspector stay reachable.
 
 ## Prototype boundary
 

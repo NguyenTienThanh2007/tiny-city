@@ -1,6 +1,6 @@
 import { BUILDINGS, type Cell, type CityState } from '../types';
 import type { PlanProposal } from '@tiny-city/ai-architect';
-import type { CityPlan } from '@tiny-city/simulation';
+import type { BuildingType, CityPlan } from '@tiny-city/simulation';
 
 export type Point = { x: number; y: number };
 export const TILE_W = 56;
@@ -33,7 +33,7 @@ export function footprint(x: number, y: number, width: number, height: number): 
 }
 
 export interface ProposalOverlayGeometry {
-  placements: { buildingId: string; buildingType: string; operation: 'build' | 'move'; points: Point[]; from?: Point[] }[];
+  placements: { buildingId: string; buildingType: BuildingType; operation: 'build' | 'move'; points: Point[]; from?: Point[] }[];
   demolitions: { buildingId: string; points: Point[] }[];
   roadAdds: Point[][];
   roadRemovals: Point[][];
