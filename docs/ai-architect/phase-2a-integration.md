@@ -4,7 +4,7 @@ Phase 2B owns prompt/history/loading UI, preview overlays, approval buttons, ani
 
 ## Local setup and startup
 
-The repository uses root npm workspaces and `apps/api/uv.lock`. Setup has already installed the dependencies and created an ignored `apps/api/.env` from `.env.example`, with an empty key. Existing configuration files and credentials are never overwritten. Enter `GEMINI_API_KEY` in that backend file to enable live interpretation; never put it in browser code, a `VITE_` variable, Git or chat.
+The repository uses root npm workspaces and `apps/api/uv.lock`. Setup has already installed the dependencies and prepared an ignored `apps/api/.env` from `.env.example`. The local key has since been configured by the user and passed the bilingual live acceptance check. Existing configuration files and credentials are never overwritten. On another machine, enter `GEMINI_API_KEY` only in that backend file; never put it in browser code, a `VITE_` variable, Git or chat.
 
 ```sh
 # Repository root
@@ -73,11 +73,15 @@ Read `{requestId,error:{code,message,retryable}}` for HTTP errors. Propagate the
 
 Do not automatically repeat the whole planning request after retries are exhausted; ask the user to retry so additional provider cost is deliberate. Default provider attempts are capped at two ×20 seconds plus 0.25 seconds backoff; each Node phase is capped at 15 seconds. Allow an approximately 75-second client deadline, with AbortController cancellation. ASGI disconnection/request cancellation cancels provider work and kills an in-flight planner subprocess. Increase deadlines only alongside bounded server settings.
 
-For a separately labeled live check after supplying the key:
+For a separately labeled live check after supplying the key and starting the backend:
 
 ```sh
 cd apps/api
 uv run python -m tiny_city_api.live_smoke
+# For a backend started on another local port:
+uv run python -m tiny_city_api.live_smoke --base-url http://127.0.0.1:8010
 ```
 
-This makes a real, potentially paid call only when a backend key exists. Ordinary CI never invokes it. Missing-key output is `NOT VERIFIED`, not a success.
+This makes exactly two live, potentially paid planning requests (Vietnamese and English; each may use the configured bounded provider retry). It validates generated commands, footprints, connectivity, budgets, preservation, preview immutability, explicit approval, atomic application/rollback, stale worlds and replay on isolated simulation fixtures. Two additional `/plan/validate` requests test budget rejection without Gemini cost. It requires Gemini mode and a loopback HTTP URL. The key is excluded from the Node runner's environment, and output contains only acceptance metadata. Ordinary CI never invokes the paid check; missing-key/mock-mode output is `NOT VERIFIED`, not a success.
+
+The provider uses a compact JSON Schema derived from the same strict Pydantic contract. Full objects avoid the live API's large optional-schema grammar rejection, while Pydantic still enforces all counts, lengths, integer bounds and forbidden extra fields after inference. Public TypeScript/wire contracts remain unchanged. See the [acceptance results](phase-2a-acceptance.md) for the actual live outcomes and resolved SDK serialization issue.

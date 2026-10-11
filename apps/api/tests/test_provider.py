@@ -7,7 +7,7 @@ from google.genai import errors
 from tiny_city_api.architect_errors import ArchitectError
 from tiny_city_api.architect_models import ArchitectIntent
 from tiny_city_api.config import Settings
-from tiny_city_api.providers import GeminiProvider
+from tiny_city_api.providers import GeminiProvider, gemini_intent_schema
 
 class AsyncClient:
     def __init__(self, generate):
@@ -33,7 +33,8 @@ def test_sdk_structured_schema_and_limits(monkeypatch,language,prompt):
     assert result==intent and generate.await_count==1 and aio.closed
     args=generate.call_args.kwargs
     assert json.loads(args['contents'])['userRequest']==prompt
-    assert args['config'].response_schema is ArchitectIntent
+    assert args['config'].response_schema is None
+    assert args['config'].response_json_schema==gemini_intent_schema()
     assert args['config'].max_output_tokens==4096 and args['config'].tools is None
     assert factory.call_args.kwargs['http_options'].retry_options.attempts==1
     client.close.assert_called_once()
@@ -83,3 +84,55 @@ def test_missing_key_and_context_limits_do_not_construct_client(monkeypatch):
             asyncio.run(GeminiProvider(Settings(_env_file=None,**config)).interpret(prompt,{}))
         assert failure.value.code==code
     factory.assert_not_called()
+
+def test_real_sdk_serializes_strict_json_schema_without_legacy_fields(monkeypatch):
+    """Exercise the SDK's real HTTP serialization, which a fake Client bypasses."""
+    import httpx
+    from tiny_city_api import providers
+    original_client=providers.genai.Client
+    intent=ArchitectIntent(summary='One park',language='en',builds=[{'buildingType':'park','quantity':1}])
+    bodies=[]
+    def handle(request):
+        body=json.loads(request.content);bodies.append(body)
+        generation=body['generationConfig']
+        if 'responseSchema' in generation:
+            return httpx.Response(400,json={'error':{'code':400,'message':'Unsupported additional_properties'}})
+        assert generation['responseJsonSchema']==gemini_intent_schema()
+        assert generation['responseJsonSchema']['additionalProperties'] is False
+        assert generation['responseJsonSchema']['properties']['builds']['items']['additionalProperties'] is False
+        return httpx.Response(200,json={'candidates':[{'content':{'parts':[{'text':intent.model_dump_json()}]},'finishReason':'STOP'}]})
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+            def factory(**kwargs):
+                kwargs['http_options'].httpx_async_client=transport
+                return original_client(**kwargs)
+            monkeypatch.setattr(providers.genai,'Client',factory)
+            settings=Settings(_env_file=None,gemini_api_key='test-placeholder')
+            return await GeminiProvider(settings).interpret('Build one park',{})
+    assert asyncio.run(run())==intent
+    assert len(bodies)==1
+
+def test_provider_grammar_derives_fields_and_requires_complete_objects():
+    schema=gemini_intent_schema()
+    assert set(schema['properties'])==set(ArchitectIntent.model_fields)
+    assert schema['required']==list(ArchitectIntent.model_fields)
+    builds=schema['properties']['builds']['items']
+    assert builds['required']==['buildingType','quantity','preferredPosition']
+    assert builds['properties']['buildingType']['enum']==ArchitectIntent.model_json_schema()['$defs']['BuildRequest']['properties']['buildingType']['enum']
+    encoded=json.dumps(schema)
+    for keyword in ('$ref','$defs','default','maxLength','minLength','maximum','maxItems'):
+        assert f'"{keyword}"' not in encoded
+
+@pytest.mark.parametrize('patch',[
+    {'builds':[{'buildingType':'villa','quantity':33,'preferredPosition':None}]},
+    {'summary':'x'*513},
+    {'region':{'x':0,'y':0,'width':0,'height':10}},
+    {'untrustedExtraField':'not allowed'},
+])
+def test_simplified_provider_grammar_does_not_weaken_backend_validation(monkeypatch,patch):
+    payload=ArchitectIntent(summary='One park',language='en',builds=[{'buildingType':'park','quantity':1}]).model_dump()
+    provider,generate,_,_,_=setup(monkeypatch,text=json.dumps({**payload,**patch}))
+    with pytest.raises(ArchitectError) as failure:
+        asyncio.run(provider.interpret('Build one park',{}))
+    assert failure.value.code=='PROVIDER_INVALID_RESPONSE'
+    assert generate.await_count==1
