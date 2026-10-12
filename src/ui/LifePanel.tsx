@@ -103,14 +103,16 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
     <p className="panel-lede">Green homes have a free room. You take one room; residents are never moved out for you.</p>
     {available.length === 0 && <div className="housing-recovery" role="region" aria-label="No free home">
       <div className="housing-recovery-head"><Icon name="home" size={18} />
-        <strong>{options.length === 0 ? 'There are no homes yet' : 'Every home is full right now'}</strong></div>
+        <strong>{options.length === 0 ? 'There are no homes yet' : purpose === 'move' ? 'No other home has a free room' : 'Every home is full right now'}</strong></div>
       {options.length > 0 && <div className="housing-meter" aria-label={`${housing.occupied} of ${housing.rooms} rooms taken`}>
         <span><b>{housing.occupied}</b> of {housing.rooms} rooms taken in {housing.homes} home{housing.homes === 1 ? '' : 's'}</span>
         <span className="meter"><i style={{ width: `${housing.rooms ? Math.min(100, housing.occupied / housing.rooms * 100) : 0}%` }} /></span>
       </div>}
-      <p>Residents are never moved out to make room for you. Build a villa, townhouse or apartment beside a road
-        {playerName ? <> and one room is kept free for <b>{playerName}</b></> : null} — new residents will not take it.</p>
-      {playerName && <p className="housing-saved"><Icon name="check" size={13} /> {playerName} is saved and waiting. You can come back here any time from the Life tab.</p>}
+      {purpose === 'move' ? <p>Residents are never moved out to make room for you. You keep your current home; build a villa, townhouse
+        or apartment beside a road to have somewhere to move to.</p>
+        : <p>Residents are never moved out to make room for you. Build a villa, townhouse or apartment beside a road
+        {playerName ? <> and one room is kept free for <b>{playerName}</b></> : null} — new residents will not take it.</p>}
+      {playerName && purpose === 'create' && <p className="housing-saved"><Icon name="check" size={13} /> {playerName} is saved and waiting. You can come back here any time from the Life tab.</p>}
       <button className="primary-action" onClick={onBuildHome}><Icon name="villa" size={15} /> Build a home</button>
     </div>}
     {available.length > 0 && fresh.size > 0 && <div className="hint-banner fresh-banner" role="status"><Icon name="sparkle" size={14} />
