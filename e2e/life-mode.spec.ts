@@ -196,11 +196,13 @@ test('Phase 3 saves load without a player, and full housing gets an honest fallb
   await page.getByRole('button', { name: 'Create character' }).click();
   await page.getByRole('dialog', { name: 'Create your character' }).getByLabel('Character name').fill('Sam');
   await page.getByRole('button', { name: /Next: choose a home/ }).click();
-  await expect(page.locator('.home-picker')).toContainText('Every home is full right now.');
+  await expect(page.getByRole('region', { name: 'No free home' })).toContainText('Every home is full right now');
   await expect(page.getByRole('list', { name: 'Homes' }).getByRole('button', { name: /Lagoon Villa/ })).toBeDisabled();
   await page.getByRole('button', { name: 'Build a home' }).click();
   await expect(page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: 'Villa $120', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  expect((await save(page)).simulation.player).toBeUndefined();
+  // The character is kept (unplaced) instead of being lost when the player leaves to build.
+  expect((await save(page)).simulation.player).toMatchObject({ name: 'Sam', homeBuildingId: null, movement: { status: 'unplaced' } });
+  await expect(page.getByRole('button', { name: 'Back to home selection' })).toContainText('Sam needs a home');
   expect(errors).toEqual([]);
 });
 
@@ -273,3 +275,89 @@ test('phone layout: Life tab, full-screen creator, home sheet and compact HUD', 
   await expect(page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: 'Road $8', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+/** The reported bug: a populated city where every room is taken. The player must recover without editing saves. */
+async function fullCityRecovery(page: Page, buildAt: { x: number; y: number }) {
+  await page.getByRole('button', { name: 'Live', exact: true }).click();
+  await page.getByRole('button', { name: 'Welcome residents' }).click();
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  const before = await save(page);
+  const residents = new Map(before.simulation.citizens.map((c) => [c.id, c.homeBuildingId]));
+  expect(residents.size).toBe(8);
+  await page.getByRole('button', { name: 'Life', exact: true }).click();
+  await page.getByRole('button', { name: 'Create character' }).click();
+  await page.getByRole('dialog', { name: 'Create your character' }).getByLabel('Character name').fill('Mai');
+  await page.getByRole('button', { name: /Next: choose a home/ }).click();
+  const recovery = page.getByRole('region', { name: 'No free home' });
+  await expect(recovery).toContainText('Every home is full right now');
+  await expect(recovery).toContainText('8 of 8 rooms taken in 3 homes');
+  await expect(page.getByRole('list', { name: 'Homes' }).getByRole('button', { disabled: false })).toHaveCount(0);
+  await recovery.getByRole('button', { name: 'Build a home' }).click();
+  await expect(page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: 'Villa $120', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  if (await page.getByRole('button', { name: 'Center neighborhood' }).isVisible()) await centerCity(page);
+  else {
+    // Phones hide the camera buttons: center the lot through the minimap, then let the camera settle.
+    const minimap = (await page.getByRole('button', { name: 'Navigate neighborhood overview' }).boundingBox())!;
+    await page.mouse.click(minimap.x + minimap.width * (buildAt.x + 1) / 64, minimap.y + minimap.height * (buildAt.y + 1) / 64);
+    await page.waitForTimeout(600);
+  }
+  await clickTile(page, buildAt.x, buildAt.y);
+  await expect(notice(page)).toContainText('has a free room for Mai');
+  const built = (await save(page)).simulation;
+  const villa = built.plan.buildings.find((b) => !before.simulation.plan.buildings.some((old) => old.id === b.id))!;
+  // No resident was moved or removed; the new villa got one resident and kept one room for the player.
+  for (const [id, home] of residents) expect(built.citizens.find((c) => c.id === id)?.homeBuildingId).toBe(home);
+  expect(built.citizens.filter((c) => c.homeBuildingId === villa.id)).toHaveLength(1);
+  expect(built.player).toMatchObject({ name: 'Mai', movement: { status: 'unplaced' } });
+  await page.getByRole('button', { name: 'Back to home selection' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose your home' })).toBeVisible();
+  const fresh = page.getByRole('list', { name: 'Homes' }).getByRole('button', { name: /New/ });
+  await expect(fresh).toContainText('1 of 2 rooms taken');
+  await fresh.click();
+  await page.getByRole('region', { name: 'Confirm home' }).getByRole('button', { name: 'Move in & start' }).click();
+  await expect(notice(page)).toContainText('Welcome home, Mai!');
+  return { residents, villa };
+}
+
+test('housing recovery: all homes full, build a home, the held room survives residents, move in, walk and reload', async ({ page }) => {
+  const errors = await openCity(page);
+  const { residents, villa } = await fullCityRecovery(page, { x: 28, y: 21 });
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  const placed = (await save(page)).simulation;
+  expect(placed.player).toMatchObject({ homeBuildingId: villa.id, movement: { status: 'inside', currentBuildingId: villa.id } });
+  expect(placed.citizens).toHaveLength(9);
+  for (const [id, home] of residents) expect(placed.citizens.find((c) => c.id === id)?.homeBuildingId).toBe(home);
+  // Play: walk along the street.
+  await centerCity(page);
+  await clickTile(page, 36, 20);
+  await expect(status(page)).toContainText('Walking to the street at 36, 20');
+  await page.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect(status(page)).toContainText('Free to explore', { timeout: 30_000 });
+  // City edits keep housing consistent: another villa now fills completely with residents.
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await page.getByRole('button', { name: 'Build', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: 'Villa $120', exact: true }).click();
+  await centerCity(page);
+  await clickTile(page, 32, 21);
+  await expect.poll(async () => (await save(page)).simulation.plan.buildings.length).toBe(placed.plan.buildings.length + 1);
+  const grown = (await save(page)).simulation;
+  expect(grown.citizens).toHaveLength(11);
+  expect(grown.citizens.filter((c) => c.homeBuildingId === villa.id)).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator('canvas')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Life', exact: true })).toHaveAttribute('title', 'Continue life as Mai');
+  const reloaded = (await save(page)).simulation;
+  expect(reloaded.player).toEqual(grown.player);
+  expect(reloaded.citizens).toHaveLength(11);
+  expect(errors).toEqual([]);
+});
+
+test('phone: full-housing recovery to a playable character', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openCity(page);
+  await fullCityRecovery(page, { x: 28, y: 21 });
+  await expect(page.getByRole('region', { name: 'Life HUD' })).toContainText('Mai');
+  await expect(page.getByRole('button', { name: 'Back to home selection' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+

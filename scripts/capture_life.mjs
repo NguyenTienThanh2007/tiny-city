@@ -52,8 +52,9 @@ async function create(page, { name = 'Mai Nguyen', home = /^Villa 03/, look = tr
   await page.waitForTimeout(900);
 }
 
+const only = process.argv[4];
 // Desktop journey on the sample city.
-{
+if (!only) {
   const { context, page } = await open({ width: 1440, height: 900 });
   await create(page, { shots: true });
   await shot(page, '05-first-spawn-night');
@@ -128,11 +129,25 @@ async function create(page, { name = 'Mai Nguyen', home = /^Villa 03/, look = tr
   await page.getByRole('button', { name: /Next: choose a home/ }).click();
   await page.waitForTimeout(600);
   await shot(page, '16-no-free-home');
+  // Recovery: build a home, the held room is highlighted, move in and play.
+  await page.getByRole('button', { name: 'Build a home' }).click();
+  await page.getByRole('button', { name: 'Center neighborhood' }).click();
+  await page.waitForTimeout(700);
+  await clickTile(page, 28, 21);
+  await page.waitForTimeout(900);
+  await shot(page, '22-recovery-build-mode');
+  await page.getByRole('button', { name: 'Back to home selection' }).click();
+  await page.waitForTimeout(800);
+  await shot(page, '23-recovery-new-home');
+  await page.getByRole('list', { name: 'Homes' }).getByRole('button', { name: /New/ }).click();
+  await page.getByRole('region', { name: 'Confirm home' }).getByRole('button', { name: /Move in/ }).click();
+  await page.waitForTimeout(1500);
+  await shot(page, '24-recovery-moved-in');
   await context.close();
 }
 
 // Tablet and phone.
-for (const [label, viewport] of [['17-tablet', { width: 1024, height: 768 }], ['18-phone', { width: 390, height: 844 }]]) {
+if (!only) for (const [label, viewport] of [['17-tablet', { width: 1024, height: 768 }], ['18-phone', { width: 390, height: 844 }]]) {
   const { context, page } = await open(viewport);
   if (label === '18-phone') {
     await page.getByRole('button', { name: 'Life', exact: true }).click();
