@@ -3,7 +3,7 @@ import { Simulation } from '@tiny-city/simulation';
 import type { Citizen, WorldState } from '@tiny-city/simulation';
 import { createLivingWorldFixture } from '@tiny-city/simulation/fixtures';
 import {
-  blendPosition, buildingDepth, citizenAppearance, citizenDepth, isCitizenOutdoors, laneOffset, receiveSnapshot, screenFacing, skyTint,
+  blendPosition, buildingDepth, citizenAppearance, citizenDepth, isCitizenOutdoors, laneOffset, receiveSnapshot, screenFacing,
 } from './npcMotion';
 
 describe('resident appearance', () => {
@@ -97,10 +97,4 @@ describe('isometric presentation helpers', () => {
     }
   });
 
-  it('tints only dusk, night and dawn', () => {
-    expect(skyTint(12 * 60).opacity).toBe(0);
-    expect(skyTint(23 * 60).opacity).toBeGreaterThan(0.2);
-    expect(skyTint(18 * 60).opacity).toBeGreaterThan(0);
-    expect(skyTint(6.5 * 60).opacity).toBeGreaterThan(0);
-  });
 });

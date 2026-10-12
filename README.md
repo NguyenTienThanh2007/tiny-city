@@ -19,7 +19,7 @@ uv sync --locked --extra dev
 uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8000
 ```
 
-The frontend calls `http://127.0.0.1:8000/v1/city/plan` by default. Set `VITE_AI_ARCHITECT_API_URL` only when the API uses another base URL. The prompt produces a temporary map preview; only **Approve & build** applies the validated batch through the live simulation.
+In development the frontend calls the planner through Vite's same-origin proxy at `/api` (forwarded to `http://127.0.0.1:8000`; set `TINY_CITY_API_PROXY_TARGET` for another address), so phones and tablets on your LAN that open the dev server also reach the API without CORS changes. Production builds call `http://127.0.0.1:8000` by default. Set `VITE_AI_ARCHITECT_API_URL` only when the API uses another base URL. The AI panel shows the planner connection (reachable, mock/demo mode, provider key configured, planner built) from the cheap `GET /v1/city/status` endpoint and offers Retry and setup steps when the API is unreachable; it never substitutes mock output in a real session. The prompt produces a temporary map preview; only **Approve & build** applies the validated batch through the live simulation.
 
 ## Controls
 
@@ -68,6 +68,8 @@ An optional, separately paid production UI smoke is `TINY_CITY_LIVE_UI=1 npm run
 `@tiny-city/simulation` remains authoritative for city commands, footprints, roads, construction spending, IDs, and deterministic saves. AI responses are untrusted proposals; the frontend validates them with `PlanReview` before approval and commits only through the existing simulation/history path. Pixi remains the single frame driver; only styles and construction timestamps remain presentation metadata. Residents are rendered from authoritative snapshots (blended between fixed ticks, never simulated in React/Pixi). Traffic, recurring economy, needs and God Mode are not implemented. See [Phase 1A contracts](docs/simulation/phase-1a.md), [Phase 1B tools](docs/simulation/phase-1b.md), the [Phase 2A frontend integration contract](docs/ai-architect/phase-2a-integration.md), and the [final Phase 1 acceptance audit](docs/simulation/phase-1-acceptance.md).
 
 Phase 3A adds opt-in seeded residents, capacity/job assignment, varied daily routines and progressive road navigation in the headless engine. Existing worlds retain their behavior until `enablePopulation()` is called; managed saves restore automatically. See the [NPC public contract](docs/npc/phase-3a-contracts.md), [typed integration examples](docs/npc/phase-3a-integration.md) and [Phase 3A acceptance](docs/npc/phase-3a-acceptance.md). Run `npm run bench:npc` for the engine benchmark.
+
+Visual World 2.0 adds deterministic building variants, sidewalks/crosswalks/streetlights, landscaping, time-of-day lighting with lit windows, richer placement feedback, a contextual collapsible HUD and planner connectivity diagnostics, while keeping Phase 3 rendering performance. See [Visual World 2.0 acceptance](docs/design/visual-world-2-acceptance.md).
 
 Phase 3B delivers the player-facing living world (Pixi resident sprites, selection, profiles, follow camera, speed controls, City Life feed) and the Coastal Paradise UX/UI redesign. See [Phase 3 complete acceptance](docs/npc/phase-3-complete-acceptance.md) and the [UX/UI redesign notes](docs/design/ux-ui-redesign.md). `node scripts/npc_render_benchmark.mjs` measures browser rendering with 30–1000 residents against a running dev server; `node scripts/capture_ui.mjs` regenerates the design-review screenshots.
 

@@ -20,6 +20,7 @@ def create_app(*, cors_origins: list[str] | None = None, settings: Settings | No
     application.state.provider = provider if provider is not None else MockProvider() if settings.tiny_city_provider_mode == 'mock' else GeminiProvider(settings)
     application.state.bridge = bridge if bridge is not None else PlannerBridge(settings)
     application.state.gate = RequestGate(settings)
+    application.state.settings = settings
     application.add_middleware(RequestBoundary, limit=settings.tiny_city_body_limit_bytes)
     application.add_middleware(CORSMiddleware, allow_origins=cors_origins, allow_credentials=False,
         allow_methods=['GET','POST'], allow_headers=['Content-Type'], expose_headers=['X-Request-ID'])

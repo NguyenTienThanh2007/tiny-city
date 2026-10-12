@@ -7,7 +7,6 @@ import { PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { PlanProposal, PlanningConstraints, PlanningHost } from '@tiny-city/ai-architect';
 import CityViewport from './game/CityViewport';
 import type { CameraRequest, SafeArea } from './game/CityViewport';
-import { skyTint } from './game/npcMotion';
 import { Icon } from './ui/Icon';
 import { MiniMap } from './ui/MiniMap';
 import { SimulationDock } from './ui/SimulationDock';
@@ -18,7 +17,8 @@ import { LivePanel } from './ui/LivePanel';
 import { BuildingThumb } from './ui/BuildingThumb';
 import { residentsWithoutJobs, summarizeActivities } from './simulation/citizenView';
 import { emptyLifeFeed, reduceLifeFeed, type LifeFeedState } from './simulation/lifeFeed';
-import { ArchitectClientError, createPlanningRequest, requestCityPlan } from './aiArchitect/client';
+import { ArchitectClientError, checkPlannerConnection, createPlanningRequest, requestCityPlan } from './aiArchitect/client';
+import { ConnectionBadge, isRecoverablePlannerError, PlannerRecovery, type ConnectionView } from './ui/PlannerConnection';
 import { rejectionFeedback } from './simulation/feedback';
 import { loadCitySave, saveCity } from './simulation/citySave';
 import { useCitySimulation } from './simulation/useCitySimulation';
@@ -34,6 +34,14 @@ const promptSuggestions = [
   'Xây 2 biệt thự gần công viên',
   'Create a pool and clubhouse corner for evenings',
 ];
+
+const PANEL_KEY = 'tiny-city-panel-collapsed';
+function readFlag(key: string): boolean {
+  try { return localStorage.getItem(key) === '1'; } catch { return false; }
+}
+function writeFlag(key: string, value: boolean) {
+  try { if (value) localStorage.setItem(key, '1'); else localStorage.removeItem(key); } catch { /* Layout preferences are conveniences only. */ }
+}
 
 function readGuideHidden(): boolean {
   try { return localStorage.getItem(GUIDE_KEY) === '1'; } catch { return false; }
@@ -114,6 +122,11 @@ function App() {
   const [guideHidden, setGuideHidden] = useState(readGuideHidden);
   const [metResident, setMetResident] = useState(false);
   const { safeArea, compact } = useSafeArea();
+  const [panelCollapsed, setPanelCollapsed] = useState(() => readFlag(PANEL_KEY));
+  const [connection, setConnection] = useState<ConnectionView>({ state: 'idle' });
+  const connectionCheckedAt = useRef(0);
+  const plannerFormRef = useRef<HTMLFormElement>(null);
+  const [fundsDelta, setFundsDelta] = useState<{ id: number; amount: number } | null>(null);
   const cityRef = useRef(city);
   cityRef.current = city;
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -131,7 +144,6 @@ function App() {
   const [destructiveConfirmation, setDestructiveConfirmation] = useState(false);
   const [notice, setNotice] = useState(loaded.notice ?? '');
   const [saved, setSaved] = useState(false);
-  const [constructionClock, setConstructionClock] = useState(Date.now());
   const [cameraFootprint, setCameraFootprint] = useState<CameraFootprintPoint[] | null>(null);
   const [cameraRequest, setCameraRequest] = useState<CameraRequest>();
   const gestureRef = useRef<{ active: boolean; recorded: boolean }>({ active: false, recorded: false });
@@ -357,6 +369,33 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [redo, undo, togglePause]);
 
+  const checkConnection = useCallback(() => {
+    connectionCheckedAt.current = Date.now();
+    setConnection({ state: 'checking' });
+    void checkPlannerConnection().then((result) => setConnection(result));
+  }, []);
+  // Checked only when the planner is opened (at most every 15 s) or after a failed request; never polled.
+  useEffect(() => {
+    if (!architectPanelOpen) return;
+    if (connection.state === 'checking') return;
+    if (connection.state === 'idle' || Date.now() - connectionCheckedAt.current > 15_000) checkConnection();
+  }, [architectPanelOpen, checkConnection, connection.state]);
+  useEffect(() => {
+    if (architectState.status === 'error' && isRecoverablePlannerError(architectState.errorCode)) checkConnection();
+  }, [architectState.status, architectState.errorCode, checkConnection]);
+
+  const fundsRef = useRef(city.funds);
+  useEffect(() => {
+    const amount = city.funds - fundsRef.current;
+    fundsRef.current = city.funds;
+    if (amount !== 0) setFundsDelta((current) => ({ id: (current?.id ?? 0) + 1, amount }));
+  }, [city.funds]);
+  useEffect(() => {
+    if (!fundsDelta) return;
+    const timer = window.setTimeout(() => setFundsDelta(null), 1400);
+    return () => window.clearTimeout(timer);
+  }, [fundsDelta]);
+
   const save = () => {
     try {
       saveCity(localStorage, cityRef.current, getSnapshot());
@@ -397,12 +436,6 @@ function App() {
     error: architectState.errorCode ?? 'Could not plan', stale: 'Plan is stale',
   };
 
-  useEffect(() => {
-    if (!selectedBuilding) return;
-    const delay = Math.max(0, selectedBuilding.createdAt + 5200 - Date.now() + 25);
-    const timer = window.setTimeout(() => setConstructionClock(Date.now()), delay);
-    return () => window.clearTimeout(timer);
-  }, [selectedBuilding?.id, selectedBuilding?.createdAt]);
 
   const plannerSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -468,6 +501,8 @@ function App() {
       const response = await requestCityPlan(request, controller.signal);
       if (token !== requestTokenRef.current) return;
       responseRequestId = response.requestId;
+      // A planning response proves the server is reachable; refresh a stale "unreachable" badge.
+      setConnection((current) => current.state === 'unavailable' ? { state: 'reachable', reason: 'The last planning request reached the server.' } : current);
       if (pending.timeoutId !== null) window.clearTimeout(pending.timeoutId);
       pending.timeoutId = null;
       updatePromptHistory(historyId, { requestId: response.requestId });
@@ -652,10 +687,13 @@ function App() {
     { id: 'meet', label: 'Meet a resident', hint: 'Click someone walking on the map to see their routine.', done: metResident },
   ];
 
-  const tint = skyTint(gameTime.minuteOfDay);
   const dirty = history.length > 0 || redoHistory.length > 0 || world.clock.tick !== loaded.world.clock.tick || populationEnabled !== (loaded.world.population !== undefined);
   const view = selectedCitizen ? 'citizen' : selectedBuilding && !movingBuildingId ? 'building' : mode;
   const sheetVisible = compact && (view === 'citizen' || view === 'building' || architectPanelOpen || sheetOpen);
+  // Collapsing hides only the Build/Live overview; inspectors and the AI panel still open when relevant.
+  const panelHidden = !compact && panelCollapsed && (view === 'build' || view === 'live');
+  const togglePanel = (collapsed: boolean) => { setPanelCollapsed(collapsed); writeFlag(PANEL_KEY, collapsed); };
+  const selectedFootprint = selectedBuilding ? { x: selectedBuilding.x, y: selectedBuilding.y, width: BUILDINGS[selectedBuilding.kind].width, height: BUILDINGS[selectedBuilding.kind].height } : null;
   const proposalBreakdown = currentProposal ? Object.entries(currentProposal.placements
     .filter((placement) => placement.operation === 'build')
     .reduce<Record<string, number>>((counts, placement) => ({ ...counts, [placement.buildingType]: (counts[placement.buildingType] ?? 0) + 1 }), {}))
@@ -667,7 +705,7 @@ function App() {
     : `Click an open lot to place a ${BUILDINGS[tool].label.toLowerCase()}`;
 
   return (
-    <main className={`app-shell mode-${mode} ${compact ? 'is-compact' : ''}`}>
+    <main className={`app-shell mode-${mode} ${compact ? 'is-compact' : ''} ${panelHidden ? 'panel-collapsed' : ''}`}>
       <section className="map-stage">
         <CityViewport
           city={city}
@@ -694,8 +732,6 @@ function App() {
           onBeginGesture={beginGesture}
           onEndGesture={endGesture}
         />
-        {/* Only mounted while tinted: an idle blend layer over the canvas still costs a full-screen composite. */}
-        {populationEnabled && tint.opacity > 0 && <div className="daylight" aria-hidden="true" style={{ backgroundColor: tint.color, opacity: tint.opacity }} />}
         {overlayProposal && <div className="preview-ribbon" role="note"><Icon name="sparkle" size={14} /> AI preview · not built yet</div>}
       </section>
 
@@ -707,7 +743,8 @@ function App() {
             <div className="city-line"><span>Villa Gardens</span><span className={`save-state ${saved ? 'is-saved' : dirty ? 'is-dirty' : ''}`}>{saved ? 'Saved on this device' : dirty ? 'Unsaved changes' : 'Local city'}</span></div>
           </div>
         </div>
-        <nav className="mode-switch" aria-label="Game mode">
+        <nav className="mode-switch" aria-label="Game mode" data-mode={mode}>
+          <span className="mode-indicator" aria-hidden="true" />
           <button className={`mode-tab ${mode === 'build' ? 'active' : ''}`} aria-pressed={mode === 'build'} onClick={() => chooseMode('build')} title="Build roads and buildings">
             <Icon name="layers" size={16} /><span>Build</span></button>
           <button className={`mode-tab ${mode === 'plan' ? 'active' : ''}`} aria-pressed={mode === 'plan'} onClick={() => chooseMode('plan')} title="Plan with the AI Architect">
@@ -716,7 +753,8 @@ function App() {
             <Icon name="people" size={16} /><span>Live</span>{unseenFeed > 0 && <b className="tab-badge" aria-label={`${unseenFeed} new city life updates`}>{unseenFeed}</b>}</button>
         </nav>
         <div className="hud-stats">
-          <div className="hud-stat cash" title="Funds available for construction"><Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds</small></div>
+          <div className="hud-stat cash" title="Funds available for construction"><Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds</small>
+            {fundsDelta && <span key={fundsDelta.id} className={`funds-delta ${fundsDelta.amount < 0 ? 'is-spend' : 'is-gain'}`} aria-hidden="true">{fundsDelta.amount < 0 ? '−' : '+'}${Math.abs(fundsDelta.amount).toLocaleString()}</span>}</div>
           <div className="hud-stat" title={populationEnabled ? 'Residents living in the city' : 'Residents have not moved in yet'}><Icon name="people" size={15} /><strong>{populationEnabled ? citizens.length : '—'}</strong><small>Residents</small></div>
           <div className="hud-stat" title="Home buildings"><Icon name="home" size={15} /><strong>{villas}</strong><small>Homes</small></div>
         </div>
@@ -751,16 +789,17 @@ function App() {
           <button className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomCamera(0.8)}><Icon name="minus" size={16} /></button>
           <button className="icon-button camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => { setFollowCitizenId(null); navigateCamera(); }}><Icon name="center" size={16} /></button>
         </div>
-        <MiniMap city={city} citizens={citizens} cameraFootprint={cameraFootprint} selectedCitizenId={selectedCitizenId} onNavigate={(cell) => { setFollowCitizenId(null); navigateCamera(cell); }} />
+        <MiniMap city={city} citizens={citizens} cameraFootprint={cameraFootprint} selectedCitizenId={selectedCitizenId} selectedFootprint={selectedFootprint} onNavigate={(cell) => { setFollowCitizenId(null); navigateCamera(cell); }} />
       </div>
 
       <div className="tool-hint" aria-hidden="true"><span className="control-dot" />{toolHint}<span className="control-separator">·</span>Scroll to zoom<span className="control-separator">·</span>Shift + drag to pan</div>
 
-      <form className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
+      <form ref={plannerFormRef} className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
         <button type="button" className="architect-panel-toggle" aria-controls="architect-panel"
           aria-expanded={architectPanelOpen} aria-label={architectPanelOpen ? 'Hide AI Architect panel' : 'Show AI Architect panel'}
           onClick={() => { const opening = !architectPanelOpen; setArchitectPanelOpen(opening); if (opening) { setSelectedBuildingId(null); setSelectedCitizenId(null); setSheetOpen(false); } }}>
-          <Icon name="sparkle" size={17} /><span>AI options</span></button>
+          <Icon name="sparkle" size={17} /><span>AI options</span>
+          {connection.state !== 'idle' && <i className={`composer-dot ${connection.state === 'connected' || connection.state === 'reachable' ? 'is-online' : connection.state === 'checking' ? 'is-checking' : 'is-offline'}`} aria-hidden="true" />}</button>
         <div className="planner-copy"><strong>AI Architect</strong><span id="architect-prompt-help">Preview first, then approve</span></div>
         <textarea value={command} onChange={(event) => setCommand(event.target.value)}
           onKeyDown={(event) => {
@@ -783,7 +822,10 @@ function App() {
       </form>
       {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check"><Icon name="check" size={12} /></span>{notice}</div>}
 
-      <aside className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''}`}>
+      {panelHidden && <button className="panel-handle" aria-label="Show side panel" title="Show side panel" onClick={() => togglePanel(false)}>
+        <Icon name="chevron" size={16} className="is-flipped" /><span>{mode === 'live' ? 'Live' : 'Build'}</span></button>}
+      <aside className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''} ${panelHidden ? 'is-collapsed' : ''}`}>
+        {!compact && (view === 'build' || view === 'live') && <button className="panel-collapse" aria-label="Collapse side panel" title="Collapse side panel" onClick={() => togglePanel(true)}><Icon name="chevron" size={16} /></button>}
         {compact && sheetVisible && (view === 'build' || view === 'live') && !architectPanelOpen && <button className="sheet-close" aria-label="Close panel" onClick={() => setSheetOpen(false)}><Icon name="close" size={16} /></button>}
         <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">
           <div className="panel-topline"><span>AI ARCHITECT</span><span className={`architect-chip state-${architectState.status}`}>{architectStatusLabel[architectState.status]}</span></div>
@@ -791,6 +833,7 @@ function App() {
             <div><h2 id="architect-heading">AI Architect</h2><p>Your idea, safely planned</p></div>
           </div>
           <p className="architect-intro">Describe a change in the prompt bar. Plans appear as a blueprint on the map; the city only changes after you approve a valid plan.</p>
+          <ConnectionBadge connection={connection} onRetry={checkConnection} />
           {!currentProposal && !architectBusy && <div className="prompt-suggestions" aria-label="Example prompts">
             {promptSuggestions.map((suggestion) => <button key={suggestion} type="button" className="suggestion-chip" onClick={() => setCommand(suggestion)}>{suggestion}</button>)}
           </div>}
@@ -798,10 +841,12 @@ function App() {
             <span className="architect-state-dot" />
             <span>{architectState.message ?? architectStatusLabel[architectState.status]}</span>
             {architectState.requestId && <small>Request {architectState.requestId}</small>}
-            {(architectState.status === 'error' || architectState.status === 'stale') && <small className="recovery">{architectState.status === 'stale'
-              ? 'Your manual edit is kept. Send the prompt again to plan against the current city.'
-              : 'Nothing was changed. Check the planning server, then press the arrow to retry.'}</small>}
+            {architectState.status === 'stale' && <small className="recovery">Your manual edit is kept. Send the prompt again to plan against the current city.</small>}
+            {architectState.status === 'error' && !isRecoverablePlannerError(architectState.errorCode) && <small className="recovery">Nothing was changed. Adjust the prompt or options, then press the arrow to retry.</small>}
           </div>
+          {architectState.status === 'error' && isRecoverablePlannerError(architectState.errorCode) && <PlannerRecovery code={architectState.errorCode!}
+            connection={connection} prompt={command} dev={import.meta.env.DEV}
+            onRetry={() => plannerFormRef.current?.requestSubmit()} onCheck={checkConnection} />}
 
           {currentProposal && <div className={`proposal-card ${architectState.status === 'stale' ? 'is-stale' : ''}`}>
             <div className="proposal-card-heading"><strong>{currentProposal.summary}</strong>
@@ -881,7 +926,6 @@ function App() {
           onSelectBuilding={(id) => selectBuilding(id)} />}
 
         {view === 'building' && selectedBuilding && <BuildingInspector building={selectedBuilding} roadConnected={roadConnected}
-          underConstruction={constructionClock < selectedBuilding.createdAt + 5200}
           occupancy={populationEnabled ? getBuildingOccupancy(selectedBuilding.id) : null}
           citizens={citizenMap} populationEnabled={populationEnabled}
           onClose={() => { setSelectedBuildingId(null); setMovingBuildingId(null); setTool('select'); }}

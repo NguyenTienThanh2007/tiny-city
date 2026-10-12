@@ -1,4 +1,5 @@
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import type { Renderer } from 'pixi.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CityPlan, Position, WorldState } from '@tiny-city/simulation';
 import type { PlanProposal } from '@tiny-city/ai-architect';
@@ -6,8 +7,12 @@ import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement 
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
-import { buildingLift, drawBuildingArt, polygon, roofCapHeight } from './buildingArt';
-import { NpcLayer, type LocalBounds } from './npcLayer';
+import { buildingLift, drawBuildingArt, polygon, roofCapHeight, type RoadSides } from './buildingArt';
+import { NpcLayer, npcSpriteScale, type LocalBounds } from './npcLayer';
+import { DecorLayer } from './decorLayer';
+import { EffectsLayer } from './effectsLayer';
+import { DAYLIGHT, worldLighting, type WorldLighting } from './lighting';
+import { getGameTime } from '@tiny-city/simulation';
 import { buildingDepth } from './npcMotion';
 import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
 import { rejectionFeedback } from '../simulation/feedback';
@@ -47,6 +52,13 @@ type Props = {
 };
 
 const SEA = 0x8fc3c0;
+
+/**
+ * Pixi applications are created strictly one after another. Destroying an Application clears Pixi's global
+ * batch pool; if a StrictMode remount initializes a second app before the first one is destroyed, the live app
+ * later draws with destroyed batches. A mount disposed before its turn never creates a renderer at all.
+ */
+let pixiLifecycle: Promise<void> = Promise.resolve();
 const NO_SAFE_AREA: SafeArea = { left: 0, right: 0, top: 0, bottom: 0 };
 
 function tileDiamond(x: number, y: number): Point[] {
@@ -99,45 +111,153 @@ function drawTerrain(layer: Container, size: number) {
 
 function drawRoads(layer: Container, city: CityState) {
   const roadSet = new Set(city.roads.map(({ x, y }) => cellKey(x, y)));
-  const roadGraphics = new Graphics();
+  const g = new Graphics();
+  const has = (x: number, y: number) => roadSet.has(cellKey(x, y));
+  const quad = (x0: number, y0: number, x1: number, y1: number) => [iso(x0, y0), iso(x1, y0), iso(x1, y1), iso(x0, y1)];
+  const ASPHALT = 0x56636a, PAVING = 0xe3dccb, CURB = 0xbfb6a2, MARK = 0xf3e3b0;
+  const inset = 0.17;
   for (const { x, y } of city.roads) {
-    // Pale curb, then asphalt inset.
-    polygon(roadGraphics, tileDiamond(x, y), 0xd9d1bd, 1);
-    const inset = [iso(x + 0.1, y + 0.1), iso(x + 0.9, y + 0.1), iso(x + 0.9, y + 0.9), iso(x + 0.1, y + 0.9)];
-    polygon(roadGraphics, inset, 0x5b676c, 1);
-    const extend = (dx: number, dy: number) => {
-      if (!roadSet.has(cellKey(x + dx, y + dy))) return;
-      const strip = dx !== 0
-        ? [iso(dx > 0 ? x + 0.9 : x, y + 0.1), iso(dx > 0 ? x + 1 : x + 0.1, y + 0.1), iso(dx > 0 ? x + 1 : x + 0.1, y + 0.9), iso(dx > 0 ? x + 0.9 : x, y + 0.9)]
-        : [iso(x + 0.1, dy > 0 ? y + 0.9 : y), iso(x + 0.9, dy > 0 ? y + 0.9 : y), iso(x + 0.9, dy > 0 ? y + 1 : y + 0.1), iso(x + 0.1, dy > 0 ? y + 1 : y + 0.1)];
-      polygon(roadGraphics, strip, 0x5b676c, 1);
-    };
-    extend(1, 0); extend(-1, 0); extend(0, 1); extend(0, -1);
+    const n = has(x, y - 1), sDir = has(x, y + 1), w = has(x - 1, y), e = has(x + 1, y);
+    // Sidewalk paving first, then asphalt that reaches the tile edge wherever the road continues.
+    polygon(g, tileDiamond(x, y), PAVING, 1);
+    const x0 = w ? x : x + inset, x1 = e ? x + 1 : x + 1 - inset, y0 = n ? y : y + inset, y1 = sDir ? y + 1 : y + 1 - inset;
+    polygon(g, quad(x + inset, y + inset, x + 1 - inset, y + 1 - inset), ASPHALT, 1);
+    if (w) polygon(g, quad(x, y + inset, x + inset, y + 1 - inset), ASPHALT, 1);
+    if (e) polygon(g, quad(x + 1 - inset, y + inset, x + 1, y + 1 - inset), ASPHALT, 1);
+    if (n) polygon(g, quad(x + inset, y, x + 1 - inset, y + inset), ASPHALT, 1);
+    if (sDir) polygon(g, quad(x + inset, y + 1 - inset, x + 1 - inset, y + 1), ASPHALT, 1);
+    // Curbs only along open sides.
+    const curb = (a: Point, b: Point) => g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: CURB, width: 1.6, alpha: 0.95 });
+    if (!n) curb(iso(x0, y + inset), iso(x1, y + inset));
+    if (!sDir) curb(iso(x0, y + 1 - inset), iso(x1, y + 1 - inset));
+    if (!w) curb(iso(x + inset, y0), iso(x + inset, y1));
+    if (!e) curb(iso(x + 1 - inset, y0), iso(x + 1 - inset, y1));
+    const links = Number(n) + Number(sDir) + Number(w) + Number(e);
     const center = iso(x + 0.5, y + 0.5);
-    const hasX = roadSet.has(cellKey(x - 1, y)) || roadSet.has(cellKey(x + 1, y));
-    const hasY = roadSet.has(cellKey(x, y - 1)) || roadSet.has(cellKey(x, y + 1));
-    if (hasX && !hasY) roadGraphics.moveTo(center.x - 8, center.y - 4).lineTo(center.x + 8, center.y + 4).stroke({ color: 0xf3e3b0, width: 1.4, alpha: 0.85 });
-    if (hasY && !hasX) roadGraphics.moveTo(center.x + 8, center.y - 4).lineTo(center.x - 8, center.y + 4).stroke({ color: 0xf3e3b0, width: 1.4, alpha: 0.85 });
-    if (hasX && hasY) roadGraphics.circle(center.x, center.y, 2).fill({ color: 0xf3e3b0, alpha: 0.5 });
+    if (links >= 3) {
+      // Crosswalk stripes on every approach of an intersection.
+      const zebra = (dx: number, dy: number) => {
+        for (let stripe = 0; stripe < 4; stripe += 1) {
+          const t = inset + 0.08 + stripe * (1 - 2 * inset - 0.16) / 3;
+          const a = dx !== 0 ? iso(dx > 0 ? x + 0.86 : x + 0.04, y + t) : iso(x + t, dy > 0 ? y + 0.86 : y + 0.04);
+          const b = dx !== 0 ? iso(dx > 0 ? x + 0.98 : x + 0.16, y + t) : iso(x + t, dy > 0 ? y + 0.98 : y + 0.16);
+          g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: 0xf7f2e2, width: 2.2, alpha: 0.9 });
+        }
+      };
+      if (n) zebra(0, -1); if (sDir) zebra(0, 1); if (w) zebra(-1, 0); if (e) zebra(1, 0);
+      g.circle(center.x, center.y, 1.6).fill({ color: MARK, alpha: 0.45 });
+    } else if ((w || e) && !(n || sDir)) {
+      for (const [a, b] of [[0.08, 0.36], [0.6, 0.88]] as const) {
+        const p = iso(x + a, y + 0.5), q = iso(x + b, y + 0.5);
+        g.moveTo(p.x, p.y).lineTo(q.x, q.y).stroke({ color: MARK, width: 1.3, alpha: 0.85 });
+      }
+    } else if ((n || sDir) && !(w || e)) {
+      for (const [a, b] of [[0.08, 0.36], [0.6, 0.88]] as const) {
+        const p = iso(x + 0.5, y + a), q = iso(x + 0.5, y + b);
+        g.moveTo(p.x, p.y).lineTo(q.x, q.y).stroke({ color: MARK, width: 1.3, alpha: 0.85 });
+      }
+    } else if (links === 2) {
+      g.circle(center.x, center.y, 1.2).fill({ color: MARK, alpha: 0.4 });
+    }
   }
-  layer.addChild(roadGraphics);
+  layer.addChild(g);
 }
 
-function drawBuilding(layer: Container, building: Building, selected: boolean, progress: number) {
+/** Display objects per building, so lighting and hover feedback can update without redrawing art. */
+export interface BuildingVisual { readonly item: Container; readonly lights: Graphics | null }
+type BuildingRegistry = Map<string, BuildingVisual>;
+
+/**
+ * Finished buildings are pre-rendered once into textures and shown as sprites (one quad each). Keyed by
+ * everything that changes their look, so a selection change re-renders one building, not the city.
+ * Sprites avoid per-building cacheAsTexture render groups, whose destruction corrupts Pixi's batch pool.
+ */
+/** Off-stage sources and retired textures are destroyed on the next frame, never in the frame that rendered them. */
+class DeferredDestroy {
+  private queue: Array<() => void> = [];
+  add(task: () => void): void { this.queue.push(task); }
+  flush(): void { const tasks = this.queue; this.queue = []; for (const task of tasks) task(); }
+}
+
+class BuildingTextures {
+  private readonly entries = new Map<string, { texture: Texture; x: number; y: number }>();
+  private used = new Set<string>();
+  constructor(private readonly renderer: Renderer | null, private readonly graveyard = new DeferredDestroy()) {}
+  begin(): void { this.used = new Set(); }
+  get(key: string, render: () => Container): { texture: Texture; x: number; y: number } | null {
+    if (!this.renderer) return null;
+    this.used.add(key);
+    let entry = this.entries.get(key);
+    if (!entry) {
+      const source = render();
+      const bounds = source.getLocalBounds();
+      entry = { texture: this.renderer.generateTexture({ target: source, resolution: 1.5, antialias: true }), x: bounds.minX, y: bounds.minY };
+      this.graveyard.add(() => source.destroy({ children: true, context: true }));
+      this.entries.set(key, entry);
+    }
+    return entry;
+  }
+  end(): void {
+    for (const [key, entry] of this.entries) if (!this.used.has(key)) { this.graveyard.add(() => entry.texture.destroy(true)); this.entries.delete(key); }
+  }
+  get size(): number { return this.entries.size; }
+  destroy(): void { for (const entry of this.entries.values()) entry.texture.destroy(true); this.entries.clear(); }
+}
+
+function roadSidesFor(building: Building, roadSet: ReadonlySet<string>): RoadSides {
+  const spec = BUILDINGS[building.kind];
+  const along = (from: number, to: number, fixed: number, horizontal: boolean) => {
+    for (let i = from; i < to; i += 1) if (roadSet.has(horizontal ? cellKey(i, fixed) : cellKey(fixed, i))) return true;
+    return false;
+  };
+  return {
+    north: along(building.x, building.x + spec.width, building.y - 1, true),
+    south: along(building.x, building.x + spec.width, building.y + spec.height, true),
+    west: along(building.y, building.y + spec.height, building.x - 1, false),
+    east: along(building.y, building.y + spec.height, building.x + spec.width, false),
+  };
+}
+
+function drawBuilding(layer: Container, building: Building, selected: boolean, progress: number, roadSet: ReadonlySet<string>, registry: BuildingRegistry, textures: BuildingTextures) {
   const item = new Container();
   item.label = 'building';
   const spec = BUILDINGS[building.kind];
   const ground = footprint(building.x, building.y, spec.width, spec.height);
-  const base = new Graphics();
-  polygon(base, ground, selected ? 0xffd36e : 0x3c5242, selected ? 0.5 : 0.16, selected ? 0xfff1c4 : undefined, selected ? 0.95 : 0.28);
-  if (selected) {
-    base.poly(ground.flatMap((point) => [point.x, point.y])).stroke({ color: 0xffd36e, width: 2.5, alpha: 0.9 });
+  const sides = roadSidesFor(building, roadSet);
+  const windows: Point[][] = [];
+  const vector = () => {
+    const group = new Container();
+    const base = new Graphics();
+    polygon(base, ground, selected ? 0xffd36e : 0x3c5242, selected ? 0.5 : 0.12, selected ? 0xfff1c4 : undefined, selected ? 0.95 : 0.28);
+    if (selected) base.poly(ground.flatMap((point) => [point.x, point.y])).stroke({ color: 0xffd36e, width: 2.5, alpha: 0.9 });
+    const art = new Graphics();
+    windows.length = 0;
+    drawBuildingArt(art, building, progress, { roadSides: sides, lights: progress >= 1 ? windows : undefined });
+    group.addChild(base, art);
+    return group;
+  };
+  if (progress >= 1) {
+    const key = [building.id, building.kind, building.x, building.y, selected ? 1 : 0, Number(sides.north), Number(sides.south), Number(sides.east), Number(sides.west)].join(':');
+    const cached = textures.get(key, vector);
+    if (cached) {
+      const sprite = new Sprite(cached.texture);
+      sprite.position.set(cached.x, cached.y);
+      item.addChild(sprite);
+      // Window quads are cheap to recompute and keep night lighting independent of the texture.
+      if (!windows.length) drawBuildingArt(new Graphics(), building, progress, { roadSides: sides, lights: windows });
+    } else item.addChild(vector());
+  } else item.addChild(vector());
+  let lights: Graphics | null = null;
+  if (windows.length) {
+    // Night windows live beside the cached art (same depth), so lighting never forces a re-cache.
+    lights = new Graphics();
+    lights.label = 'building-lights';
+    for (const quad of windows) lights.poly(quad.flatMap((point) => [point.x, point.y])).fill({ color: 0xffd98a, alpha: 0.95 });
+    lights.visible = false;
+    lights.eventMode = 'none';
+    lights.zIndex = buildingDepth(building.x, building.y, spec.width, spec.height) + 0.0005;
+    layer.addChild(lights);
   }
-  item.addChild(base);
-
-  const sprite = new Graphics();
-  drawBuildingArt(sprite, building, progress);
-  item.addChild(sprite);
 
   if (progress < 1) {
     const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
@@ -155,25 +275,31 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   item.eventMode = 'none';
   item.zIndex = buildingDepth(building.x, building.y, spec.width, spec.height);
   layer.addChild(item);
+  registry.set(building.id, { item, lights });
 }
 
-function clearBuildings(buildings: Container) {
+function clearBuildings(buildings: Container, registry: BuildingRegistry) {
   for (const child of [...buildings.children]) {
-    if (child.label !== 'building') continue;
+    if (child.label !== 'building' && child.label !== 'building-lights') continue;
     buildings.removeChild(child);
-    child.destroy({ children: true, context: true });
+    // Sprite textures belong to BuildingTextures; destroy only the display objects.
+    child.destroy({ children: true });
   }
+  registry.clear();
 }
 
-function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null) {
-  clearBuildings(buildings);
+function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, registry: BuildingRegistry, textures: BuildingTextures) {
+  clearBuildings(buildings, registry);
+  const roadSet = new Set(plan.roads.map(({ x, y }) => cellKey(x, y)));
+  textures.begin();
   for (const building of getRenderBuildings(city, plan)) {
     const age = Date.now() - building.createdAt;
-    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)));
+    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)), roadSet, registry, textures);
   }
+  textures.end();
 }
 
-function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean) {
+function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean, registry: BuildingRegistry, textures: BuildingTextures, includeRoads = true) {
   if (includeTerrain) {
     terrain.cacheAsTexture(false);
     terrain.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
@@ -181,9 +307,11 @@ function redrawCity(terrain: Container, roads: Container, buildings: Container, 
     // ~8k static triangles become one textured quad; redrawn only when the map itself changes.
     terrain.cacheAsTexture({ resolution: 1, antialias: true });
   }
-  roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
-  drawRoads(roads, city);
-  redrawBuildings(buildings, city, plan, selectedId);
+  if (includeRoads) {
+    roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
+    drawRoads(roads, city);
+  }
+  redrawBuildings(buildings, city, plan, selectedId, registry, textures);
 }
 
 function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null | undefined, sourcePlan: CityPlan) {
@@ -280,6 +408,11 @@ export default function CityViewport(props: Props) {
   const cameraRef = useRef<((request: CameraRequest) => void) | null>(null);
   const safeAreaRef = useRef<(() => void) | null>(null);
   const nameplateRef = useRef<(() => void) | null>(null);
+  const registryRef = useRef<BuildingRegistry>(new Map());
+  const texturesRef = useRef<BuildingTextures>(new BuildingTextures(null));
+  const afterRedrawRef = useRef<((plan: CityPlan) => void) | null>(null);
+  const refreshGroundRef = useRef<(() => void) | null>(null);
+  const lastRoadsRef = useRef<CityState['roads'] | null>(null);
   const [preview, setPreview] = useState('');
   const [renderError, setRenderError] = useState(false);
 
@@ -306,7 +439,8 @@ export default function CityViewport(props: Props) {
     const app = new Application();
     let cleanup = () => {};
 
-    void (async () => {
+    const run = pixiLifecycle.then(async () => {
+      if (disposed) return;
       await app.init({
         backgroundColor: SEA,
         antialias: true,
@@ -321,12 +455,20 @@ export default function CityViewport(props: Props) {
 
       const world = new Container();
       const terrain = new Container();
+      // Roads and flat landscaping are composed off-stage and shown as one texture, re-rendered only when the
+      // plan changes. (A sprite, not cacheAsTexture: destroying children of a cached group corrupts Pixi's batch pool.)
+      const ground = new Container();
       const roads = new Container();
+      const groundDecor = new Container();
+      ground.addChild(roads, groundDecor);
+      const groundSprite = new Sprite(Texture.EMPTY);
+      groundSprite.eventMode = 'none';
       const groundOverlay = new Container();
       // Buildings and residents share one depth-sorted container so walkers pass behind and in front correctly.
       const buildings = new Container();
       buildings.sortableChildren = true;
       const proposalOverlay = new Container();
+      const effectsContainer = new Container();
       const ghost = new Container();
       const ghostShape = new Graphics();
       const ghostArt = new Graphics();
@@ -338,7 +480,7 @@ export default function CityViewport(props: Props) {
       nameplate.anchor.set(0.5, 1);
       labels.addChild(nameplateBg, nameplate);
       labels.visible = false;
-      world.addChild(terrain, roads, groundOverlay, buildings, proposalOverlay, ghost, labels);
+      world.addChild(terrain, groundSprite, groundOverlay, buildings, proposalOverlay, effectsContainer, ghost, labels);
       app.stage.addChild(world);
       // Pixi v8 skips listeners on passive containers, including the default stage.
       app.stage.eventMode = 'static';
@@ -348,9 +490,84 @@ export default function CityViewport(props: Props) {
       roadsRef.current = roads;
       buildingsRef.current = buildings;
       proposalOverlayRef.current = proposalOverlay;
-      redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true);
+      const registry = registryRef.current;
+      const graveyard = new DeferredDestroy();
+      const textures = new BuildingTextures(app.renderer as Renderer, graveyard);
+      texturesRef.current = textures;
+      redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true, registry, textures);
       redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan);
       const npcs = new NpcLayer(buildings, groundOverlay);
+      const decor = new DecorLayer(buildings, groundDecor, app.renderer);
+      const effects = new EffectsLayer(effectsContainer);
+
+      // Lighting is applied as cheap tints when it changes, never as a full-screen overlay or filter.
+      let lighting: WorldLighting = DAYLIGHT;
+      let demolishHoverId: string | null = null;
+      const seaTint = (tint: number) => {
+        const channel = (shift: number) => Math.round(((SEA >> shift) & 0xff) * (((tint >> shift) & 0xff) / 255));
+        return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+      };
+      const applyLighting = (next: WorldLighting, force = false) => {
+        if (!force && next.tint === lighting.tint && next.glow === lighting.glow) return;
+        lighting = next;
+        terrain.tint = next.tint;
+        groundSprite.tint = next.tint;
+        decor.applyLighting(next.tint, next.glow, force);
+        npcs.setTint(next.tint);
+        for (const [id, visual] of registry) {
+          visual.item.tint = id === demolishHoverId ? 0xff9c8a : next.tint;
+          if (visual.lights) { visual.lights.visible = next.glow > 0.01; visual.lights.alpha = next.glow; }
+        }
+        app.renderer.background.color = seaTint(next.tint);
+      };
+      const setDemolishHover = (id: string | null) => {
+        if (id === demolishHoverId) return;
+        const previous = demolishHoverId ? registry.get(demolishHoverId) : undefined;
+        if (previous) previous.item.tint = lighting.tint;
+        demolishHoverId = id;
+        const next = id ? registry.get(id) : undefined;
+        if (next) next.item.tint = 0xff9c8a;
+      };
+
+      // Plan diffs drive decor rebuilds and completion feedback (build, move, demolish, roads, AI batches).
+      let lastPlan: CityPlan = propsRef.current.world.plan;
+      decor.rebuild(lastPlan);
+      const rebuildGround = () => {
+        const bounds = ground.getLocalBounds();
+        const previous = groundSprite.texture;
+        groundSprite.texture = bounds.width > 0 ? app.renderer.generateTexture({ target: ground, resolution: 1, antialias: true }) : Texture.EMPTY;
+        groundSprite.position.set(bounds.minX, bounds.minY);
+        if (previous !== Texture.EMPTY) graveyard.add(() => previous.destroy(true));
+      };
+      rebuildGround();
+      let groundDirty = false;
+      refreshGroundRef.current = () => { groundDirty = true; };
+      afterRedrawRef.current = (plan) => {
+        if (plan !== lastPlan) {
+          const before = new Map(lastPlan.buildings.map((b) => [b.id, b]));
+          const after = new Map(plan.buildings.map((b) => [b.id, b]));
+          const center = (b: CityPlan['buildings'][number]) => ({ x: b.position.x + b.footprint.width / 2, y: b.position.y + b.footprint.height / 2 });
+          const built = plan.buildings.filter((b) => !before.has(b.id));
+          const batch = built.length > 1 ? 'plan' : 'build';
+          for (const b of built) effects.spawn(batch, center(b), Math.max(b.footprint.width, b.footprint.height) / 2);
+          for (const b of plan.buildings) {
+            const old = before.get(b.id);
+            if (old && (old.position.x !== b.position.x || old.position.y !== b.position.y)) effects.spawn('build', center(b), Math.max(b.footprint.width, b.footprint.height) / 2);
+          }
+          for (const b of lastPlan.buildings) if (!after.has(b.id)) effects.spawn('demolish', center(b), Math.max(b.footprint.width, b.footprint.height) / 2);
+          const oldRoads = new Set(lastPlan.roads.map((tile) => cellKey(tile.x, tile.y)));
+          plan.roads.filter((tile) => !oldRoads.has(cellKey(tile.x, tile.y))).slice(0, 12)
+            .forEach((tile) => effects.spawn('road', { x: tile.x + 0.5, y: tile.y + 0.5 }));
+          if (plan.roads !== lastPlan.roads || plan.buildings !== lastPlan.buildings || plan.blockedTiles !== lastPlan.blockedTiles) {
+            decor.rebuild(plan);
+            groundDirty = true;
+          }
+          lastPlan = plan;
+        }
+        if (groundDirty) { rebuildGround(); groundDirty = false; }
+        applyLighting(lighting, true);
+      };
+      applyLighting(DAYLIGHT, true);
 
       const safeBox = () => {
         const area = propsRef.current.safeArea ?? NO_SAFE_AREA;
@@ -458,7 +675,12 @@ export default function CityViewport(props: Props) {
         if (citizenId) {
           const citizen = live.citizens.find((entry) => entry.id === citizenId);
           const position = npcs.getRenderedPosition(citizenId);
-          if (citizen && position) { text = citizen.name; const point = iso(position.x, position.y); anchor = { x: point.x, y: point.y - 26 }; }
+          if (citizen && position) {
+            text = citizen.name;
+            const point = iso(position.x, position.y);
+            // Clear the figure (and the selected resident's activity badge), which scale with zoom.
+            anchor = { x: point.x, y: point.y - (citizenId === current.selectedCitizenId ? 36 : 25) * npcSpriteScale(view.scale) };
+          }
         }
         const buildingId = !text ? hoverBuildingId ?? current.selectedBuildingId : null;
         if (buildingId) {
@@ -521,9 +743,41 @@ export default function CityViewport(props: Props) {
           current.onPlaceBuilding(kind, cell.x, cell.y);
         }
       });
+      const footprintTiles = (x: number, y: number, width: number, height: number) => {
+        const tiles = new Set<string>();
+        for (let ty = y; ty < y + height; ty += 1) for (let tx = x; tx < x + width; tx += 1) tiles.add(cellKey(tx, ty));
+        return tiles;
+      };
+      /** Marks road tiles touching a footprint (green) or outlines a missing connection (red, dashed). */
+      const roadAccessHint = (x: number, y: number, width: number, height: number, ok: boolean) => {
+        const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
+        let touching = 0;
+        for (let tx = x - 1; tx <= x + width; tx += 1) {
+          for (let ty = y - 1; ty <= y + height; ty += 1) {
+            const edge = (tx === x - 1 || tx === x + width) !== (ty === y - 1 || ty === y + height);
+            if (!edge || !roadSet.has(cellKey(tx, ty))) continue;
+            touching += 1;
+            polygon(ghostShape, tileDiamond(tx, ty), 0x62c797, 0.45, 0xe8fff3, 0.9);
+          }
+        }
+        if (!ok && touching === 0) {
+          const pts = footprint(x, y, width, height);
+          for (let index = 0; index < 4; index += 1) {
+            const a = pts[index]!, b = pts[(index + 1) % 4]!;
+            for (let dash = 0; dash < 8; dash += 2) {
+              ghostShape.moveTo(a.x + (b.x - a.x) * dash / 8, a.y + (b.y - a.y) * dash / 8)
+                .lineTo(a.x + (b.x - a.x) * (dash + 1) / 8, a.y + (b.y - a.y) * (dash + 1) / 8);
+            }
+          }
+          ghostShape.stroke({ color: 0xb84c43, width: 2.4, alpha: 0.95 });
+        }
+      };
       const refreshPreview = () => {
         ghostShape.clear();
         ghostArt.clear();
+        decor.hideUnder(null);
+        setDemolishHover(null);
+        npcs.setHovered(null);
         if (!hoverPoint) { nameplateRef.current?.(); return; }
         const localPoint = world.toLocal(hoverPoint);
         const cell = toCell(localPoint);
@@ -535,15 +789,18 @@ export default function CityViewport(props: Props) {
         if (current.tool === 'road') {
           const validation = validateRoadPlacement(current.world, cell);
           label = validation.valid ? 'Road · Ready to build · $8' : rejectionFeedback[validation.reason];
-          polygon(ghostShape, tileDiamond(cell.x, cell.y), validation.valid ? 0x8ba8ac : 0xd97962,
-            0.64, validation.valid ? 0xe9f0d5 : 0xb84c43, 0.8);
+          polygon(ghostShape, tileDiamond(cell.x, cell.y), validation.valid ? 0x6d7b80 : 0xd97962,
+            0.72, validation.valid ? 0xf3e3b0 : 0xb84c43, 0.95);
+          if (validation.valid) decor.hideUnder(new Set([cellKey(cell.x, cell.y)]));
         } else if (Object.hasOwn(BUILDINGS, current.tool)) {
           const kind = current.tool as BuildingKind;
           const spec = BUILDINGS[kind];
           const validation = validateBuildingPlacement(current.world, kind, cell);
           label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
-          polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xf3da98 : 0xd97962,
-            0.58, validation.valid ? 0xf9f2d5 : 0xb84c43, 0.9);
+          polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xbfe8c9 : 0xd97962,
+            validation.valid ? 0.42 : 0.58, validation.valid ? 0x2f8a5b : 0xb84c43, 0.95);
+          if (validation.valid || validation.reason === 'road-required') roadAccessHint(cell.x, cell.y, spec.width, spec.height, validation.valid);
+          decor.hideUnder(footprintTiles(cell.x, cell.y, spec.width, spec.height));
           if (validation.valid) drawBuildingArt(ghostArt, { id: 'ghost', kind, x: cell.x, y: cell.y, name: '', createdAt: 0 }, 1);
         } else if (current.tool === 'move' && current.movingBuildingId) {
           const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
@@ -553,7 +810,19 @@ export default function CityViewport(props: Props) {
             label = validation.valid ? 'Ready to move · No cost' : rejectionFeedback[validation.reason];
             polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xb9e8c2 : 0xd97962,
               0.62, validation.valid ? 0x4d9662 : 0xb84c43, 0.9);
-            if (validation.valid) drawBuildingArt(ghostArt, { ...building, x: cell.x, y: cell.y, createdAt: 0 }, 1);
+            // Dashed travel line from the current lot to the destination.
+            const from = iso(building.x + spec.width / 2, building.y + spec.height / 2), to = iso(cell.x + spec.width / 2, cell.y + spec.height / 2);
+            const steps = Math.max(2, Math.floor(Math.hypot(to.x - from.x, to.y - from.y) / 9));
+            for (let step = 0; step < steps; step += 2) {
+              ghostShape.moveTo(from.x + (to.x - from.x) * step / steps, from.y + (to.y - from.y) * step / steps)
+                .lineTo(from.x + (to.x - from.x) * (step + 1) / steps, from.y + (to.y - from.y) * (step + 1) / steps);
+            }
+            ghostShape.stroke({ color: 0x2f8a5b, width: 2, alpha: 0.85 });
+            decor.hideUnder(footprintTiles(cell.x, cell.y, spec.width, spec.height));
+            if (validation.valid) {
+              roadAccessHint(cell.x, cell.y, spec.width, spec.height, true);
+              drawBuildingArt(ghostArt, { ...building, x: cell.x, y: cell.y, createdAt: 0 }, 1);
+            }
           }
         } else if (current.tool === 'move' || current.tool === 'bulldoze') {
           const building = buildingAtPoint(current.city, localPoint);
@@ -562,14 +831,22 @@ export default function CityViewport(props: Props) {
             label = `${current.tool === 'move' ? 'Move' : 'Demolish'} ${building.name}`;
             hoverBuildingId = building.id;
             polygon(ghostShape, footprint(building.x, building.y, spec.width, spec.height),
-              current.tool === 'move' ? 0xb9e8c2 : 0xd97962, 0.5);
+              current.tool === 'move' ? 0xb9e8c2 : 0xd97962, 0.5, current.tool === 'move' ? 0x2f8a5b : 0xb84c43, 0.95);
+            if (current.tool === 'bulldoze') setDemolishHover(building.id);
           } else {
             label = current.tool === 'move' ? 'Choose a building to move.' : 'Choose a building or road to demolish.';
             polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.18, 0xfff4d5);
           }
         } else if (current.tool === 'select') {
           hoverCitizenId = current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
+          npcs.setHovered(hoverCitizenId);
           if (!hoverCitizenId) hoverBuildingId = buildingAtPoint(current.city, localPoint)?.id ?? null;
+          const hovered = hoverBuildingId && hoverBuildingId !== current.selectedBuildingId ? current.city.buildings.find((entry) => entry.id === hoverBuildingId) : undefined;
+          if (hovered) {
+            const spec = BUILDINGS[hovered.kind];
+            ghostShape.poly(footprint(hovered.x, hovered.y, spec.width, spec.height).flatMap((point) => [point.x, point.y]))
+              .fill({ color: 0xffffff, alpha: 0.12 }).stroke({ color: 0xffffff, width: 2, alpha: 0.85 });
+          }
         }
         host.style.cursor = current.tool === 'select' && (hoverCitizenId || hoverBuildingId) ? 'pointer' : '';
         setPreview(label);
@@ -631,12 +908,14 @@ export default function CityViewport(props: Props) {
       let lastConstructionDraw = 0;
       let frames = 0, frameWindowStart = performance.now(), frameCost = 0;
       app.ticker.add(() => {
+        graveyard.flush();
         const frameStart = performance.now();
         const now = Date.now();
         const current = propsRef.current;
         const constructing = current.city.buildings.some((building) => now - building.createdAt < 5200);
         if ((constructing && now - lastConstructionDraw >= 100) || (wasConstructing && !constructing)) {
-          redrawBuildings(buildings, current.city, current.world.plan, current.selectedBuildingId);
+          redrawBuildings(buildings, current.city, current.world.plan, current.selectedBuildingId, registry, textures);
+          applyLighting(lighting, true);
           lastConstructionDraw = now;
         }
         wasConstructing = constructing;
@@ -655,7 +934,10 @@ export default function CityViewport(props: Props) {
             top: Math.min(a.y, b.y, c.y, d.y), bottom: Math.max(a.y, b.y, c.y, d.y) };
         })() : null;
         npcs.setSelected(current.selectedCitizenId ?? null);
+        const target = live.population ? worldLighting(getGameTime(live.clock).minuteOfDay) : DAYLIGHT;
+        applyLighting(target);
         npcs.sync(live, frameStart, view.scale, bounds);
+        effects.update(Math.min(100, app.ticker.deltaMS));
 
         const followId = current.followCitizenId ?? null;
         if (followId) {
@@ -685,6 +967,15 @@ export default function CityViewport(props: Props) {
       cleanup = () => {
         disconnectSimulation();
         npcs.destroy();
+        decor.destroy();
+        effects.destroy();
+        graveyard.flush();
+        textures.destroy();
+        if (groundSprite.texture !== Texture.EMPTY) groundSprite.texture.destroy(true);
+        ground.destroy({ children: true });
+        texturesRef.current = new BuildingTextures(null);
+        afterRedrawRef.current = null;
+        refreshGroundRef.current = null;
         app.canvas.removeEventListener('wheel', onWheel);
         app.canvas.removeEventListener('pointerleave', leave);
         app.canvas.removeEventListener('contextmenu', preventContextMenu);
@@ -692,9 +983,10 @@ export default function CityViewport(props: Props) {
         window.removeEventListener('blur', leave);
         resizeObserver.disconnect();
       };
-    })().catch(() => {
+    }).catch(() => {
       if (!disposed) setRenderError(true);
     });
+    pixiLifecycle = run;
 
     return () => {
       disposed = true;
@@ -721,7 +1013,11 @@ export default function CityViewport(props: Props) {
     const buildings = buildingsRef.current;
     const proposalOverlay = proposalOverlayRef.current;
     if (!terrain || !roads || !buildings) return;
-    redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false);
+    const roadsChanged = lastRoadsRef.current !== props.city.roads;
+    lastRoadsRef.current = props.city.roads;
+    redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false, registryRef.current, texturesRef.current, roadsChanged);
+    if (roadsChanged) refreshGroundRef.current?.();
+    afterRedrawRef.current?.(props.world.plan);
     if (proposalOverlay) redrawProposalOverlay(proposalOverlay, props.proposal, props.world.plan);
     nameplateRef.current?.();
   }, [props.city, props.world.plan, props.selectedBuildingId, props.proposal]);

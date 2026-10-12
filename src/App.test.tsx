@@ -40,6 +40,14 @@ vi.mock('./game/CityViewport', () => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
+const plannerStatus = { status: 'ok', provider: { mode: 'gemini', configured: true }, planner: 'ready' };
+/** Answers the cheap planner-status check separately, so `planning` only counts planning requests. */
+function stubPlannerFetch(planning: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>, status: unknown = plannerStatus) {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => String(input).endsWith('/v1/city/status')
+    ? Promise.resolve(new Response(JSON.stringify(status), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    : planning(input, init));
+}
+
 const threeVillasIntent: ArchitectIntent = {
   summary: 'Build three villas near the park', language: 'vi', style: 'coastal', near: 'park',
   region: null, budgetLimit: null, connectRoads: true,
@@ -60,7 +68,7 @@ function installPlanningFetch(
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
   });
-  vi.stubGlobal('fetch', fetchMock);
+  stubPlannerFetch(fetchMock);
   return fetchMock;
 }
 
@@ -251,7 +259,7 @@ describe('frontend city/simulation integration', () => {
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubPlannerFetch(fetchMock);
     render(<App />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'Add a park' } });
     click('Generate AI plan');
@@ -516,5 +524,77 @@ describe('living world integration', () => {
     await screen.findByText('AI city plan applied. Undo is available.');
     expect(world().citizens).toHaveLength(26);
     expectSynchronized();
+  });
+});
+
+describe('smart HUD and planner connectivity', () => {
+  it('collapses the Build overview but still opens contextual inspectors and remembers the choice', () => {
+    const { unmount } = render(<App />);
+    expect(screen.getByRole('heading', { name: 'Shape the neighborhood' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Villa\s*2×2/ })).not.toBeInTheDocument();
+    click('Browse building catalog');
+    expect(screen.getByRole('button', { name: 'Hide building catalog' })).toHaveAttribute('aria-expanded', 'true');
+    click('Collapse side panel');
+    expect(document.querySelector('.side-panel')).toHaveClass('is-collapsed');
+    expect(document.querySelector('.app-shell')).toHaveClass('panel-collapsed');
+    click('Test place villa');
+    expect(document.querySelector('.side-panel')).not.toHaveClass('is-collapsed');
+    expect(screen.getByText('Villa', { selector: '.building-details strong' })).toBeInTheDocument();
+    unmount();
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Show side panel' })).toBeInTheDocument();
+    click('Show side panel');
+    expect(screen.getByRole('heading', { name: 'Shape the neighborhood' })).toBeInTheDocument();
+  });
+
+  it('shows a selected-tool card instead of duplicating the toolbar', () => {
+    render(<App />);
+    fireEvent.click(screen.getByTitle('Road · R'));
+    expect(screen.getByLabelText('Selected tool')).toHaveTextContent('Road');
+    expect(screen.getByLabelText('Selected tool')).toHaveTextContent('$8 per tile');
+    fireEvent.keyDown(window, { key: '9' });
+    expect(screen.getByLabelText('Selected tool')).toHaveTextContent('Office tower');
+    expect(screen.getByLabelText('Selected tool')).toHaveTextContent('Must touch a road');
+  });
+
+  it('checks the planner only when the AI panel opens and distinguishes provider readiness', async () => {
+    const planning = vi.fn(async () => new Response('{}', { status: 500 }));
+    stubPlannerFetch(planning, { status: 'ok', provider: { mode: 'gemini', configured: false }, planner: 'ready' });
+    render(<App />);
+    expect(screen.queryByRole('status', { name: 'Planner connection' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Planner connection' })).toHaveTextContent('Planner not checked yet');
+    click('Plan');
+    expect(await screen.findByText('Planner online · Gemini key missing')).toBeInTheDocument();
+    expect(planning).not.toHaveBeenCalled();
+  });
+
+  it('explains an unreachable planner, keeps the prompt, and retries the same request', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/v1/city/status')) throw new TypeError('Failed to fetch');
+      calls += 1;
+      throw new TypeError('Failed to fetch');
+    }));
+    render(<App />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'Add a park by the sea' } });
+    click('Generate AI plan');
+    expect(await screen.findByRole('region', { name: 'Planner recovery' })).toHaveTextContent('Can’t reach the planning server');
+    expect(screen.getByRole('region', { name: 'Planner recovery' })).toHaveTextContent('Your prompt is still in the composer');
+    expect(screen.getByRole('region', { name: 'Planner recovery' })).toHaveTextContent('uv run uvicorn');
+    expect(await screen.findByText('Planner unreachable')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Describe a city change' })).toHaveValue('Add a park by the sea');
+    expect(screen.queryByRole('button', { name: 'Approve & build' })).not.toBeInTheDocument();
+    click('Retry request');
+    await screen.findByRole('region', { name: 'Planner recovery' });
+    expect(calls).toBe(2);
+    expect(world().plan.buildings).toHaveLength(12);
+  });
+
+  it('labels offline demo mode instead of implying Gemini interpreted the prompt', async () => {
+    installPlanningFetch();
+    stubPlannerFetch(async () => new Response('{}', { status: 500 }), { status: 'ok', provider: { mode: 'mock', configured: true }, planner: 'ready' });
+    render(<App />);
+    click('Plan');
+    expect(await screen.findByText('Planner online · offline demo mode')).toBeInTheDocument();
   });
 });

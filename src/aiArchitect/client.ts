@@ -9,6 +9,8 @@ import type {
   PlanningResponse,
 } from '@tiny-city/ai-architect';
 
+import { resolveApiBaseUrl } from './devProxy';
+
 type JsonRecord = Record<string, unknown>;
 
 export class ArchitectClientError extends Error {
@@ -92,8 +94,42 @@ export function createPlanningRequest(
   };
 }
 
-function apiBaseUrl(): string {
-  return (import.meta.env.VITE_AI_ARCHITECT_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+export function apiBaseUrl(): string {
+  return resolveApiBaseUrl(import.meta.env.VITE_AI_ARCHITECT_API_URL, import.meta.env.DEV);
+}
+
+/** Backend reachability and provider readiness, from cheap GET endpoints that never call Gemini. */
+export type PlannerConnection =
+  | { readonly state: 'connected'; readonly providerMode: 'gemini' | 'mock' | 'custom'; readonly providerConfigured: boolean; readonly plannerReady: boolean }
+  | { readonly state: 'reachable'; readonly reason: string }
+  | { readonly state: 'unavailable'; readonly reason: string };
+
+export async function checkPlannerConnection(fetcher: typeof fetch = fetch, timeoutMs = 4000): Promise<PlannerConnection> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetcher(`${apiBaseUrl()}/v1/city/status`, { method: 'GET', signal: controller.signal });
+    let payload: unknown = null;
+    try { payload = await response.json(); } catch { /* handled below */ }
+    if (response.status === 404) {
+      // Something answered, so the address is reachable; it just predates the status route (or is another service).
+      return { state: 'reachable', reason: 'The server answered but has no planner status route, so provider readiness is unknown. Restart the API from apps/api to get full diagnostics.' };
+    }
+    if (!response.ok) {
+      const reason = isArchitectError(payload) ? payload.error.message : `The planning service answered with HTTP ${response.status}.`;
+      return { state: 'unavailable', reason };
+    }
+    if (!isRecord(payload) || payload.status !== 'ok' || !isRecord(payload.provider) ||
+        !['gemini', 'mock', 'custom'].includes(String(payload.provider.mode)) || typeof payload.provider.configured !== 'boolean') {
+      return { state: 'unavailable', reason: 'The service at this address is not the TINY CITY planning API.' };
+    }
+    return { state: 'connected', providerMode: payload.provider.mode as 'gemini' | 'mock' | 'custom',
+      providerConfigured: payload.provider.configured, plannerReady: payload.planner === 'ready' };
+  } catch {
+    return { state: 'unavailable', reason: controller.signal.aborted ? 'The planning service did not answer in time.' : 'Could not reach the planning service.' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function requestCityPlan(

@@ -85,7 +85,6 @@ kbd { font-family: var(--font-ui); }
 .map-stage { position: absolute; inset: 0; overflow: hidden; background: #8fc3c0; }
 .city-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: crosshair; }
 .city-canvas { display: block; width: 100%; height: 100%; }
-.daylight { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; transition: opacity 1.2s linear, background-color 1.2s linear; }
 .preview-ribbon {
   position: absolute; top: calc(var(--topbar-h) + 14px); left: 50%; transform: translateX(-50%); z-index: 3;
   display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px;
@@ -634,6 +633,103 @@ kbd { font-family: var(--font-ui); }
   .catalog-grid { grid-template-columns: 1fr 1fr; }
   .activity-grid { grid-template-columns: repeat(3, 1fr); }
   .fact-list > div { grid-template-columns: 96px 1fr; }
+}
+
+
+/* ==========================================================================
+   Visual World 2.0 — Smart HUD additions
+   ========================================================================== */
+/* Sliding mode indicator: the active tab is obvious at a glance. */
+.mode-switch { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); }
+.mode-switch .mode-tab { justify-content: center; z-index: 1; }
+.mode-switch .mode-tab.active { background: transparent; box-shadow: none; }
+.mode-indicator {
+  position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px - 8px) / 3);
+  border-radius: 10px; background: var(--paper); box-shadow: var(--shadow-sm); transition: transform .28s var(--ease);
+}
+.mode-switch[data-mode='plan'] .mode-indicator { transform: translateX(calc(100% + 4px)); }
+.mode-switch[data-mode='live'] .mode-indicator { transform: translateX(calc(200% + 8px)); }
+.mode-switch[data-mode='plan'] .mode-indicator { box-shadow: 0 0 0 1px rgba(200, 113, 79, .25), var(--shadow-sm); }
+.mode-switch[data-mode='live'] .mode-indicator { box-shadow: 0 0 0 1px rgba(79, 122, 94, .25), var(--shadow-sm); }
+
+/* Funds change feedback. */
+.hud-stat.cash { position: relative; }
+.funds-delta {
+  position: absolute; right: 6px; top: 100%; margin-top: 4px; padding: 2px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; pointer-events: none; animation: delta-float 1.4s var(--ease) forwards;
+}
+.funds-delta.is-spend { background: var(--terracotta-100); color: var(--terracotta-600); }
+.funds-delta.is-gain { background: #dff3ea; color: #1f6f58; }
+@keyframes delta-float { 0% { opacity: 0; transform: translateY(-4px); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(6px); } }
+.save-button.is-saved svg { animation: save-pop .45s var(--ease); }
+@keyframes save-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: none; } }
+
+/* Collapsible side panel. */
+.panel-collapse {
+  position: absolute; top: 14px; right: 14px; z-index: 2; display: grid; place-items: center; width: 30px; height: 30px;
+  border: 0; border-radius: 9px; background: rgba(34, 53, 43, .06); color: var(--ink-soft);
+}
+.panel-collapse:hover { background: var(--sage-100); }
+.side-panel .panel-topline { padding-right: 38px; }
+.side-panel.view-citizen .panel-topline, .side-panel.view-building .panel-topline, .side-panel.view-plan .panel-topline { padding-right: 0; }
+.side-panel.is-collapsed { display: none; }
+.app-shell.panel-collapsed { --panel-w: 0px; }
+.panel-handle {
+  position: absolute; z-index: 5; top: calc(var(--topbar-h) + var(--gap)); right: var(--gap); display: inline-flex; align-items: center; gap: 6px;
+  height: 40px; padding: 0 14px 0 10px; border: 1px solid rgba(255, 255, 255, .8); border-radius: var(--radius-md);
+  background: var(--glass-strong); color: var(--forest-700); font-size: 13px; font-weight: 800; box-shadow: var(--shadow-md);
+}
+.panel-handle:hover { background: var(--sage-100); }
+.is-flipped { transform: rotate(180deg); }
+.icon-rotate, .catalog-toggle .is-open { transform: rotate(90deg); }
+
+/* Contextual tool card + opt-in catalog. */
+.tool-card { margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+.tool-card-head { display: flex; align-items: center; gap: 10px; }
+.tool-card-head .building-thumb { width: 46px; height: 46px; }
+.tool-card-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; background: var(--sage-100); color: var(--forest-700); }
+.tool-card-head small { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.tool-card-head strong { display: block; margin-top: 2px; font: 600 17px/1.2 var(--font-display); color: var(--forest-900); }
+.tool-card dl { margin: 10px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tool-card dl div { padding: 7px 9px; border-radius: var(--radius-sm); background: var(--sand-100); }
+.tool-card dt { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.tool-card dd { margin: 2px 0 0; font-size: 12.5px; font-weight: 800; }
+.tool-card p { margin: 10px 0 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
+.catalog-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm); background: transparent; color: var(--forest-700); font-size: 13px; font-weight: 800; text-align: left;
+}
+.catalog-toggle span { flex: 1; }
+.catalog-toggle:hover { background: var(--sage-100); border-style: solid; }
+.catalog-toggle svg:last-child { transition: transform .2s var(--ease); }
+
+/* Planner connectivity. */
+.connection-badge { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--paper); }
+.connection-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+.connection-badge.tone-ok .connection-dot { background: #2d9b6f; box-shadow: 0 0 0 3px rgba(45, 155, 111, .18); }
+.connection-badge.tone-warn .connection-dot { background: var(--gold); box-shadow: 0 0 0 3px rgba(232, 182, 76, .2); }
+.connection-badge.tone-bad .connection-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(181, 72, 62, .18); }
+.connection-badge.tone-pending .connection-dot { animation: pulse 1s ease-in-out infinite; }
+.connection-copy strong { display: block; font-size: 12.5px; color: var(--ink); }
+.connection-copy small { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.composer-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 2px var(--paper); }
+.architect-panel-toggle { position: relative; }
+.composer-dot.is-online { background: #2d9b6f; }
+.composer-dot.is-offline { background: var(--danger); }
+.composer-dot.is-checking { background: var(--gold); }
+.recovery-card { margin-top: 12px; padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(181, 72, 62, .28); background: #fdf3ef; }
+.recovery-head { display: flex; align-items: center; gap: 8px; color: #8d3229; }
+.recovery-head strong { font-size: 14px; }
+.recovery-card p { margin: 6px 0 0; color: #6f3b33; font-size: 12.5px; line-height: 1.5; }
+.recovery-steps { display: grid; gap: 5px; margin-top: 10px; padding: 10px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, .7); }
+.recovery-steps small { color: var(--ink-soft); font-size: 11.5px; line-height: 1.4; }
+.recovery-steps code { display: block; padding: 6px 8px; border-radius: 6px; background: var(--forest-900); color: #e8f2ea; font: 11.5px/1.45 ui-monospace, 'SF Mono', Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.recovery-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.recovery-actions button { height: 40px; padding: 0 10px; font-size: 13px; white-space: nowrap; }
+.recovery-actions .approve-plan:disabled { opacity: .5; }
+@media (max-width: 759px) {
+  .panel-collapse, .panel-handle { display: none; }
+  .mode-indicator { top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px - 8px) / 3); }
 }
 
 @media (prefers-reduced-motion: reduce) {
