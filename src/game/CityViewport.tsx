@@ -175,8 +175,11 @@ function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, 
 
 function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean) {
   if (includeTerrain) {
+    terrain.cacheAsTexture(false);
     terrain.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
     drawTerrain(terrain, plan.width);
+    // ~8k static triangles become one textured quad; redrawn only when the map itself changes.
+    terrain.cacheAsTexture({ resolution: 1, antialias: true });
   }
   roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   drawRoads(roads, city);

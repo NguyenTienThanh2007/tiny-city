@@ -93,11 +93,9 @@ kbd { font-family: var(--font-ui); }
   box-shadow: 0 0 0 3px rgba(98, 199, 151, .35), var(--shadow-md); pointer-events: none;
 }
 
-/* ---------- Shared surfaces ---------- */
-.topbar, .tool-rail, .sim-dock, .side-panel, .planner-bar, .map-tools .minimap, .zoom-controls, .tool-hint {
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
-  backdrop-filter: blur(14px) saturate(1.1);
-}
+/* ---------- Shared surfaces ----------
+   Floating surfaces are near-opaque paper instead of backdrop-blurred glass: blurring the live WebGL canvas
+   every frame roughly halved frame rate under software rendering for an almost invisible effect. */
 .icon-button {
   display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: var(--radius-sm);
   color: var(--ink-soft); background: transparent; transition: background .15s, color .15s;

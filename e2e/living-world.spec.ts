@@ -10,6 +10,8 @@ const fixture: CityState = { size: 64, funds: 5000, roads: Array.from({ length: 
   { id: 'home-c', name: 'Dune Townhouse', kind: 'townhouse', x: 18, y: 21, createdAt: 0 },
   { id: 'office', name: 'Harbor Office', kind: 'office', x: 44, y: 21, createdAt: 0 },
 ] };
+// These specs run hours of game time through the real UI; under CI software rendering they need the slow budget.
+test.slow();
 type Renderer = { fps: number; frameMs: number; residents: number; visibleResidents: number };
 
 async function openCity(page: Page) {

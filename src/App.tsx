@@ -163,7 +163,7 @@ function App() {
     noticeTimerRef.current = window.setTimeout(() => {
       setNotice('');
       noticeTimerRef.current = null;
-    }, 2600);
+    }, 4500);
   }, []);
 
   useEffect(() => () => {
@@ -694,7 +694,8 @@ function App() {
           onBeginGesture={beginGesture}
           onEndGesture={endGesture}
         />
-        <div className="daylight" aria-hidden="true" style={{ backgroundColor: tint.color, opacity: populationEnabled ? tint.opacity : 0 }} />
+        {/* Only mounted while tinted: an idle blend layer over the canvas still costs a full-screen composite. */}
+        {populationEnabled && tint.opacity > 0 && <div className="daylight" aria-hidden="true" style={{ backgroundColor: tint.color, opacity: tint.opacity }} />}
         {overlayProposal && <div className="preview-ribbon" role="note"><Icon name="sparkle" size={14} /> AI preview · not built yet</div>}
       </section>
 

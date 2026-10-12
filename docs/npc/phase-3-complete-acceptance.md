@@ -89,16 +89,28 @@ Headless engine (`npm run bench:npc`, unchanged engine): 100 residents 0.10 ms m
 Browser rendering (`scripts/npc_render_benchmark.mjs`, results in `render-benchmark-results.json`), commute in
 progress, whole grid on screen:
 
-| Residents | Visible | Apple M2 (Metal) fps median / min | SwiftShader fps | Scene update ms (GPU / SW) |
+| Residents | Visible | Apple M2 (Metal) fps median / min | SwiftShader fps median | Scene update ms (GPU / SW) |
 | --- | --- | --- | --- | --- |
-| 30 | 19 | 60 / 59 | 10 | 0.05 / 0.07 |
-| 100 | 42 | 60 / 59 | 8 | 0.19 / 0.13 |
-| 300 | 210 | 60 / 59 | 7 | 0.23 / 0.35 |
-| 1000 | 714 | 58 / 57 | 5 | 0.73 / 1.08 |
+| 30 | 19 | 60 / 59 | 30 | 0.04 / 0.05 |
+| 100 | 44 | 60 / 59 | 29 | 0.08 / 0.10 |
+| 300 | 218 | 60 / 59 | 17 | 0.19 / 0.24 |
+| 1000 | 719 | 58 / 57 | 7 | 0.53 / 0.96 |
 
-"Scene update" is the per-frame JS cost of the viewport ticker (resident sync, culling, selection overlay). Software
-rendering (CI's SwiftShader) is fill-rate bound by the full-map vector terrain even with 30 residents, so its fps says
-little about resident cost. No React render occurs per resident or per frame; no path is recomputed in the renderer.
+"Scene update" is the per-frame JS cost of the viewport ticker (resident sync, culling, selection overlay). No React render
+occurs per resident or per frame; no path is recomputed in the renderer.
+
+### CI software-rendering regression found and fixed
+
+The first CI run of this branch showed every browser spec 40–50% slower than on `main` (e.g. 55 s → 80 s per building
+spec) and the gameplay job hit its 20-minute limit. Local A/B against the `main` production build under SwiftShader
+confirmed it (~10 vs ~18 frames/s; 845 vs 465 ms per canvas screenshot). Causes: `backdrop-filter` blur on the floating
+panels re-blurring the live canvas every frame, an always-mounted blend-mode daylight layer, and re-rasterizing ~8k
+static terrain triangles per frame. Fixes: opaque paper panels, the daylight layer mounts only while tinted, and the
+terrain is cached as a single texture (`cacheAsTexture`) rebuilt only when the map is redrawn. Result: ~25–30 frames/s
+and ~380 ms per screenshot, now faster than `main`; the local e2e suite went from 7.3 to 4.7 minutes. The living-world
+specs are marked `test.slow()` and the gameplay job timeout is 35 minutes to fit the three new multi-hour simulations.
+Trade-off: at maximum zoom on high-DPI screens the grass texture is slightly soft; buildings, roads and residents are
+not cached and stay crisp.
 
 ## Known limitations
 
@@ -106,7 +118,8 @@ little about resident cost. No React render occurs per resident or per frame; no
 - Clicking residents works with the Select tool; other tools keep their construction meaning.
 - Residents walk on road centerlines with lane offsets; there is no traffic or collision avoidance (not in scope).
 - Names come from the engine (`<first name> <number>`); the engine provides no occupations beyond the workplace.
-- Software-rendered environments (CI) run at single-digit fps because of terrain fill, not residents.
+- Under software rendering, 1000 visible residents still drop to ~7 fps (GPU hardware holds 58 fps).
+- The pre-existing city-builder toast assertions are timing-sensitive on slow CI; notices now stay 4.5 s (was 2.6 s), which removed the flake seen on `main` (clubhouse spec).
 - Speed is a session setting and is not saved.
 
 ## Future ideas (not implemented)

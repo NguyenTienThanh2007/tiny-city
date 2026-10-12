@@ -93,6 +93,9 @@ Verified screens (all reviewed): `after/desktop-01-initial`, `-02-build-ghost`, 
 `tablet-01-initial`, `mobile-01-initial`, `mobile-02-build-sheet`, `mobile-03-live-sheet`, `mobile-04-citizen`,
 `mobile-05-ai-panel`.
 
+Floating surfaces are near-opaque paper rather than backdrop-blurred glass; blur over the live canvas halved software-rendered
+frame rate for an almost invisible effect (see the acceptance report).
+
 Issues found during review and fixed: simulation dock reflowing (and clipping the clock) as digits changed; tablet
 top bar overlap; hovered "Saved" button losing its label; a crash from a negative hash modulo in avatar generation;
 truncated activity labels; mobile home view zoomed too far out.

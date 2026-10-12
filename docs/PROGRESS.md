@@ -31,9 +31,17 @@ API 58 passed · e2e 26/26 (mock Gemini).
 - Tools/docs: `scripts/capture_ui.mjs`, `scripts/npc_render_benchmark.mjs`, `docs/npc/phase-3-complete-acceptance.md`,
   `docs/design/ux-ui-redesign.md`, `docs/npc/render-benchmark-results.json`
 
+## Phase 3 integration with main (after PR #7 merged)
+
+- Merged `origin/main` (`4cd105a`) cleanly as `5349bdd`; no conflicts, no duplicate commits; PR #8 retargeted to `main` via `gh`.
+- First CI run on the PR head: frontend/simulation and API green; gameplay cancelled at the 20-minute job limit.
+  Root cause: software-rendering regression from the redesign (fixed: terrain texture cache, no backdrop blur,
+  conditional daylight layer), plus `test.slow()` for living-world specs and a 35-minute gameplay timeout.
+- `main`'s own CI run for the PR #7 merge failed on a pre-existing toast-timing flake; notice duration raised to 4.5 s.
+
 ## Known blockers
 
-- `gh` CLI is not installed and the GitHub MCP server failed to connect, so the PR may need to be opened from the browser.
+- None for GitHub: `gh` is installed and authenticated.
 - A user process holds port 8000; local previews use a mock API on 8013 (`.claude/launch.json`, not committed).
 
 ## Next steps
