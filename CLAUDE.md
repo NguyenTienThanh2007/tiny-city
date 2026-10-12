@@ -55,6 +55,8 @@ CI (`.github/workflows/phase-0-ci.yml`) runs: typecheck, test:architect, securit
 
 Many e2e tests depend on exact accessible names (`Villa $120`, `Road $8`, `Resume`, `Pause`, `Step`, `Save`/`Saved`, `Show/Hide AI Architect panel`, `Center neighborhood`, …), classes (`.inspector`, `.building-details`, `.condition`, `.architect-panel`), the `Simulation clock` text format `DAY 01 · 00:00`, the top bar covering (1100,50), and building roof lift heights in `buildingArt.ts` (used for hit testing). Keep these stable.
 
+**Rendering caveats (Visual World 2.0)**: Pixi `Application`s are created strictly one after another (`pixiLifecycle` in `CityViewport.tsx`) because `Application.destroy()` clears Pixi's global batch pool and a StrictMode remount would otherwise draw with destroyed batches. Don't destroy children of `cacheAsTexture` containers; finished buildings and the roads/flat-landscaping ground are pre-rendered with `generateTexture` into sprites (keyed `BuildingTextures`, `rebuildGround`) and off-stage sources are destroyed a frame later (`DeferredDestroy`). Night lighting is per-container `tint` plus separate unlit window/lamp layers — no full-screen overlays or filters. Building looks come from `buildingVariant(id, kind)`; landscaping from `planDecor(plan)`; both deterministic.
+
 `docs/PROGRESS.md` is the running log for multi-session work; read it before continuing a milestone. `node scripts/capture_ui.mjs` (needs dev server + mock API) regenerates design screenshots; `node scripts/npc_render_benchmark.mjs` measures browser rendering.
 
 Contract docs live under `docs/` (`simulation/`, `ai-architect/`, `npc/`). Read the relevant contracts doc before changing a public interface.

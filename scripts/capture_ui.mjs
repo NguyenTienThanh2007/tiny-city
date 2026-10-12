@@ -33,6 +33,7 @@ function showcaseCity() {
   };
 }
 
+const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice(7) ?? 'all';
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
 async function open(viewport, city) {
@@ -59,6 +60,50 @@ async function clockMinutes(page) {
 async function runUntil(page, minute) {
   for (let i = 0; i < 400 && await clockMinutes(page) < minute; i += 1) await page.waitForTimeout(150);
 }
+
+// World close-ups, night lighting, placement feedback and AI connectivity.
+if (only === 'all' || only === 'extra') {
+  const page = await open({ width: 1440, height: 900 }, showcaseCity());
+  await page.getByRole('button', { name: 'Live', exact: true }).click();
+  await page.getByRole('button', { name: 'Welcome residents' }).click();
+  await page.getByRole('button', { name: 'Speed 4x' }).click();
+  await runUntil(page, 7 * 60 + 20);
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Zoom in' }).click();
+  await page.waitForTimeout(700);
+  await shot(page, 'desktop-11-closeup-day');
+  await page.getByRole('button', { name: 'Resume', exact: true }).click();
+  await runUntil(page, 21 * 60 + 30);
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await page.waitForTimeout(1600);
+  await shot(page, 'desktop-12-closeup-night');
+  await page.getByRole('button', { name: 'Center neighborhood' }).click();
+  await page.waitForTimeout(500);
+  await shot(page, 'desktop-13-night');
+  await page.close();
+}
+if (only === 'all' || only === 'extra') {
+  const page = await open({ width: 1440, height: 900 });
+  await page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: 'Office $640', exact: true }).click();
+  const canvas = await page.locator('canvas').boundingBox();
+  await page.mouse.move(canvas.x + canvas.width * 0.36, canvas.y + canvas.height * 0.47);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${outDir}/desktop-14-invalid-placement.png` });
+  await page.mouse.move(canvas.x + canvas.width * 0.5, canvas.y + canvas.height * 0.72);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${outDir}/desktop-15-valid-placement.png` });
+  console.log('captured placement previews');
+  await page.keyboard.press('Escape');
+  await page.route('**/v1/city/plan', (route) => route.abort('connectionrefused'));
+  await page.route('**/v1/city/status', (route) => route.abort('connectionrefused'));
+  await page.getByRole('button', { name: 'Plan', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Describe a city change' }).fill('Add a small park near the villas');
+  await page.getByRole('button', { name: 'Generate AI plan' }).click();
+  await page.waitForTimeout(1500);
+  await shot(page, 'desktop-16-ai-unavailable');
+  await page.close();
+}
+if (only === 'extra') { await browser.close(); process.exit(0); }
 
 // Desktop: initial, build, plan, preview, error.
 {

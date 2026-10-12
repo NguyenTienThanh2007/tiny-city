@@ -76,5 +76,61 @@
       }
     ],
     "note": "Before the fix the same run measured 10/8/7/5 fps: blurring the live canvas behind every floating panel and re-rasterizing ~8k terrain triangles each frame dominated. The terrain is now cached as one texture and panels are opaque. For reference, the pre-redesign main production build measured ~18 frames/s and 465 ms per canvas screenshot on the sample city under SwiftShader; this branch now measures ~25-30 frames/s and ~380 ms."
+  },
+  "visualWorld2": {
+    "measuredOn": "2026-10-12, feature/visual-world-ux-polish, same method and machine (Apple M2), Vite dev build",
+    "gpu": [
+      {
+        "residents": 30,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.05
+      },
+      {
+        "residents": 100,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.09
+      },
+      {
+        "residents": 300,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.25
+      },
+      {
+        "residents": 1000,
+        "fpsMedian": 57,
+        "fpsMin": 57,
+        "sceneUpdateMsMedian": 0.62
+      }
+    ],
+    "software": [
+      {
+        "residents": 30,
+        "fpsMedian": 33,
+        "fpsMin": 20,
+        "sceneUpdateMsMedian": 0.08
+      },
+      {
+        "residents": 100,
+        "fpsMedian": 31,
+        "fpsMin": 13,
+        "sceneUpdateMsMedian": 0.13
+      },
+      {
+        "residents": 300,
+        "fpsMedian": 16,
+        "fpsMin": 9,
+        "sceneUpdateMsMedian": 0.33
+      },
+      {
+        "residents": 1000,
+        "fpsMedian": 7,
+        "fpsMin": 6,
+        "sceneUpdateMsMedian": 1.1
+      }
+    ],
+    "regressionFound": "First Visual World build measured 16/17/9/5 software fps (vs Phase 3 30/29/17/7): detailed art and ~hundreds of vector trees re-rasterized every frame. Fixed by sprite textures for decorations, generateTexture sprites for finished buildings and one ground texture for roads + flat landscaping."
   }
 }

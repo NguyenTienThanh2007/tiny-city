@@ -106,3 +106,20 @@ truncated activity labels; mobile home view zoomed too far out.
 - Only one theme (light, coastal) is provided by design.
 - Minimap is top-down (grid) rather than isometric, as before.
 - Fonts load from Google Fonts; offline sessions fall back to system fonts.
+
+## Visual World 2.0 update (incremental, same identity)
+
+Implemented on `feature/visual-world-ux-polish`; details, measurements and evidence in
+[visual-world-2-acceptance.md](visual-world-2-acceptance.md) and `screenshots/visual-world-2/`.
+
+- The Build panel now shows a contextual **selected-tool card**. The full catalog is opt-in because the left toolbar is
+  the quick-access catalog.
+- The side panel **collapses** behind a "Show side panel" handle, and the choice is remembered. Inspectors and the AI
+  panel still open when relevant.
+- The mode switch has a **sliding indicator**; funds changes show a floating delta chip; Save confirms with a pop.
+- The AI panel has a **planner connection badge** and a **recovery card** with Retry, Check connection and dev setup
+  steps.
+- The minimap supports press-and-drag scrubbing and marks the selected building.
+- The DOM daylight overlay was removed. Lighting now lives in Pixi as per-container tints with lit windows and
+  streetlights.
+- The "Under construction" inspector label was removed because it was not backed by simulation data.

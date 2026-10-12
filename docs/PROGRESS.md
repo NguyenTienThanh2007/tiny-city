@@ -47,3 +47,15 @@ API 58 passed · e2e 26/26 (mock Gemini).
 ## Next steps
 
 - After PR #7 merges: merge `main` into this branch, rerun the suites, retarget the PR to `main`.
+
+## Visual World 2.0 & premium UX polish (branch `feature/visual-world-ux-polish`, from `origin/main` @ `585f1b9`)
+
+1. [x] Baseline audit and before screenshots (`docs/design/screenshots/visual-world-2/before`)
+2. [x] World art: building variants/details/shadows, roads with sidewalks/crosswalks/streetlights, landscaping, lighting
+3. [x] Smart HUD + NPC readability (outline, hover ring, badge, idle breathing)
+4. [x] AI connectivity: dev `/api` proxy, `GET /v1/city/status`, connection badge, recovery card with retry
+5. [x] Game feel + performance: effects pool, funds delta; sprite/texture caching restored Phase 3 fps; Pixi lifecycle fix
+6. [x] Tests + docs (`docs/design/visual-world-2-acceptance.md`); commits, push and PR — see git log / PR
+
+Results: unit 110, simulation 212, architect 31, API 61, e2e 29, typecheck/build/security pass.
+Next: after review, merge PR into `main`; consider adding `/v1/city/status` to `docs/ai-architect/phase-2a.openapi.json`.

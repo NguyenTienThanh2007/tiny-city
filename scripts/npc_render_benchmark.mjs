@@ -8,6 +8,7 @@ import { chromium } from '@playwright/test';
 const baseUrl = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://127.0.0.1:5173/';
 const software = process.argv.includes('--software');
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
+const targets = (process.argv.find((arg) => arg.startsWith('--targets='))?.slice(10) ?? '30,100,300,1000').split(',').map(Number);
 
 function benchmarkCity(target) {
   const roads = new Map();
@@ -30,8 +31,10 @@ function benchmarkCity(target) {
 const args = software ? ['--enable-webgl', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--enable-gpu', '--ignore-gpu-blocklist'];
 const browser = await chromium.launch({ args });
 const results = [];
-for (const target of [30, 100, 300, 1000]) {
+for (const target of targets) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  page.on('pageerror', (error) => console.error(`[${target}] page error: ${error.message}`));
+  page.on('console', (message) => { if (message.type() === 'error' || /context lost/i.test(message.text())) console.error(`[${target}] console: ${message.text().slice(0, 200)}`); });
   const city = benchmarkCity(target);
   await page.addInitScript(({ key, value }) => {
     if (!sessionStorage.getItem('bench')) { localStorage.setItem(key, JSON.stringify(value)); sessionStorage.setItem('bench', '1'); }
