@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
+import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
 import type { LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
@@ -691,6 +691,8 @@ function App() {
 
   // ---------- Phase 4 Life Mode ----------
   const player = world.player ?? null;
+  /** A character who has not moved in yet (no free room when created) waits in home selection. */
+  const playerWaiting = !!player && !isPlayerPlaced(player);
   const lifeActive = mode === 'life';
   const runLife = useCallback((command: LifeCommand, success?: string) => {
     const result = executeLife(command);
@@ -698,7 +700,7 @@ function App() {
     setSaved(false);
     setLifeEdits((count) => count + 1);
     if (success) showNotice(success);
-    else if (getSnapshot().clock.paused && command.type !== 'player.cancel' && command.type !== 'player.customize') showNotice('Time is paused. Press Resume (Space) to set off.');
+    else if (getSnapshot().clock.paused && (command.type === 'player.move-to' || command.type === 'player.start-activity')) showNotice('Time is paused. Press Resume (Space) to set off.');
     return result;
   }, [executeLife, showNotice, getSnapshot]);
   const focusPlayer = useCallback(() => {
@@ -731,16 +733,41 @@ function App() {
     const result = applyLifeCommand(world, command, getNavigator());
     return { action: 'cancel', available: result.reason === null, reason: result.reason };
   };
-  const homeOptions = useMemo(() => lifeFlow?.step === 'home' ? playerHomeOptions(world, getNavigator()) : [],
+  const homeOptions = useMemo(() => lifeFlow?.step === 'home' || playerWaiting ? playerHomeOptions(world, getNavigator()) : [],
     // Vacancies change only with the plan, residents or the player's home.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lifeFlow?.step, world.plan, world.citizens.length, world.player?.homeBuildingId, getNavigator]);
+    [lifeFlow?.step, playerWaiting, world.plan, world.citizens.length, world.player?.homeBuildingId, getNavigator]);
+  const housing = useMemo(() => housingSummary(world),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [world.plan, world.citizens.length, world.player?.homeBuildingId, world.population]);
+  // Homes that existed when the player first found every room taken; anything built since is highlighted as new.
+  const homeBaselineRef = useRef<Set<string> | null>(null);
+  if (playerWaiting && homeBaselineRef.current === null && homeOptions.length > 0 && homeOptions.every((option) => !option.available)) {
+    homeBaselineRef.current = new Set(homeOptions.map((option) => option.buildingId));
+  }
+  if (!playerWaiting && lifeFlow?.step !== 'home') homeBaselineRef.current = null;
+  const freshHomes = useMemo(() => new Set(homeBaselineRef.current ? homeOptions.filter((o) => !homeBaselineRef.current!.has(o.buildingId)).map((o) => o.buildingId) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [homeOptions, playerWaiting]);
+  // A waiting character always resumes home selection in Life mode.
+  useEffect(() => {
+    if (lifeActive && playerWaiting && !lifeFlow) setLifeFlow({ step: 'home', draft: null, purpose: 'create', selectedId: null });
+  }, [lifeActive, playerWaiting, lifeFlow]);
+  // Tell a waiting player as soon as a city change frees a room for them.
+  const freeRoomsRef = useRef(housing.freeRooms);
+  useEffect(() => {
+    if (playerWaiting && freeRoomsRef.current === 0 && housing.freeRooms > 0 && player) {
+      const free = homeOptions.find((option) => option.available);
+      showNotice(`${free ? free.name : 'A home'} has a free room for ${player.name}. Return to Life to move in.`);
+    }
+    freeRoomsRef.current = housing.freeRooms;
+  }, [housing.freeRooms, playerWaiting, player, homeOptions, showNotice]);
   const homeSelectedId = lifeFlow?.step === 'home' ? lifeFlow.selectedId : null;
   const homeHighlights: HomeHighlight[] | null = useMemo(() => lifeFlow?.step === 'home' ? homeOptions.flatMap((option) => {
     const building = world.plan.buildings.find((entry) => entry.id === option.buildingId);
     return building ? [{ id: building.id, x: building.position.x, y: building.position.y, width: building.footprint.width, height: building.footprint.height,
-      available: option.available, selected: option.buildingId === homeSelectedId }] : [];
-  }) : null, [lifeFlow?.step, homeOptions, homeSelectedId, world.plan]);
+      available: option.available, selected: option.buildingId === homeSelectedId, fresh: freshHomes.has(option.buildingId) }] : [];
+  }) : null, [lifeFlow?.step, homeOptions, homeSelectedId, world.plan, freshHomes]);
   const openCreator = () => { setLifeFlow({ step: 'identity', draft: { name: '', appearance: DEFAULT_APPEARANCE }, editing: false }); setSelectedCitizenId(null); };
   const selectHome = (id: string) => {
     if (lifeFlow?.step !== 'home') return;
@@ -755,13 +782,15 @@ function App() {
       if (result.applied) { setLifeFlow(null); focusPlayer(); }
       return;
     }
-    if (!lifeFlow.draft) return;
-    const result = runLife({ type: 'player.create', name: lifeFlow.draft.name, appearance: lifeFlow.draft.appearance, homeBuildingId: lifeFlow.selectedId });
+    const waiting = getSnapshot().player;
+    if (!waiting) return;
+    // The character already exists (unplaced); moving in is their spawn.
+    const result = runLife({ type: 'player.move-in', homeBuildingId: lifeFlow.selectedId });
     if (!result.applied) return;
     if (welcomeWithPlayer && !getSnapshot().population) enablePopulation({ maxCitizens: 1000 });
     resume();
     setLifeFlow(null); setFollowPlayer(true); setBaseMode('life'); setSheetOpen(false); focusPlayer();
-    showNotice(`Welcome home, ${lifeFlow.draft.name}! Click a road to walk, or choose an action.`);
+    showNotice(`Welcome home, ${waiting.name}! Click a road to walk, or choose an action.`);
   };
   const onLifeTarget = (target: LifeTarget) => {
     if (lifeFlow?.step === 'home') {
@@ -919,7 +948,7 @@ function App() {
             <Icon name="sparkle" size={16} /><span>Plan</span></button>
           <button className={`mode-tab ${mode === 'live' ? 'active' : ''}`} aria-pressed={mode === 'live'} onClick={() => chooseMode('live')} title="Watch residents live their day">
             <Icon name="people" size={16} /><span>Live</span>{unseenFeed > 0 && <b className="tab-badge" aria-label={`${unseenFeed} new city life updates`}>{unseenFeed}</b>}</button>
-          <button className={`mode-tab ${mode === 'life' ? 'active' : ''}`} aria-pressed={mode === 'life'} onClick={() => chooseMode('life')} title={player ? `Continue life as ${player.name}` : 'Create a character and live in the city'}>
+          <button className={`mode-tab ${mode === 'life' ? 'active' : ''}`} aria-pressed={mode === 'life'} onClick={() => chooseMode('life')} title={player ? (playerWaiting ? `Choose a home for ${player.name}` : `Continue life as ${player.name}`) : 'Create a character and live in the city'}>
             <Icon name="person" size={16} /><span>Life</span></button>
         </nav>
         <div className="hud-stats">
@@ -1120,11 +1149,18 @@ function App() {
 
         {view === 'life' && lifeFlow?.step === 'home' && <HomePicker options={homeOptions} selectedId={lifeFlow.selectedId} purpose={lifeFlow.purpose}
           populationEnabled={populationEnabled} welcome={welcomeWithPlayer} onWelcomeChange={setWelcomeWithPlayer} onSelect={selectHome} onConfirm={confirmHome}
-          onBack={() => setLifeFlow(lifeFlow.purpose === 'create' && lifeFlow.draft ? { step: 'identity', draft: lifeFlow.draft, editing: false } : null)}
-          onBuildHome={() => { setLifeFlow(null); chooseMode('build'); setTool('villa'); }}
+          housing={housing} fresh={freshHomes} playerName={player?.name ?? null}
+          onBack={() => setLifeFlow(playerWaiting && player ? { step: 'identity', draft: { name: player.name, appearance: player.appearance }, editing: true } : null)}
+          onBuildHome={() => {
+            if (playerWaiting && homeBaselineRef.current === null) homeBaselineRef.current = new Set(homeOptions.map((option) => option.buildingId));
+            setLifeFlow(null); chooseMode('build'); setTool('villa');
+            // Keep the map visible on phones so the player can pick a lot right away.
+            if (compact) setSheetOpen(false);
+            showNotice(player ? `Build a home beside a road. One room will be kept free for ${player.name}.` : 'Build a home beside a road.');
+          }}
           kindOf={(id) => city.buildings.find((entry) => entry.id === id)?.kind} />}
         {view === 'life' && lifeFlow?.step !== 'home' && !player && <LifeEntry populationEnabled={populationEnabled} onCreate={openCreator} />}
-        {view === 'life' && lifeFlow?.step !== 'home' && player && <LifePanel player={player} world={world} actions={lifeActions} log={playerLog.entries}
+        {view === 'life' && lifeFlow?.step !== 'home' && player && !playerWaiting && <LifePanel player={player} world={world} actions={lifeActions} log={playerLog.entries}
           paused={world.clock.paused} following={followPlayer && !followCitizenId} place={placeCard}
           nearby={nearby} onSelectCitizen={(id) => { selectCitizen(id); if (compact) setSheetOpen(true); }}
           onAction={(action) => runLife(action === 'go-home' ? { type: 'player.move-to', destination: { type: 'building', buildingId: player.homeBuildingId ?? '' } }
@@ -1135,13 +1171,19 @@ function App() {
           onChangeHome={() => setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: null })}
           onResume={() => { resume(); setSaved(false); }} onClosePlace={() => setLifePlaceId(null)} />}
       </aside>
-      {lifeActive && player && !lifeFlow && <LifeStrip player={player} world={world} following={followPlayer && !followCitizenId}
+      {playerWaiting && player && !lifeActive && <button className="home-return" onClick={() => chooseMode('life')} aria-label="Back to home selection">
+        <Icon name="home" size={15} /><span><strong>{player.name} needs a home</strong><small>{housing.freeRooms > 0 ? `${housing.freeRooms} free room${housing.freeRooms === 1 ? '' : 's'} · choose one` : 'Build a home beside a road'}</small></span>
+        <Icon name="chevron" size={14} /></button>}
+      {lifeActive && player && !playerWaiting && !lifeFlow && <LifeStrip player={player} world={world} following={followPlayer && !followCitizenId}
         onOpen={() => { setSelectedCitizenId(null); setLifePlaceId(null); if (compact) setSheetOpen(true); else if (panelCollapsed) togglePanel(false); }}
         onFollow={() => { setFollowCitizenId(null); setFollowPlayer((value) => !value); }} onCancel={() => runLife({ type: 'player.cancel' })} />}
       {lifeFlow?.step === 'identity' && <CharacterCreator initial={lifeFlow.draft} editing={lifeFlow.editing} onCancel={() => setLifeFlow(null)}
         onSubmit={(draft) => {
           if (lifeFlow.editing) { const result = runLife({ type: 'player.customize', name: draft.name, appearance: draft.appearance }, 'Look saved.'); if (result.applied) setLifeFlow(null); return; }
-          setLifeFlow({ step: 'home', draft, purpose: 'create', selectedId: null });
+          // The character is created now (unplaced), so it is kept while the player finds or builds a home.
+          const created = runLife({ type: 'player.create', name: draft.name, appearance: draft.appearance });
+          if (!created.applied) return;
+          setLifeFlow({ step: 'home', draft: null, purpose: 'create', selectedId: null });
           setBaseMode('life'); setArchitectPanelOpen(false); setSelectedCitizenId(null);
           if (panelCollapsed) togglePanel(false);
         }} />}

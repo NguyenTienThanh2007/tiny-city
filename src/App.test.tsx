@@ -633,7 +633,8 @@ describe('Phase 4 Life mode', () => {
     click(/Next: choose a home/);
     expect(screen.getByRole('heading', { name: 'Choose your home' })).toBeInTheDocument();
     expect(screen.getByTestId('home-highlights')).toHaveTextContent('10');
-    expect(world().player).toBeUndefined();
+    // The character now exists, waiting (unplaced) until they move in.
+    expect(world().player).toMatchObject({ name: 'Mai Nguyễn', homeBuildingId: null, movement: { status: 'unplaced' } });
     click('Test life villa');
     expect(screen.getByRole('region', { name: 'Confirm home' })).toHaveTextContent('Move into Villa 02?');
     click('Move in & start');
@@ -691,6 +692,45 @@ describe('Phase 4 Life mode', () => {
     expect(world().player).toEqual(saved);
     click('Life');
     expect(screen.getByRole('heading', { name: 'Linh' })).toBeInTheDocument();
+  });
+
+  it('recovers from a fully occupied city: keeps the character, builds a home, holds a room and moves in', () => {
+    render(<App />);
+    click(/^Live/);
+    click('Welcome residents');
+    click('Pause');
+    const residents = new Map(world().citizens.map((c: { id: string; homeBuildingId: string }) => [c.id, c.homeBuildingId]));
+    expect(residents.size).toBe(20);
+    click('Life');
+    click('Create character');
+    fireEvent.change(screen.getByLabelText(/Character name/), { target: { value: 'Mai' } });
+    click(/Next: choose a home/);
+    const recovery = screen.getByRole('region', { name: 'No free home' });
+    expect(recovery).toHaveTextContent('Every home is full right now');
+    expect(recovery).toHaveTextContent('20 of 20 rooms taken in 10 homes');
+    expect(recovery).toHaveTextContent('Mai is saved and waiting');
+    expect(world().player).toMatchObject({ name: 'Mai', movement: { status: 'unplaced' } });
+    click('Build a home');
+    expect(screen.getByRole('navigation', { name: 'Build tools' }).querySelector('.tool-villa')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Back to home selection' })).toHaveTextContent('Mai needs a home');
+    click('Test place villa');
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('has a free room for Mai');
+    expect(screen.getByRole('button', { name: 'Back to home selection' })).toHaveTextContent('1 free room');
+    // Every original resident keeps their home; the new villa got one resident and one room for the player.
+    const after = world();
+    for (const [id, home] of residents) expect(after.citizens.find((c: { id: string }) => c.id === id)?.homeBuildingId).toBe(home);
+    expect(after.citizens).toHaveLength(21);
+    click('Back to home selection');
+    expect(screen.getByRole('heading', { name: 'Choose your home' })).toBeInTheDocument();
+    const fresh = screen.getByRole('list', { name: 'Homes' }).querySelector('.home-option.is-fresh')!;
+    expect(fresh).toHaveTextContent('New');
+    expect(fresh).toHaveTextContent('1 of 2 rooms taken');
+    fireEvent.click(fresh);
+    click('Move in & start');
+    expect(world().player).toMatchObject({ name: 'Mai', movement: { status: 'inside' } });
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('Welcome home, Mai!');
+    expect(screen.getByRole('region', { name: 'Life HUD' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to home selection' })).not.toBeInTheDocument();
   });
 });
 

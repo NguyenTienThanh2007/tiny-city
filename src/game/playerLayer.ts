@@ -30,7 +30,7 @@ function draw(g: Graphics, shapes: readonly Shape[]) {
 }
 
 export type LifeFeedback = { readonly id: number; readonly cell: Position; readonly ok: boolean };
-export type HomeHighlight = { readonly id: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly available: boolean; readonly selected: boolean };
+export type HomeHighlight = { readonly id: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly available: boolean; readonly selected: boolean; readonly fresh?: boolean };
 
 interface Pulse { cell: Position; ok: boolean; age: number }
 
@@ -161,6 +161,8 @@ export class PlayerLayer {
       const color = home.selected ? 0xe8b64c : home.available ? 0x2f8a5b : 0x8f9a91;
       const r = home.selected ? 12 : home.available ? 10 : 7;
       badge.poly([-3.4, -r * 0.4, 3.4, -r * 0.4, 0, r + 4]).fill(color);
+      // Newly built housing gets a gold halo so it is easy to find after building it.
+      if (home.fresh && home.available) badge.circle(0, -r * 0.6, r + 5).fill({ color: 0xffd36e, alpha: 0.45 }).stroke({ color: 0xe8b64c, width: 1.6 });
       badge.circle(0, -r * 0.6, r).fill(color).stroke({ color: 0xffffff, width: 1.6 });
       if (home.available || home.selected) {
         badge.poly([-r * 0.5, -r * 0.5, 0, -r * 1.05, r * 0.5, -r * 0.5]).fill(0xffffff);
@@ -191,7 +193,8 @@ export class PlayerLayer {
       if (this.badgeList[index]?.selected && !this.reducedMotion) badge.pivot.y = Math.sin(this.time / 260) * 2;
     });
     const player = world.player;
-    if (!player) {
+    // A character waiting for a home is not in the world yet.
+    if (!player || player.movement.status === 'unplaced') {
       this.root.visible = false; this.pin.visible = false; this.overlay.clear(); this.rendered = null; this.visibleOnMap = false;
       this.drawPulses(viewScale, dt);
       return;
