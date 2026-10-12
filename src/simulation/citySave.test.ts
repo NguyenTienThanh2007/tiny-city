@@ -154,4 +154,41 @@ describe('save recovery feedback', () => {
     expect(loaded.city).toEqual(initialCity);
     expect(localStorage.getItem(SAVE_KEY)).toBe(raw);
   });
+
+  it('round-trips a Life mode player and never creates one for Phase 3 saves', () => {
+    const phase3 = new Simulation(createCityWorld(initialCity));
+    // 15 residents in 20 rooms: some homes keep a free room.
+    phase3.enablePopulation({ maxCitizens: 15 });
+    phase3.step(30);
+    saveCity(localStorage, projectCity(phase3.getState(), initialCity), phase3.getState());
+    const legacy = loadCitySave(localStorage);
+    expect(legacy.notice).toBeUndefined();
+    expect(legacy.world.player).toBeUndefined();
+
+    const sim = new Simulation(legacy.world);
+    const free = sim.getState().plan.buildings.find((b) => b.kind === 'home' && sim.getBuildingOccupancy(b.id).residentIds.length < b.capacity)!;
+    expect(sim.executeLife({ type: 'player.create', name: 'Mai', appearance: { skinTone: 1, hairStyle: 'bun', hairColor: 2, outfit: 'jacket', outfitColor: 4, accessory: 'scarf' }, homeBuildingId: free.id }).applied).toBe(true);
+    sim.executeLife({ type: 'player.start-activity', activity: 'visit' });
+    sim.step(5);
+    const state = sim.getState();
+    saveCity(localStorage, projectCity(state, initialCity), state);
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.notice).toBeUndefined();
+    expect(loaded.world.player).toEqual(state.player);
+    expect(new Simulation(loaded.world).step(40)).toEqual(sim.step(40));
+  });
+
+  it('keeps the city layout when a saved player is corrupt', () => {
+    const sim = new Simulation(createCityWorld(initialCity));
+    sim.executeLife({ type: 'player.create', name: 'Mai', appearance: { skinTone: 1, hairStyle: 'bun', hairColor: 2, outfit: 'jacket', outfitColor: 4, accessory: 'scarf' }, homeBuildingId: 'villa-seed-1' });
+    saveCity(localStorage, projectCity(sim.getState(), initialCity), sim.getState());
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY)!);
+    raw.simulation.player.needs.energy = 900;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(raw));
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.notice).toContain('Recovered your city layout');
+    expect(loaded.world.player).toBeUndefined();
+    expect(loaded.city.buildings).toHaveLength(initialCity.buildings.length);
+  });
 });
+

@@ -6,6 +6,7 @@ import { BUILDING_CATALOG, isBuildingType } from './catalog.js';
 import { OccupancyGrid } from './grid.js';
 import { containsPosition, NPC_LIMITS } from './navigation.js';
 import { initializePopulation, providesJobs, providesLeisure } from './population.js';
+import { clonePlayer, validatePlayer } from './player.js';
 import type { CityPlan, CityPlanInput, Citizen, DailySchedule, PopulationOptions, Position, WorldState } from './types.js';
 
 const ACTIVITIES = new Set(['sleep', 'home', 'work', 'leisure', 'idle', 'travel']);
@@ -149,6 +150,7 @@ export function validateWorld(world: WorldState): void {
       }
     }
   }
+  validatePlayer(world, assert);
 }
 
 /** Copies plain contract data so callers retain ownership of their input objects. */
@@ -160,6 +162,7 @@ export function cloneWorld(world: WorldState): WorldState {
       accumulatedMs: world.clock.accumulatedMs, paused: world.clock.paused },
     randomState: world.randomState,
     ...(world.population === undefined ? {} : { population: { version: world.population.version, maxCitizens: world.population.maxCitizens, nextCitizenId: world.population.nextCitizenId } }),
+    ...(world.player === undefined ? {} : { player: clonePlayer(world.player) }),
     plan: { id: world.plan.id, name: world.plan.name, width: world.plan.width, height: world.plan.height,
       roads: world.plan.roads.map((tile) => ({ x: tile.x, y: tile.y })),
       blockedTiles: world.plan.blockedTiles.map((tile) => ({ x: tile.x, y: tile.y })),

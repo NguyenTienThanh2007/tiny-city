@@ -59,3 +59,24 @@ API 58 passed · e2e 26/26 (mock Gemini).
 
 Results: unit 110, simulation 212, architect 31, API 61, e2e 29, typecheck/build/security pass.
 Next: after review, merge PR into `main`; consider adding `/v1/city/status` to `docs/ai-architect/phase-2a.openapi.json`.
+
+## Phase 4 Complete Life Mode (branch `feature/p4-complete-life-mode`, from `origin/main` @ `83a11c8`)
+
+Phase 3 (#7, #8) and Visual World 2.0 (#9) are merged in `main`. No open PRs at start.
+
+1. [x] M1 Architecture and player state contracts (`docs/life/phase-4a-contracts.md`, `WorldState.player`)
+2. [x] M2 Player identity, needs and simulation logic (`packages/simulation/src/player.ts`)
+3. [x] M3 Home ownership (one housing slot, move-in, demolition/move recovery) and navigation (`routeToRoad`)
+4. [x] M4 Resident interactions (greet/socialize, approach, leave detection) and activities (rest/eat/visit)
+5. [x] M5 Character Creator and Life Mode entry (fourth `Life` tab; Live unchanged)
+6. [x] M6 Player rendering (`src/game/playerLayer.ts`, shared `playerLook.ts`), follow camera, click-to-move
+7. [x] M7 Life HUD (side panel + compact strip), contextual place cards, Interact section in the resident profile
+8. [x] M8 Save/load (`Continue life`), undo semantics, demolished home, full housing, corrupt-save recovery
+9. [x] M9 Visual QA (`docs/life/screenshots`, reviewed), performance (`docs/life/benchmark-results.json`), e2e
+10. [x] M10 Final docs (`docs/life/phase-4-complete-acceptance.md`), full regression run, push and PR
+
+Results: typecheck pass · unit 122 · simulation 261 · architect 31 · security 0 · build pass · API 61 · e2e 33.
+
+Notes for resuming: the browser pane in this desktop app is often hidden, which (by design) freezes the clock;
+use Playwright (`e2e/life-mode.spec.ts`, `scripts/capture_life.mjs`) for timed checks. Software-render benchmarks
+must run on an otherwise idle machine.

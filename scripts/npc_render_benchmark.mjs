@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Browser rendering benchmark for managed residents.
-// Usage: node scripts/npc_render_benchmark.mjs [baseUrl] [--software]
+// Usage: node scripts/npc_render_benchmark.mjs [baseUrl] [--software] [--player]
+// --player (Phase 4) creates a Life Mode character first and keeps them walking a long route while sampling.
 // Generates road-connected cities sized for ~30/100/300/1000 residents, welcomes residents through the UI,
 // runs the commute at 4x, and samples the renderer's own once-per-second stats (window.__tinyCityRenderer).
 import { chromium } from '@playwright/test';
 
 const baseUrl = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://127.0.0.1:5173/';
 const software = process.argv.includes('--software');
+const withPlayer = process.argv.includes('--player');
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
 const targets = (process.argv.find((arg) => arg.startsWith('--targets='))?.slice(10) ?? '30,100,300,1000').split(',').map(Number);
 
@@ -46,6 +48,17 @@ for (const target of targets) {
     const info = gl?.getExtension('WEBGL_debug_renderer_info');
     return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'unknown';
   });
+  if (withPlayer) {
+    // Move in before residents, so the player's room is reserved and no resident is displaced.
+    await page.getByRole('button', { name: 'Life', exact: true }).click();
+    await page.getByRole('button', { name: 'Create character' }).click();
+    await page.getByLabel('Character name').fill('Bench');
+    await page.getByRole('button', { name: /Next: choose a home/ }).click();
+    await page.getByRole('list', { name: 'Homes' }).getByRole('button', { disabled: false }).first().click();
+    await page.getByRole('region', { name: 'Confirm home' }).getByRole('checkbox').uncheck();
+    await page.getByRole('region', { name: 'Confirm home' }).getByRole('button', { name: /Move in/ }).click();
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  }
   await page.getByRole('button', { name: 'Live', exact: true }).click();
   await page.getByRole('button', { name: 'Welcome residents' }).click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
@@ -59,6 +72,21 @@ for (const target of targets) {
   await page.getByRole('button', { name: 'Speed 1x' }).click();
   // Zoom out so the whole grid (and so every resident) is on screen.
   for (let i = 0; i < 4; i += 1) await page.getByRole('button', { name: 'Zoom out' }).click();
+  if (withPlayer) {
+    await page.getByRole('button', { name: 'Life', exact: true }).click();
+    await page.getByRole('button', { name: 'Center neighborhood' }).click();
+    for (let i = 0; i < 4; i += 1) await page.getByRole('button', { name: 'Zoom out' }).click();
+    await page.waitForTimeout(400);
+    // Walk to the far corner of the street grid.
+    const bounds = await page.locator('canvas').boundingBox();
+    const points = (await page.getByTestId('minimap-camera').getAttribute('points')).split(' ').map((p) => p.split(',').map((n) => Number(n) * 64 / 100));
+    const world = (gx, gy) => ({ x: (gx - gy) * 28, y: (gx + gy) * 14 });
+    const origin = world(points[0][0], points[0][1]), right = world(points[1][0], points[1][1]);
+    const scale = bounds.width / (right.x - origin.x), goal = world(58.5, 46.5);
+    await page.mouse.click(bounds.x + (goal.x - origin.x) * scale, bounds.y + (goal.y - origin.y) * scale);
+    const walking = await page.getByRole('status', { name: 'Current activity' }).textContent();
+    if (!/Walking/.test(walking)) console.error(`[${target}] player is not walking: ${walking}`);
+  }
   const samples = [];
   for (let i = 0; i < 6; i += 1) {
     await page.waitForTimeout(1050);
@@ -75,4 +103,4 @@ for (const target of targets) {
   await page.close();
 }
 await browser.close();
-console.log(JSON.stringify({ renderer: software ? 'swiftshader' : 'default-gpu', viewport: '1440x900', results }, null, 2));
+console.log(JSON.stringify({ renderer: software ? 'swiftshader' : 'default-gpu', viewport: '1440x900', player: withPlayer, results }, null, 2));

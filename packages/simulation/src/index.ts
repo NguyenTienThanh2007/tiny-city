@@ -3,6 +3,9 @@ export type {
   CommandRejectionReason, DailySchedule, Position, ScheduleEntry,
   SimulationEvent, SimulationResult, WorldCommand, WorldState,
   PopulationOptions, PopulationState, CitizenAttributes, CitizenMovement, BuildingOccupancy,
+  PlayerCharacter, PlayerAppearance, PlayerNeeds, PlayerNeed, PlayerNeedLevel, PlayerActivity, PlayerActivityKind, PlayerMovement,
+  PlayerOutcome, PlayerFailureReason, PlayerDestination, PlayerActionKind, PlayerHairStyle, PlayerOutfit, PlayerAccessory,
+  PlayerSocialTopic, LifeCommand, LifeCommandResult, LifeRejectionReason,
 } from './types.js';
 export type { ClockOptions } from './clock.js';
 export { advanceClock, createClock, getGameTime, MINUTES_PER_DAY, stepClock } from './clock.js';
@@ -18,6 +21,9 @@ export { RoadGraph } from './roads.js';
 export { applyCityCommand, applyCityCommandBatch, validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from './cityCommands.js';
 export { serializeWorld, deserializeWorld } from './serialization.js';
 export type { LegacyWorldOptions } from './serialization.js';
-export { RoadNavigator, NPC_LIMITS, buildingCenter } from './navigation.js';
+export { RoadNavigator, NPC_LIMITS, buildingCenter, containsPosition } from './navigation.js';
 export type { NavigationStats, RouteResult } from './navigation.js';
-export { createDailyRoutine } from './population.js';
+export { createDailyRoutine, providesJobs, providesLeisure } from './population.js';
+export { PLAYER_ID, PLAYER_APPEARANCE_OPTIONS, PLAYER_BALANCE, PLAYER_LIMITS, applyLifeCommand, isPlayerAppearance, needLevel,
+  normalizePlayerName, playerActionAvailability, playerHomeOptions } from './player.js';
+export type { HomeOption, PlayerActionAvailability } from './player.js';

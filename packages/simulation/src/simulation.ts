@@ -1,5 +1,5 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
-import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, PopulationOptions, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
+import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
 import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
 import { applyCityCommand, applyCityCommandBatch, copyCityCommand } from './cityCommands.js';
 import { compareTiles, OccupancyGrid } from './grid.js';
@@ -7,6 +7,7 @@ import { RoadGraph } from './roads.js';
 import { buildingCenter, RoadNavigator } from './navigation.js';
 import { initializePopulation, insideMovement, providesLeisure, reconcilePopulation } from './population.js';
 import { advanceDailyLife, scheduledEntry } from './life.js';
+import { advancePlayer, applyLifeCommand, reconcilePlayer } from './player.js';
 
 function copyCommand(command: WorldCommand): WorldCommand {
   switch (command.type) {
@@ -21,6 +22,12 @@ function copyCommand(command: WorldCommand): WorldCommand {
     default:
       throw new TypeError('unsupported command type');
   }
+}
+
+/** City data is validated before the player's references into it are reconciled. */
+function withoutPlayer(world: WorldState): WorldState {
+  const { player: _player, ...rest } = world;
+  return rest;
 }
 
 /** Headless deterministic runner. Event delivery belongs to the caller. */
@@ -50,6 +57,19 @@ export class Simulation {
     const change = initializePopulation(this.state, options);
     if(change.state!==this.state) { validateWorld(change.state); this.state = freeze(cloneWorld(change.state)); }
     return freeze({ state: this.state, events: change.events, steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  getPlayer(): PlayerCharacter | undefined { return this.state.player; }
+
+  /** Phase 4 Life Mode commands apply immediately (like city commands); movement then progresses on ticks. */
+  executeLife(command: LifeCommand): LifeCommandResult {
+    const change = applyLifeCommand(this.state, command, this.getNavigator());
+    if (change.reason === null && change.state !== this.state) {
+      validateWorld(change.state);
+      this.state = freeze(cloneWorld(change.state));
+    }
+    return freeze({ state: this.state, events: change.events, steps: 0, applied: change.reason === null, reason: change.reason,
+      alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
   private ensureCitizenIndexes(): void {
     if(this.citizenIndexState===this.state.citizens && this.citizenIndexPlan===this.state.plan) return;
@@ -100,7 +120,7 @@ export class Simulation {
       nextBuildingId: Math.max(this.state.nextBuildingId, snapshot.nextBuildingId), revision: this.state.revision + 1 };
     if (this.state.population) {
       // Validate city data before attempting to reconcile references into it.
-      validateWorld({ ...next, citizens: [] });
+      validateWorld({ ...withoutPlayer(next), citizens: [] });
       const buildings = new Map(snapshot.plan.buildings.map(b => [b.id,b]));
       if (snapshot.citizens) {
         const restored = snapshot.citizens.map(c => {
@@ -108,7 +128,7 @@ export class Simulation {
           return home ? { ...c, position: buildingCenter(home), activity: 'home' as const, targetBuildingId: home.id,
             movement: insideMovement(home.id,next.revision) } : c;
         });
-        validateWorld({ ...next, citizens: restored });
+        validateWorld({ ...withoutPlayer(next), citizens: restored });
         const current = new Map(this.state.citizens.map(c => [c.id,c]));
         next = { ...next, citizens: restored.map(c => {
           const live=current.get(c.id);
@@ -118,14 +138,20 @@ export class Simulation {
       }
       const population = reconcilePopulation(next, this.state);
       next = population.state;
+      const life = reconcilePlayer(next, this.state);
+      next = life.state;
       validateWorld(next);
       this.state = freeze(cloneWorld(next));
-      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events],
+      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events, ...life.events],
         steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
     }
+    // Validate the city before reconciling the player's references into it.
+    validateWorld(withoutPlayer(next));
+    const life = reconcilePlayer(next, this.state);
+    next = life.state;
     validateWorld(next);
     this.state = freeze(cloneWorld(next));
-    return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }],
+    return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...life.events],
       steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
@@ -260,6 +286,12 @@ export class Simulation {
         activity: entry.activity, targetBuildingId: entry.targetBuildingId });
       return { ...citizen, activity: entry.activity, targetBuildingId: entry.targetBuildingId };
     });
+    if (this.state.player) {
+      // The player shares the one fixed step and reads the residents' positions for this tick.
+      const life = advancePlayer({ ...this.state, clock, citizens }, this.getNavigator());
+      events.push(...life.events);
+      this.state = freeze({ ...this.state, player: life.state.player! });
+    }
     for (let day = previousDay + 1; day <= time.day; day += 1) {
       events.push({ type: 'clock.day-started', tick, day });
     }

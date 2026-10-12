@@ -32,6 +32,12 @@ vi.mock('./game/CityViewport', () => ({
     <button onClick={() => props.onAddRoad({ x: 40, y: 39 })}>Test adjacent road</button>
     <button onClick={() => props.onBulldoze({ x: 40, y: 39 })}>Test remove road</button>
     <button onClick={() => props.onAddRoad({ x: 42, y: 42 })}>Test paint road</button>
+    <button onClick={() => props.onLifeTarget?.({ type: 'tile', cell: { x: 18, y: 20 } })}>Test life road</button>
+    <button onClick={() => props.onLifeTarget?.({ type: 'tile', cell: { x: 30, y: 5 } })}>Test life grass</button>
+    <button onClick={() => props.onLifeTarget?.({ type: 'building', id: 'park-seed' })}>Test life park</button>
+    <button onClick={() => props.onLifeTarget?.({ type: 'building', id: 'villa-seed-2' })}>Test life villa</button>
+    <output data-testid="home-highlights">{props.homeHighlights ? props.homeHighlights.filter((h) => h.available).length : 'none'}</output>
+    <output data-testid="life-mode">{props.lifeMode ? 'on' : 'off'}</output>
     <button onClick={() => props.onCameraFootprintChange([
       { x: 16, y: 16 }, { x: 48, y: 16 }, { x: 48, y: 48 }, { x: 16, y: 48 },
     ])}>Test camera footprint</button>
@@ -74,7 +80,7 @@ function installPlanningFetch(
 
 function editorCity() { return JSON.parse(screen.getByTestId('editor-city').textContent!); }
 function world() { return JSON.parse(screen.getByTestId('simulation-world').textContent!); }
-function click(name: string) { fireEvent.click(screen.getByRole('button', { name })); }
+function click(name: string | RegExp) { fireEvent.click(screen.getByRole('button', { name })); }
 function expectSynchronized() { expect(world().plan).toEqual(toCityPlan(editorCity())); }
 
 describe('frontend city/simulation integration', () => {
@@ -598,3 +604,93 @@ describe('smart HUD and planner connectivity', () => {
     expect(await screen.findByText('Planner online · offline demo mode')).toBeInTheDocument();
   });
 });
+
+describe('Phase 4 Life mode', () => {
+  function createCharacter(name = 'Mai Nguyen', home = /^Villa 01/) {
+    click('Life');
+    click('Create character');
+    fireEvent.change(screen.getByLabelText(/Character name/), { target: { value: name } });
+    click(/Next: choose a home/);
+    fireEvent.click(screen.getByRole('list', { name: 'Homes' }).querySelectorAll('button')[[...screen.getByRole('list', { name: 'Homes' }).querySelectorAll('button')].findIndex((b) => home.test(b.textContent ?? ''))]!);
+    click('Move in & start');
+  }
+
+  it('enters Life mode without replacing Live, validates the creator and spawns in a chosen home', () => {
+    render(<App />);
+    click('Life');
+    expect(screen.getByTestId('life-mode')).toHaveTextContent('on');
+    expect(screen.getByRole('heading', { name: 'Live in your city' })).toBeInTheDocument();
+    click('Create character');
+    const dialog = screen.getByRole('dialog', { name: 'Create your character' });
+    click(/Next: choose a home/);
+    expect(dialog).toHaveTextContent('Use 1–24 letters');
+    fireEvent.change(screen.getByLabelText(/Character name/), { target: { value: 'Mai <b>' } });
+    click(/Next: choose a home/);
+    expect(screen.getByRole('dialog', { name: 'Create your character' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Character name/), { target: { value: '  Mai Nguyễn ' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Hairstyle Bun' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Outfit color Sea glass' }));
+    click(/Next: choose a home/);
+    expect(screen.getByRole('heading', { name: 'Choose your home' })).toBeInTheDocument();
+    expect(screen.getByTestId('home-highlights')).toHaveTextContent('10');
+    expect(world().player).toBeUndefined();
+    click('Test life villa');
+    expect(screen.getByRole('region', { name: 'Confirm home' })).toHaveTextContent('Move into Villa 02?');
+    click('Move in & start');
+    const created = world();
+    expect(created.player).toMatchObject({ name: 'Mai Nguyễn', homeBuildingId: 'villa-seed-2', appearance: { hairStyle: 'bun', outfitColor: 1 } });
+    // Residents moved in too, leaving the player's room free: 10 villas × 2 rooms − 1.
+    expect(created.citizens).toHaveLength(19);
+    expect(created.clock.paused).toBe(false);
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('Welcome home, Mai Nguyễn!');
+    expect(screen.getByRole('region', { name: 'Life HUD' })).toHaveTextContent('Mai Nguyễn');
+    expect(screen.getAllByRole('meter', { name: 'Energy' })[0]).toHaveAttribute('aria-valuenow', '85');
+    expect(screen.getByRole('button', { name: 'Life' })).toHaveAttribute('title', 'Continue life as Mai Nguyễn');
+    // Live mode still observes residents; the player is not a resident.
+    click(/^Live/);
+    expect(screen.getByRole('heading', { name: '19 residents' })).toBeInTheDocument();
+  });
+
+  it('walks on click, explains invalid destinations and offers contextual place actions', () => {
+    render(<App />);
+    createCharacter();
+    click('Pause');
+    click('Test life grass');
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('You can only walk on roads and paths.');
+    expect(world().player.activity.kind).toBe('idle');
+    click('Test life road');
+    expect(screen.getByRole('status', { name: 'Current activity' })).toHaveTextContent('Walking to the street at 18, 20');
+    const start = world().player.position;
+    click('Resume');
+    for (let i = 0; i < 5; i += 1) click('Test frame');
+    click('Pause');
+    expect(world().player.position).not.toEqual(start);
+    click('Test life park');
+    const card = screen.getByRole('region', { name: 'Place: Coastal Park' });
+    expect(card).toHaveTextContent('of 20 visitors now');
+    fireEvent.click(card.querySelectorAll('button')[0]!);
+    expect(screen.getByRole('status', { name: 'Current activity' })).toHaveTextContent('Walking to Coastal Park');
+    expect(screen.queryByRole('region', { name: 'Place: Coastal Park' })).not.toBeInTheDocument();
+    click('Cancel current action');
+    expect(world().player.lastOutcome).toMatchObject({ kind: 'visit', result: 'cancelled' });
+    expect(document.querySelector('.player-log')).toHaveTextContent('Visiting cancelled.');
+  });
+
+  it('keeps Build and Plan usable and saves the character with the city', () => {
+    const { unmount } = render(<App />);
+    createCharacter('Linh');
+    click('Build');
+    expect(screen.getByTestId('life-mode')).toHaveTextContent('off');
+    click('Test place villa');
+    expect(world().plan.buildings).toHaveLength(13);
+    click('Pause');
+    click('Save');
+    const saved = world().player;
+    unmount();
+    render(<App />);
+    expect(world().player).toEqual(saved);
+    click('Life');
+    expect(screen.getByRole('heading', { name: 'Linh' })).toBeInTheDocument();
+  });
+});
+

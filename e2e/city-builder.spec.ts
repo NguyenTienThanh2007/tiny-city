@@ -91,6 +91,15 @@ for (const kind of Object.keys(toolNames) as BuildingType[]) {
     await expect.poll(async () => (await page.locator('canvas').screenshot()).equals(duringConstruction)).toBe(false);
     await page.mouse.move(1100, 50);
     expect((await page.locator('canvas').screenshot()).equals(empty)).toBe(false);
+    // The inspector reads "Ready" at once, but the 5.2 s rise animation (and its hit-test height) is still running.
+    // Wait until the canvas stops changing so the roof click targets the finished height.
+    let previousFrame = await page.locator('canvas').screenshot();
+    await expect.poll(async () => {
+      const frame = await page.locator('canvas').screenshot();
+      const stable = frame.equals(previousFrame);
+      previousFrame = frame;
+      return stable;
+    }, { intervals: [400], timeout: 15_000 }).toBe(true);
     await selectRoof(page, kind, 12, 21);
     await page.locator('.inspector').getByRole('button', { name: 'Move', exact: true }).click();
     await clickTile(page, 10, 20);

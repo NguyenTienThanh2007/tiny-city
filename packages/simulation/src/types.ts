@@ -130,7 +130,112 @@ export interface WorldState {
   readonly nextBuildingId: number;
   /** Absent in legacy Phase 0–2 saves. Explicit opt-in activates Phase 3A. */
   readonly population?: PopulationState;
+  /** Phase 4 Life Mode character. Absent until a player is explicitly created; never auto-created on load. */
+  readonly player?: PlayerCharacter;
 }
+
+export type PlayerHairStyle = 'short' | 'long' | 'bun' | 'curly' | 'cap' | 'buzz';
+export type PlayerOutfit = 'tee' | 'dress' | 'jacket' | 'overalls' | 'hoodie';
+export type PlayerAccessory = 'none' | 'glasses' | 'backpack' | 'scarf' | 'sunhat';
+
+/** Bounded, typed choices. Colors are palette indices; the renderer owns the palettes. */
+export interface PlayerAppearance {
+  readonly skinTone: number;
+  readonly hairStyle: PlayerHairStyle;
+  readonly hairColor: number;
+  readonly outfit: PlayerOutfit;
+  readonly outfitColor: number;
+  readonly accessory: PlayerAccessory;
+}
+
+/** Every need is in [0, 100]; 100 is fully satisfied (rested, fed, connected, happy). */
+export interface PlayerNeeds {
+  readonly energy: number;
+  readonly hunger: number;
+  readonly social: number;
+  readonly mood: number;
+}
+export type PlayerNeed = keyof PlayerNeeds;
+export type PlayerNeedLevel = 'good' | 'fair' | 'low' | 'critical';
+
+export type PlayerActivityKind = 'idle' | 'move' | 'rest' | 'eat' | 'visit' | 'greet' | 'socialize';
+export type PlayerFailureReason = 'unreachable' | 'home-lost' | 'venue-removed' | 'venue-full' | 'citizen-left' |
+  'citizen-unavailable' | 'too-tired' | 'route-lost';
+
+export interface PlayerActivity {
+  readonly kind: PlayerActivityKind;
+  readonly phase: 'idle' | 'travelling' | 'performing';
+  /** Destination or venue (home, park, any building for move). */
+  readonly buildingId: string | null;
+  /** Resident for greet/socialize. */
+  readonly citizenId: string | null;
+  /** Road tile for move-to-tile. */
+  readonly tile: Position | null;
+  /** Game minutes the performing phase lasts; 0 for idle and move. */
+  readonly durationMinutes: number;
+  readonly elapsedMinutes: number;
+}
+
+export interface PlayerMovement {
+  readonly status: 'inside' | 'travelling' | 'standing';
+  readonly heading: Position;
+  /** Building the player is inside, or whose private entrance leg they are on. */
+  readonly currentBuildingId: string | null;
+  /** Building being entered at the end of the route (own home or a leisure venue). */
+  readonly destinationBuildingId: string | null;
+  readonly route: readonly Position[];
+  readonly nextWaypoint: number;
+  /** -1 requests a fresh route on the next tick (city edits, moving social targets). */
+  readonly plannedRevision: number;
+}
+
+export interface PlayerOutcome {
+  readonly kind: PlayerActivityKind;
+  readonly result: 'completed' | 'cancelled' | 'failed';
+  readonly reason: PlayerFailureReason | null;
+  readonly tick: number;
+  readonly buildingId: string | null;
+  readonly citizenId: string | null;
+  readonly elapsedMinutes: number;
+}
+
+export interface PlayerCharacter {
+  readonly version: 1;
+  readonly id: string;
+  readonly name: string;
+  readonly appearance: PlayerAppearance;
+  /** Null only after the home was lost (demolished); the player then chooses a new home. */
+  readonly homeBuildingId: string | null;
+  readonly position: Position;
+  readonly movement: PlayerMovement;
+  readonly activity: PlayerActivity;
+  readonly needs: PlayerNeeds;
+  /** Residents met through greet/socialize, oldest first, bounded and pruned when residents leave. */
+  readonly acquaintances: readonly string[];
+  readonly createdTick: number;
+  readonly lastOutcome: PlayerOutcome | null;
+}
+
+export type PlayerDestination =
+  | { readonly type: 'tile'; readonly position: Position }
+  | { readonly type: 'building'; readonly buildingId: string };
+
+export type PlayerActionKind = 'rest' | 'eat' | 'visit' | 'greet' | 'socialize';
+
+export type LifeCommand =
+  | { readonly type: 'player.create'; readonly name: string; readonly appearance: PlayerAppearance; readonly homeBuildingId: string }
+  | { readonly type: 'player.customize'; readonly name: string; readonly appearance: PlayerAppearance }
+  | { readonly type: 'player.move-in'; readonly homeBuildingId: string }
+  | { readonly type: 'player.move-to'; readonly destination: PlayerDestination }
+  | { readonly type: 'player.start-activity'; readonly activity: PlayerActionKind; readonly buildingId?: string; readonly citizenId?: string }
+  | { readonly type: 'player.cancel' };
+
+export type LifeRejectionReason = 'invalid-command' | 'player-exists' | 'player-not-found' | 'invalid-name' |
+  'invalid-appearance' | 'home-not-found' | 'not-a-home' | 'home-full' | 'already-home' | 'no-home' |
+  'invalid-destination' | 'unreachable' | 'stranded' | 'building-not-found' | 'not-leisure' | 'no-venue' | 'venue-full' |
+  'citizen-not-found' | 'citizen-unavailable' | 'too-tired' | 'nothing-to-cancel';
+
+export type PlayerSocialTopic = 'introduction' | 'commute' | 'leisure' | 'neighbourhood' | 'rest';
 
 export type CitizenCommand =
   | { readonly type: 'citizen.relocate'; readonly citizenId: string; readonly position: Position }
@@ -174,6 +279,18 @@ export type SimulationEvent =
   | { readonly type: 'city.command-rejected'; readonly tick: number; readonly commandType: CityCommand['type']; readonly reason: CityRejectionReason; readonly commandIndex: number }
   | { readonly type: 'citizen.activity-changed'; readonly tick: number; readonly citizenId: string; readonly activity: CitizenActivity; readonly targetBuildingId: string | null }
   | { readonly type: 'clock.day-started'; readonly tick: number; readonly day: number }
+  | { readonly type: 'player.created'; readonly tick: number; readonly player: PlayerCharacter }
+  | { readonly type: 'player.customized'; readonly tick: number; readonly name: string }
+  | { readonly type: 'player.moved-in'; readonly tick: number; readonly homeBuildingId: string; readonly previousHomeBuildingId: string | null }
+  | { readonly type: 'player.home-lost'; readonly tick: number; readonly buildingId: string }
+  | { readonly type: 'player.relocated'; readonly tick: number; readonly position: Position; readonly reason: 'building-removed' | 'building-moved' | 'road-removed'; readonly stranded: boolean }
+  | { readonly type: 'player.route-blocked'; readonly tick: number; readonly reason: 'unreachable' | 'search-limit' }
+  | { readonly type: 'player.arrived'; readonly tick: number; readonly buildingId: string | null; readonly position: Position }
+  | { readonly type: 'player.activity-started'; readonly tick: number; readonly activity: PlayerActivityKind; readonly phase: PlayerActivity['phase']; readonly buildingId: string | null; readonly citizenId: string | null }
+  | { readonly type: 'player.activity-ended'; readonly tick: number; readonly outcome: PlayerOutcome }
+  | { readonly type: 'player.interaction'; readonly tick: number; readonly citizenId: string; readonly kind: 'greet' | 'socialize'; readonly topic: PlayerSocialTopic; readonly firstMeeting: boolean }
+  | { readonly type: 'player.need-changed'; readonly tick: number; readonly need: PlayerNeed; readonly level: PlayerNeedLevel; readonly previous: PlayerNeedLevel; readonly value: number }
+  | { readonly type: 'player.command-rejected'; readonly tick: number; readonly commandType: LifeCommand['type']; readonly reason: LifeRejectionReason }
   | { readonly type: 'clock.ticked'; readonly tick: number; readonly day: number; readonly minuteOfDay: number };
 
 export interface SimulationResult {
@@ -186,4 +303,9 @@ export interface SimulationResult {
 
 export interface CityCommandResult extends SimulationResult {
   readonly applied: boolean;
+}
+
+export interface LifeCommandResult extends SimulationResult {
+  readonly applied: boolean;
+  readonly reason: LifeRejectionReason | null;
 }

@@ -29,6 +29,9 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   const previousBuildings = new Map(previous?.plan.buildings.map(b => [b.id,b]) ?? []);
   const homes = world.plan.buildings.filter(b => b.kind === 'home').sort(byId);
   const jobs = world.plan.buildings.filter(providesJobs).sort(byId);
+  // The Phase 4 player occupies one slot in their home; residents never fill it and are never evicted for it.
+  const playerHome = world.player?.homeBuildingId ?? null;
+  const housing = (b: Building) => b.capacity - (b.id === playerHome ? 1 : 0);
   const homeCounts = new Map<string, number>(), jobCounts = new Map<string, number>();
   const events: SimulationEvent[] = [], tick = world.clock.tick;
   let randomState = world.randomState, cursor = world.population.nextCitizenId;
@@ -38,13 +41,13 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   const validHomes = new Map<string, string>();
   for (const c of world.citizens.slice(0, world.population.maxCitizens)) {
     const home = buildings.get(c.homeBuildingId);
-    if (home?.kind === 'home' && (homeCounts.get(home.id) ?? 0) < home.capacity) { reserve(homeCounts, home.id); validHomes.set(c.id, home.id); }
+    if (home?.kind === 'home' && (homeCounts.get(home.id) ?? 0) < housing(home)) { reserve(homeCounts, home.id); validHomes.set(c.id, home.id); }
   }
   const housed: Citizen[] = [];
   for (const [index, c] of world.citizens.entries()) {
     let homeId = validHomes.get(c.id);
     if (index < world.population.maxCitizens && !homeId) {
-      const available = homes.find(b => (homeCounts.get(b.id) ?? 0) < b.capacity);
+      const available = homes.find(b => (homeCounts.get(b.id) ?? 0) < housing(b));
       if (available) { homeId = available.id; reserve(homeCounts, homeId); }
     }
     if (!homeId) { events.push({ type: 'citizen.removed', tick, citizenId: c.id, reason: index >= world.population.maxCitizens ? 'population-limit' : 'housing-lost' }); continue; }
@@ -100,7 +103,7 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   }
   const ids = new Set(world.citizens.map(c => c.id));
   for (const home of homes) {
-    while ((homeCounts.get(home.id) ?? 0) < home.capacity && citizens.length < world.population.maxCitizens) {
+    while ((homeCounts.get(home.id) ?? 0) < housing(home) && citizens.length < world.population.maxCitizens) {
       while (ids.has(`npc-${cursor}`) && cursor < Number.MAX_SAFE_INTEGER) cursor += 1;
       if (cursor >= Number.MAX_SAFE_INTEGER) throw new RangeError('citizen ID limit reached');
       const id = `npc-${cursor++}`; ids.add(id); reserve(homeCounts, home.id);
