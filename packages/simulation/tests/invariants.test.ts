@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BUILDING_CATALOG, containsPosition, createWorld, getGameTime, deserializeWorld, housingSummary, playerHomeOptions, providesLeisure,
-  serializeWorld, Simulation, validateWorld,
+  RoadNavigator, serializeWorld, Simulation, validateWorld,
 } from '../src/index.js';
 import type { BuildingType, CityCommand, CitySnapshot, LifeCommand, PlayerAppearance, Position, WorldState } from '../src/index.js';
 import { npcBuilding } from './npcFixture.js';
@@ -98,7 +98,8 @@ function randomStep(world: WorldState, r: ReturnType<typeof prng>): Step {
 function runScenario(seed: number, length: number, onStep?: (world: WorldState, step: Step, before: WorldState, index: number) => void) {
   const r = prng(seed);
   let sim = new Simulation(neighbourhood(`seed-${seed}`));
-  sim.enablePopulation({ maxCitizens: 1000 });
+  // Every third scenario runs under a tight population limit, exercising the population-limit paths.
+  sim.enablePopulation({ maxCitizens: seed % 3 === 0 ? 7 : 1000 });
   const history: CitySnapshot[] = [];
   const steps: Step[] = [];
   for (let i = 0; i < length; i += 1) {
@@ -126,6 +127,20 @@ describe('Phase 4.5 world invariants under random city, AI, history, save and Li
       runScenario(seed, length, (world, step, _before, index) => checkInvariants(world, `seed ${seed} step ${index} ${step.kind}`));
     });
   }
+
+  it('nobody stays stuck: at 03:00 after a quiet day every resident who can reach home is inside it', () => {
+    for (const seed of [31, 32, 33, 34, 35, 36]) {
+      const { sim } = runScenario(seed, 150);
+      // Let a full quiet day pass, then stop at 03:00 when every routine says "sleep at home".
+      sim.step(Math.ceil(1440 / sim.getState().clock.minutesPerTick));
+      while (getGameTime(sim.getState().clock).minuteOfDay !== 180) sim.step(1);
+      const world = sim.getState(), nav = new RoadNavigator(world.plan);
+      for (const c of world.citizens) {
+        const home = c.movement!.status === 'inside' && c.movement!.currentBuildingId === c.homeBuildingId;
+        if (!home) expect(nav.routeFrom(c.position, c.movement!.currentBuildingId, c.homeBuildingId).route, `seed ${seed}: ${c.id} is out at 03:00 with a route home`).toBeNull();
+      }
+    }
+  });
 
   it('is deterministic: identical seeds and commands give identical worlds', () => {
     const a = runScenario(11, 160).sim.getState(), b = runScenario(11, 160).sim.getState();
