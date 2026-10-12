@@ -4,9 +4,9 @@ import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPl
 import type { LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
-import type { PlanProposal, PlanningConstraints, PlanningHost } from '@tiny-city/ai-architect';
+import type { PlanProposal, PlanningConstraints, PlanningHost, PlanningResponse, ValidationRequest } from '@tiny-city/ai-architect';
 import CityViewport from './game/CityViewport';
-import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea } from './game/CityViewport';
+import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea, TargetHighlight } from './game/CityViewport';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
 import { ActionButton, HomePicker, LifeEntry, LifePanel, LifeStrip, PlaceCard } from './ui/LifePanel';
 import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, rejectionText, type PlayerLogState } from './simulation/playerView';
@@ -21,7 +21,7 @@ import { LivePanel } from './ui/LivePanel';
 import { BuildingThumb } from './ui/BuildingThumb';
 import { residentsWithoutJobs, summarizeActivities } from './simulation/citizenView';
 import { emptyLifeFeed, reduceLifeFeed, type LifeFeedState } from './simulation/lifeFeed';
-import { ArchitectClientError, checkPlannerConnection, createPlanningRequest, requestCityPlan } from './aiArchitect/client';
+import { ArchitectClientError, checkPlannerConnection, createPlanningRequest, requestCityPlan, requestPlanValidation } from './aiArchitect/client';
 import { ConnectionBadge, isRecoverablePlannerError, PlannerRecovery, type ConnectionView } from './ui/PlannerConnection';
 import { rejectionFeedback } from './simulation/feedback';
 import { loadCitySave, saveCity } from './simulation/citySave';
@@ -79,7 +79,7 @@ function useSafeArea(): { safeArea: SafeArea; compact: boolean } {
   return value;
 }
 type CameraFootprintPoint = { x: number; y: number };
-type ArchitectStatus = 'idle' | 'requesting' | 'validating' | 'preview-ready' | 'applying' | 'applied' | 'rejected' | 'cancelled' | 'error' | 'stale';
+type ArchitectStatus = 'idle' | 'requesting' | 'validating' | 'preview-ready' | 'applying' | 'applied' | 'rejected' | 'cancelled' | 'error' | 'stale' | 'clarify' | 'authorize';
 type ArchitectState = {
   status: ArchitectStatus;
   proposal?: PlanProposal;
@@ -98,6 +98,7 @@ type PendingArchitectRequest = {
 };
 
 const MAX_PROMPT_HISTORY = 20;
+const NO_TARGETS: readonly TargetHighlight[] = [];
 const MAX_PLANNING_ALLOWLIST = 128;
 const AI_REQUEST_DEADLINE_MS = 75_000;
 
@@ -151,6 +152,9 @@ function App() {
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
   const [architectState, setArchitectState] = useState<ArchitectState>({ status: 'idle' });
+  /** A paused plan waiting for the user's target choice or authorization; re-planned without another AI call. */
+  const architectFollowUpRef = useRef<{ historyId: number; prompt: string; proposal: PlanProposal } | null>(null);
+  const [targetChoices, setTargetChoices] = useState<Record<string, string[]>>({});
   const [architectPanelOpen, setArchitectPanelOpen] = useState(false);
   const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([]);
   const [allowPartial, setAllowPartial] = useState(false);
@@ -439,6 +443,11 @@ function App() {
   const planningRequestActive = ['requesting', 'validating'].includes(architectState.status);
   const architectOptionsLocked = architectBusy || architectState.status === 'preview-ready' || destructiveConfirmation;
   const overlayProposal = ['preview-ready', 'applying'].includes(architectState.status) ? architectState.proposal ?? null : null;
+  // Buildings an ambiguous or blocked request refers to, outlined on the map while the user decides.
+  const targetHighlights = useMemo(() => architectState.status === 'clarify' ? (architectState.proposal?.clarifications.flatMap((c) => c.candidates.map((candidate) => ({ id: candidate.buildingId, tone: (targetChoices[`${c.kind}:${c.index}`] ?? []).includes(candidate.buildingId) ? 'selected' as const : 'candidate' as const }))) ?? NO_TARGETS)
+    : architectState.status === 'authorize' && architectState.proposal?.authorization
+      ? [...architectState.proposal.authorization.demolish.map((id) => ({ id, tone: 'remove' as const })), ...architectState.proposal.authorization.move.map((id) => ({ id, tone: 'move' as const }))] : NO_TARGETS,
+  [architectState.status, architectState.proposal, targetChoices]);
   const currentProposal = architectState.proposal;
   const proposalHasDestructiveEdits = currentProposal?.commands.some((item) => item.type === 'city.demolish' ||
     item.type === 'city.edit-roads' && item.remove.length > 0) ?? false;
@@ -455,6 +464,7 @@ function App() {
     'preview-ready': 'Preview ready · waiting for approval', applying: 'Applying approved plan…',
     applied: 'Applied', rejected: 'Rejected · city unchanged', cancelled: 'Cancelled · city unchanged',
     error: architectState.errorCode ?? 'Could not plan', stale: 'Plan is stale',
+    clarify: 'Choose the buildings you mean', authorize: 'Needs your authorization',
   };
 
 
@@ -503,7 +513,15 @@ function App() {
       maxOperations: 128,
     };
     const request = createPlanningRequest(prompt, snapshot, constraints);
-    const historyId = nextHistoryIdRef.current++;
+    await executePlanning(prompt, snapshot, (signal) => requestCityPlan(request, signal), true);
+  };
+
+  /**
+   * One planning round trip: AI interpretation (/plan) or re-planning an interpreted intent with the user's target
+   * choice or authorization (/plan/validate, no AI call). Ambiguous targets and blocked edits pause for the user.
+   */
+  const executePlanning = async (prompt: string, snapshot: WorldState, call: (signal: AbortSignal) => Promise<PlanningResponse>, newEntry: boolean) => {
+    const historyId = newEntry ? nextHistoryIdRef.current++ : (architectFollowUpRef.current?.historyId ?? nextHistoryIdRef.current++);
     const token = ++requestTokenRef.current;
     const controller = new AbortController();
     const pending: PendingArchitectRequest = {
@@ -514,16 +532,17 @@ function App() {
       controller.abort();
     }, AI_REQUEST_DEADLINE_MS);
     pendingArchitectRequestRef.current = pending;
-    setPromptHistory((entries) => [{ id: historyId, prompt, status: 'Planning' }, ...entries].slice(0, MAX_PROMPT_HISTORY));
-    setArchitectState({ status: 'requesting', message: 'Sending your idea to the city planner…' });
+    if (newEntry) setPromptHistory((entries) => [{ id: historyId, prompt, status: 'Planning' }, ...entries].slice(0, MAX_PROMPT_HISTORY));
+    else updatePromptHistory(historyId, { status: 'Planning' });
+    setArchitectState({ status: 'requesting', message: newEntry ? 'Sending your idea to the city planner…' : 'Re-planning with your choice (no new AI call)…' });
 
     let responseRequestId: string | undefined;
     try {
-      const response = await requestCityPlan(request, controller.signal);
+      const response = await call(controller.signal);
       if (token !== requestTokenRef.current) return;
       responseRequestId = response.requestId;
       // A planning response proves the server is reachable; refresh a stale "unreachable" badge.
-      setConnection((current) => current.state === 'unavailable' ? { state: 'reachable', reason: 'The last planning request reached the server.' } : current);
+      setConnection((current) => current.state === 'unavailable' || current.state === 'wrong-service' ? { state: 'reachable', reason: 'The last planning request reached the server.' } : current);
       if (pending.timeoutId !== null) window.clearTimeout(pending.timeoutId);
       pending.timeoutId = null;
       updatePromptHistory(historyId, { requestId: response.requestId });
@@ -531,16 +550,31 @@ function App() {
       if (getSnapshot().revision !== snapshot.revision) {
         throw new PlanError('STALE_WORLD', 'The city changed while AI was planning. Generate a new plan.');
       }
-      if (response.proposal.status === 'REJECTED') {
-        setArchitectState({ status: 'rejected', proposal: response.proposal, requestId: response.requestId,
-          message: response.proposal.explanation || 'The request could not be fulfilled safely.' });
-        updatePromptHistory(historyId, { status: 'Rejected', summary: response.proposal.summary });
+      const proposal = response.proposal;
+      if (proposal.status === 'REJECTED' && proposal.clarifications.length) {
+        architectFollowUpRef.current = { historyId, prompt, proposal };
+        setTargetChoices({});
+        setArchitectState({ status: 'clarify', proposal, requestId: response.requestId, message: 'Choose which buildings you mean. Nothing changes until you approve a preview.' });
+        updatePromptHistory(historyId, { status: 'Needs your choice', summary: proposal.summary });
+        return;
+      }
+      if (proposal.status === 'REJECTED' && proposal.authorization) {
+        architectFollowUpRef.current = { historyId, prompt, proposal };
+        setArchitectState({ status: 'authorize', proposal, requestId: response.requestId, message: proposal.authorization.message });
+        updatePromptHistory(historyId, { status: 'Needs authorization', summary: proposal.summary });
+        return;
+      }
+      if (proposal.status === 'REJECTED') {
+        const reasons = proposal.warnings.map((warning) => warning.message).join(' ');
+        setArchitectState({ status: 'rejected', proposal, requestId: response.requestId,
+          message: reasons || proposal.explanation || 'The request could not be fulfilled safely.' });
+        updatePromptHistory(historyId, { status: 'Rejected', summary: proposal.summary });
         return;
       }
 
-      setArchitectState({ status: 'validating', proposal: response.proposal, requestId: response.requestId,
+      setArchitectState({ status: 'validating', proposal, requestId: response.requestId,
         message: 'Checking this proposal against the current city…' });
-      const review = new PlanReview(architectHostRef.current!, response.proposal);
+      const review = new PlanReview(architectHostRef.current!, proposal);
       activeReviewRef.current = review;
       const preview = await review.preview();
       if (token !== requestTokenRef.current) {
@@ -551,6 +585,7 @@ function App() {
         review.reject();
         throw new PlanError('STALE_WORLD', 'The city changed while the proposal was being checked. Generate a new plan.');
       }
+      architectFollowUpRef.current = null;
       setArchitectState({ status: 'preview-ready', proposal: preview, requestId: response.requestId,
         message: preview.validation.fulfilled ? 'Review the proposal, then approve it to build.' : 'This proposal only partially fulfills your request.' });
       updatePromptHistory(historyId, { status: preview.validation.fulfilled ? 'Preview ready' : 'Partial preview', summary: preview.summary });
@@ -574,6 +609,46 @@ function App() {
       if (pending.timeoutId !== null) window.clearTimeout(pending.timeoutId);
       if (pendingArchitectRequestRef.current === pending) pendingArchitectRequestRef.current = null;
     }
+  };
+
+  /** Re-plan the interpreted intent after the user picked targets or authorized edits. Never calls the AI again. */
+  const continueFollowUp = async (intent: PlanProposal['intent'], constraints: PlanningConstraints) => {
+    const followUp = architectFollowUpRef.current;
+    if (!followUp) return;
+    const snapshot = getSnapshot();
+    if (snapshot.revision !== followUp.proposal.sourceRevision) {
+      architectFollowUpRef.current = null;
+      setArchitectState({ status: 'stale', errorCode: 'STALE_WORLD', message: 'The city changed since this plan was prepared. Send the prompt again to plan against the current city.' });
+      return;
+    }
+    const request: ValidationRequest = { contractVersion: 1, world: snapshot, sourceRevision: snapshot.revision, seed: followUp.proposal.seed, constraints, intent };
+    await executePlanning(followUp.prompt, snapshot, (signal) => requestPlanValidation(request, signal), false);
+  };
+  const confirmTargets = () => {
+    const followUp = architectFollowUpRef.current;
+    if (!followUp) return;
+    const { intent } = followUp.proposal;
+    const pick = (kind: 'demolish' | 'move', index: number) => targetChoices[`${kind}:${index}`] ?? [];
+    const next = { ...intent,
+      demolishTargets: intent.demolishTargets.map((target, index) => followUp.proposal.clarifications.some((c) => c.kind === 'demolish' && c.index === index) ? { ...target, ids: pick('demolish', index), relative: null } : target),
+      moveTargets: intent.moveTargets.map((move, index) => followUp.proposal.clarifications.some((c) => c.kind === 'move' && c.index === index) ? { ...move, target: { ...move.target, ids: pick('move', index), relative: null } } : move) };
+    void continueFollowUp(next, followUp.proposal.constraints);
+  };
+  const authorizeEdits = () => {
+    const followUp = architectFollowUpRef.current;
+    const auth = followUp?.proposal.authorization;
+    if (!followUp || !auth) return;
+    // Lift protection and allow demolition for exactly the listed buildings; every other building stays protected.
+    const ids = new Set([...auth.demolish, ...auth.move]);
+    const base = followUp.proposal.constraints;
+    void continueFollowUp(followUp.proposal.intent, { ...base,
+      preserveBuildingIds: base.preserveBuildingIds.filter((id) => !ids.has(id)),
+      allowDestructive: base.allowDestructive || auth.destructiveRequired,
+      allowedDemolitions: [...new Set([...base.allowedDemolitions, ...auth.demolish])] });
+  };
+  const dismissFollowUp = () => {
+    architectFollowUpRef.current = null;
+    setArchitectState({ status: 'cancelled', message: 'Nothing was changed. Your city is unchanged.' });
   };
 
   const cancelArchitectRequest = () => cancelPlanning();
@@ -928,6 +1003,7 @@ function App() {
           followPlayer={lifeActive && followPlayer && !!player && !followCitizenId && !lifeFlow}
           lifeFeedback={lifeFeedback}
           homeHighlights={homeHighlights}
+          targetHighlights={targetHighlights}
         />
         {overlayProposal && <div className="preview-ribbon" role="note"><Icon name="sparkle" size={14} /> AI preview · not built yet</div>}
       </section>
@@ -1047,7 +1123,51 @@ function App() {
             connection={connection} prompt={command} dev={import.meta.env.DEV}
             onRetry={() => plannerFormRef.current?.requestSubmit()} onCheck={checkConnection} />}
 
-          {currentProposal && <div className={`proposal-card ${architectState.status === 'stale' ? 'is-stale' : ''}`}>
+          {architectState.status === 'clarify' && architectState.proposal && <div className="followup-card" role="region" aria-label="Choose buildings">
+            {architectState.proposal.clarifications.map((clarification) => {
+              const key = `${clarification.kind}:${clarification.index}`;
+              const chosen = targetChoices[key] ?? [];
+              return <fieldset key={key} className="target-choice">
+                <legend>{clarification.message}</legend>
+                {clarification.candidates.map((candidate) => {
+                  const checked = chosen.includes(candidate.buildingId);
+                  return <label key={candidate.buildingId} className={`target-option ${checked ? 'is-checked' : ''}`}>
+                    <input type={clarification.quantity === 1 ? 'radio' : 'checkbox'} name={key} checked={checked}
+                      onChange={() => setTargetChoices((current) => {
+                        const list = current[key] ?? [];
+                        const next = clarification.quantity === 1 ? [candidate.buildingId] : checked ? list.filter((id) => id !== candidate.buildingId) : [...list, candidate.buildingId];
+                        return { ...current, [key]: next };
+                      })} />
+                    {candidate.buildingType && <BuildingThumb kind={candidate.buildingType} />}
+                    <span><strong>{candidate.name}</strong><small>{candidate.buildingType ? BUILDINGS[candidate.buildingType].label : 'Building'} · {candidate.position.x}, {candidate.position.y}</small></span>
+                    <button type="button" className="text-button" onClick={(event) => { event.preventDefault(); navigateCamera(candidate.position); }}>Show</button>
+                  </label>;
+                })}
+                <small>{chosen.length} of {clarification.quantity} chosen</small>
+              </fieldset>;
+            })}
+            <div className="proposal-actions">
+              <button className="approve-plan" onClick={confirmTargets}
+                disabled={!architectState.proposal.clarifications.every((c) => (targetChoices[`${c.kind}:${c.index}`] ?? []).length === c.quantity)}>Use these buildings</button>
+              <button className="reject-plan" onClick={dismissFollowUp}>Cancel</button>
+            </div>
+          </div>}
+
+          {architectState.status === 'authorize' && architectState.proposal?.authorization && <div className="followup-card is-warning" role="region" aria-label="Authorization required">
+            <strong>{architectState.proposal.authorization.protectedIds.length ? 'These buildings are protected' : 'Demolition needs your permission'}</strong>
+            <p>{architectState.proposal.authorization.message}</p>
+            <ul className="auth-list">
+              {architectState.proposal.authorization.demolish.map((id) => <li key={`d-${id}`}><b className="auth-tag is-remove">Demolish</b>{world.plan.buildings.find((x) => x.id === id)?.name ?? id}</li>)}
+              {architectState.proposal.authorization.move.map((id) => <li key={`m-${id}`}><b className="auth-tag is-move">Move</b>{world.plan.buildings.find((x) => x.id === id)?.name ?? id}</li>)}
+            </ul>
+            <small>Every other building stays protected. You will still see a preview and confirm before anything is built or removed.</small>
+            <div className="proposal-actions">
+              <button className="approve-plan" onClick={authorizeEdits}>Allow {architectState.proposal.authorization.demolish.length + architectState.proposal.authorization.move.length === 1 ? 'this change' : 'these changes'}</button>
+              <button className="reject-plan" onClick={dismissFollowUp}>Keep protection</button>
+            </div>
+          </div>}
+
+          {currentProposal && architectState.status !== 'clarify' && architectState.status !== 'authorize' && <div className={`proposal-card ${architectState.status === 'stale' ? 'is-stale' : ''}`}>
             <div className="proposal-card-heading"><strong>{currentProposal.summary}</strong>
               <span className={currentProposal.validation.fulfilled ? 'full' : 'partial'}>{currentProposal.validation.fulfilled ? 'FULL' : 'PARTIAL'}</span></div>
             <p>{currentProposal.explanation}</p>
@@ -1059,9 +1179,18 @@ function App() {
               {proposalBreakdown.map((line) => <li key={line.type}><BuildingThumb kind={line.type} /><span>{line.count} × {BUILDINGS[line.type].label}</span><b>${line.cost.toLocaleString()}</b></li>)}
               {currentProposal.roads.add.length > 0 && <li><span className="road-swatch" /><span>{currentProposal.roads.add.length} × Road tile</span><b>${(currentProposal.roads.add.length * CONSTRUCTION_COSTS.road).toLocaleString()}</b></li>}
             </ul>}
+            {currentProposal.status !== 'REJECTED' && <ul className="impact-list" aria-label="Plan impact">
+              {currentProposal.impact.buildingsRemoved > 0 && <li className="is-remove"><Icon name="bulldoze" size={13} />Removes {currentProposal.impact.buildingsRemoved} building{currentProposal.impact.buildingsRemoved === 1 ? '' : 's'}{currentProposal.impact.roomsRemoved ? ` (${currentProposal.impact.roomsRemoved} rooms)` : ''}</li>}
+              {currentProposal.impact.residentsRemoved > 0 && <li className="is-remove"><Icon name="people" size={13} />{currentProposal.impact.residentsRemoved} resident{currentProposal.impact.residentsRemoved === 1 ? '' : 's'} will leave the city (no free room)</li>}
+              {currentProposal.impact.residentsRehoused > 0 && <li><Icon name="home" size={13} />{currentProposal.impact.residentsRehoused} resident{currentProposal.impact.residentsRehoused === 1 ? '' : 's'} will move to another home</li>}
+              {currentProposal.impact.playerHomeRemoved && <li className="is-remove"><Icon name="warning" size={13} />Your character’s home will be removed — you will choose a new one</li>}
+              {currentProposal.impact.buildingsMoved > 0 && <li><Icon name="move" size={13} />Moves {currentProposal.impact.buildingsMoved} building{currentProposal.impact.buildingsMoved === 1 ? '' : 's'}</li>}
+              {currentProposal.impact.roomsAdded > 0 && <li><Icon name="villa" size={13} />Adds {currentProposal.impact.roomsAdded} rooms{player && !isPlayerPlaced(player) ? ` — one is kept for ${player.name}` : ''}</li>}
+            </ul>}
             <div className="proposal-counts">
               <span>{currentProposal.placements.filter((placement) => placement.operation === 'build').length} builds</span>
               <span>{currentProposal.placements.filter((placement) => placement.operation === 'move').length} moves</span>
+              <span>{currentProposal.commands.filter((command) => command.type === 'city.demolish').length} demolitions</span>
               <span>+{currentProposal.roads.add.length} / −{currentProposal.roads.remove.length} roads</span>
               <span>{currentProposal.validation.operationCount} operations</span>
             </div>

@@ -843,6 +843,32 @@ kbd { font-family: var(--font-ui); }
 .check-line input { width: 16px; height: 16px; accent-color: var(--forest-700); }
 .home-confirm-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 12px; }
 
+/* AI Architect 2.0: target choice, authorization and impact */
+.followup-card { margin-top: 12px; padding: 14px; border-radius: var(--radius-md); background: var(--paper); border: 1px solid rgba(232, 182, 76, .55); box-shadow: var(--shadow-sm); }
+.followup-card.is-warning { border-color: rgba(181, 72, 62, .35); background: #fdf3ef; }
+.followup-card > strong { font: 600 16px/1.3 var(--font-display); color: var(--forest-900); }
+.followup-card p { margin: 6px 0 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
+.followup-card > small { display: block; margin-top: 8px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.target-choice { margin: 0 0 10px; padding: 0; border: 0; display: grid; gap: 6px; }
+.target-choice legend { margin-bottom: 6px; color: var(--ink); font-size: 13px; font-weight: 700; line-height: 1.45; }
+.target-choice > small { color: var(--muted); font-size: 11.5px; font-weight: 700; }
+.target-option { display: grid; grid-template-columns: 18px 34px 1fr auto; gap: 9px; align-items: center; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); cursor: pointer; }
+.target-option.is-checked { border-color: #2f8a5b; background: #f1f8f2; box-shadow: 0 0 0 2px rgba(47, 138, 91, .18); }
+.target-option input { width: 16px; height: 16px; accent-color: var(--forest-700); }
+.target-option .building-thumb { width: 34px; height: 34px; }
+.target-option strong { display: block; font-size: 13px; }
+.target-option small { display: block; color: var(--muted); font-size: 11.5px; }
+.auth-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 5px; }
+.auth-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+.auth-tag { padding: 2px 7px; border-radius: 999px; font-size: 10.5px; letter-spacing: .04em; color: #fff; }
+.auth-tag.is-remove { background: var(--danger); }
+.auth-tag.is-move { background: #287d99; }
+.impact-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.impact-list li { display: flex; gap: 7px; align-items: flex-start; font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+.impact-list li svg { flex: 0 0 13px; margin-top: 2px; color: var(--forest-500); }
+.impact-list li.is-remove { color: #8d3229; }
+.impact-list li.is-remove svg { color: var(--danger); }
+
 /* Housing recovery (no free home) */
 .housing-recovery { margin-top: 12px; padding: 14px; border-radius: var(--radius-md); background: linear-gradient(160deg, #fff4dc, #f6e2d7); border: 1px solid rgba(232, 182, 76, .45); }
 .housing-recovery-head { display: flex; align-items: center; gap: 8px; color: #7b5612; }

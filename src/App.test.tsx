@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type CityViewport from './game/CityViewport';
 import type { ComponentProps } from 'react';
-import { createProposal, PlanError, PlanReview } from '@tiny-city/ai-architect';
+import { createProposal, interpretLocally, PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { ArchitectIntent, PlanningRequest } from '@tiny-city/ai-architect';
 import { CONSTRUCTION_COSTS } from '@tiny-city/simulation';
 import { initialCity } from './data/initialCity';
@@ -731,6 +731,68 @@ describe('Phase 4 Life mode', () => {
     expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('Welcome home, Mai!');
     expect(screen.getByRole('region', { name: 'Life HUD' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Back to home selection' })).not.toBeInTheDocument();
+  });
+});
+
+describe('AI Architect 2.0 target choice and authorization', () => {
+  /** Real planner behind both routes: /plan interprets with the offline rules, /plan/validate re-plans the given intent. */
+  function installLocalPlanner() {
+    const calls: string[] = [];
+    stubPlannerFetch(async (input, init) => {
+      const url = String(input);
+      calls.push(url.endsWith('/validate') ? 'validate' : 'plan');
+      const body = JSON.parse(String(init?.body));
+      const intent = url.endsWith('/validate') ? body.intent : interpretLocally(body.prompt, { buildings: body.world.plan.buildings });
+      const proposal = await createProposal(body.world, body.sourceRevision, intent, body.seed ?? 0, body.constraints);
+      return new Response(JSON.stringify({ requestId: `req-${calls.length}`, proposal }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    return calls;
+  }
+
+  it('asks which villa, requires explicit authorization over protection, previews the removal and applies it atomically', async () => {
+    const calls = installLocalPlanner();
+    render(<App />);
+    const before = world();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'Phá căn biệt thự' } });
+    click('Generate AI plan');
+    const choose = await screen.findByRole('region', { name: 'Choose buildings' });
+    expect(choose).toHaveTextContent('10 villas match. Choose which one to demolish.');
+    expect(screen.getByRole('button', { name: 'Use these buildings' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: /Villa 03/ }));
+    click('Use these buildings');
+    const authorize = await screen.findByRole('region', { name: 'Authorization required' });
+    expect(authorize).toHaveTextContent('protected by “Protect existing buildings”');
+    expect(authorize).toHaveTextContent('Demolish');
+    expect(authorize).toHaveTextContent('Villa 03');
+    expect(world()).toEqual(before);
+    click('Allow this change');
+    expect(await screen.findByRole('list', { name: 'Plan impact' })).toHaveTextContent('Removes 1 building (2 rooms)');
+    expect(world()).toEqual(before);
+    fireEvent.click(await screen.findByRole('button', { name: 'Review destructive edits' }));
+    expect(screen.getByRole('alertdialog', { name: 'Confirm destructive changes' })).toHaveTextContent('Demolish Villa 03');
+    click('Confirm & apply');
+    expect(await screen.findByRole('status', { name: 'City notice' })).toHaveTextContent('AI city plan applied');
+    expect(world().plan.buildings.map((b: { id: string }) => b.id)).not.toContain('villa-seed-3');
+    expect(world().plan.buildings).toHaveLength(11);
+    // One AI interpretation; the choice and the authorization re-planned without new AI calls.
+    expect(calls).toEqual(['plan', 'validate', 'validate']);
+    click('Undo');
+    expect(world().plan.buildings.map((b: { id: string }) => b.id)).toContain('villa-seed-3');
+  });
+
+  it('keeps protection when the user declines, and explains impossible targets without changing anything', async () => {
+    installLocalPlanner();
+    render(<App />);
+    const before = world();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'Phá căn biệt thự bên trái' } });
+    click('Generate AI plan');
+    await screen.findByRole('region', { name: 'Authorization required' });
+    click('Keep protection');
+    expect(screen.getByText('Nothing was changed. Your city is unchanged.')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'Phá tất cả chung cư' } });
+    click('Generate AI plan');
+    expect((await screen.findAllByText(/There is no apartment building in this city/)).length).toBeGreaterThan(0);
+    expect(world()).toEqual(before);
   });
 });
 
