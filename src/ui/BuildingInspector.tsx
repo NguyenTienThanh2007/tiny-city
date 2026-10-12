@@ -5,11 +5,10 @@ import { Icon } from './Icon';
 
 const roleLabels = { home: 'Residential', workplace: 'Workplace', park: 'Leisure' } as const;
 
-export function BuildingInspector({ building, roadConnected, underConstruction, occupancy, citizens, populationEnabled,
+export function BuildingInspector({ building, roadConnected, occupancy, citizens, populationEnabled,
   onClose, onDetails, onMove, onBulldoze, onSelectCitizen }: {
   building: Building;
   roadConnected: boolean;
-  underConstruction: boolean;
   occupancy: BuildingOccupancy | null;
   citizens: ReadonlyMap<string, Citizen>;
   populationEnabled: boolean;
@@ -38,7 +37,7 @@ export function BuildingInspector({ building, roadConnected, underConstruction, 
       <div>
         <h2 id="building-name">{building.name}</h2>
         <p className="inspector-subtitle">{spec.label}</p>
-        <span className={`status-pill ${underConstruction ? 'is-building' : 'is-ready'}`}>{underConstruction ? 'Under construction' : 'Open'}</span>
+        <span className="status-pill is-ready">Open</span>
       </div>
     </div>
     {populationEnabled && occupancy && (spec.role === 'home' || jobs || leisure) && <div className="occupancy-card">
@@ -60,7 +59,7 @@ export function BuildingInspector({ building, roadConnected, underConstruction, 
       <div className="detail-line"><span>Build cost</span><strong>${spec.cost.toLocaleString()}</strong></div>
       <div className="detail-line"><span>Road access</span><strong>{spec.requiresRoad ? 'Required' : 'Optional'}</strong></div>
       <div className="detail-line"><span>Road connection</span><strong className={roadConnected ? 'ok' : spec.requiresRoad ? 'warn' : ''}>{roadConnected ? 'Connected' : spec.requiresRoad ? 'Disconnected' : 'Optional'}</strong></div>
-      <div className="detail-line"><span>Condition</span><strong className="condition"><i /> {underConstruction ? 'Under construction' : 'Ready'}</strong></div>
+      <div className="detail-line"><span>Condition</span><strong className="condition"><i /> Ready</strong></div>
       <div className="inspector-buttons">
         <button className="outline-action details-action" aria-label="Building details" onClick={onDetails}>Details</button>
         <button className="outline-action" onClick={onMove}><Icon name="move" size={15} /> Move</button>
