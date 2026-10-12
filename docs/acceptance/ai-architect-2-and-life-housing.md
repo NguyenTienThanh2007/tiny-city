@@ -152,6 +152,18 @@ Real browser verification:
   home, spawn, walk and reload (desktop and phone). The AI variant (AI builds the housing) is in
   `ai-architect-2.spec.ts`.
 
+### CI fix: flaky "meet a resident" step (PR #12, run 38263645579)
+
+- **Failure:** `e2e/life-mode.spec.ts` › "complete life…" failed in the Gameplay E2E job with
+  `expect("Kim 4Travelling · 3 tiles away").toContain("Kim 5")`.
+- **Root cause:** a race in the test, not in the product.
+  - The "Nearby residents" list is sorted by live distance and re-renders about every 100 ms while the clock runs.
+  - The test read the first entry's text, then called `.first().click()`, which resolved the locator again.
+  - In between, Kim 5 had moved closer than Kim 4. The click opened Kim 5's profile correctly, but the test compared
+    it with the name it had read earlier.
+- **Fix:** the test now reads the first resident's name and clicks that exact resident by name, then asserts the
+  profile shows the same resident. No product code changed.
+
 ### Overall
 
 Both systems pass their acceptance criteria.
