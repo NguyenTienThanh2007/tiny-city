@@ -1,26 +1,39 @@
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import { useEffect, useRef, useState } from 'react';
-import type { CityPlan, WorldState } from '@tiny-city/simulation';
+import type { CityPlan, Position, WorldState } from '@tiny-city/simulation';
 import type { PlanProposal } from '@tiny-city/ai-architect';
 import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
-
+import { buildingLift, drawBuildingArt, polygon, roofCapHeight } from './buildingArt';
+import { NpcLayer, type LocalBounds } from './npcLayer';
+import { buildingDepth } from './npcMotion';
 import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
 import { rejectionFeedback } from '../simulation/feedback';
 
-export type CameraRequest = { id: number; cell?: Cell };
+export { buildingLift } from './buildingArt';
+
+/** `cell` may be fractional (a resident's position). `zoom` multiplies the scale around the visible center. */
+export type CameraRequest = { id: number; cell?: Position; zoom?: number; scale?: number };
+export type SafeArea = { left: number; right: number; top: number; bottom: number };
+export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number };
 
 type Props = {
   city: CityState;
   world: WorldState;
+  /** Live snapshot reader; residents are drawn from it every frame without React renders. */
+  getWorld?: () => WorldState;
   proposal?: PlanProposal | null;
   onSimulationFrame: (elapsedMs: number) => void;
   tool: Tool;
   selectedBuildingId: string | null;
   movingBuildingId: string | null;
+  selectedCitizenId?: string | null;
+  followCitizenId?: string | null;
   onSelectBuilding: (id: string | null) => void;
+  onSelectCitizen?: (id: string | null) => void;
+  onFollowEnd?: () => void;
   onPlaceBuilding: (kind: BuildingKind, x: number, y: number) => void;
   onBeginMoveBuilding: (id: string) => void;
   onMoveBuilding: (id: string, x: number, y: number) => void;
@@ -28,28 +41,57 @@ type Props = {
   onBulldoze: (cell: Cell) => void;
   onCameraFootprintChange: (points: Point[]) => void;
   cameraRequest?: CameraRequest;
+  safeArea?: SafeArea;
   onBeginGesture?: () => void;
   onEndGesture?: () => void;
 };
 
-function polygon(graphics: Graphics, points: Point[], color: number, alpha = 1, stroke?: number) {
-  graphics.poly(points.flatMap((point) => [point.x, point.y])).fill({ color, alpha });
-  if (stroke !== undefined) graphics.poly(points.flatMap((point) => [point.x, point.y])).stroke({ color: stroke, width: 1, alpha: 0.28 });
-}
+const SEA = 0x8fc3c0;
+const NO_SAFE_AREA: SafeArea = { left: 0, right: 0, top: 0, bottom: 0 };
 
 function tileDiamond(x: number, y: number): Point[] {
   return [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)];
 }
 
+function noise(x: number, y: number): number {
+  const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function drawTerrain(layer: Container, size: number) {
   const terrain = new Graphics();
-  const colors = [0x91b88e, 0x96bd91, 0x8bb287, 0x9bc396];
+  // Island skirt: soil and cliff faces under the front edges give the map physical depth.
+  const depth = 26;
+  const edgeLeft = [iso(0, size), iso(size, size)];
+  const edgeRight = [iso(size, size), iso(size, 0)];
+  polygon(terrain, [edgeLeft[0], edgeLeft[1], { x: edgeLeft[1].x, y: edgeLeft[1].y + depth }, { x: edgeLeft[0].x, y: edgeLeft[0].y + depth }], 0x6f8f86);
+  polygon(terrain, [edgeRight[0], edgeRight[1], { x: edgeRight[1].x, y: edgeRight[1].y + depth }, { x: edgeRight[0].x, y: edgeRight[0].y + depth }], 0x5f807a);
+  const grass = [0x93ba8b, 0x97be8e, 0x8eb486, 0x9bc392, 0x90b889];
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      const colorIndex = (x * 7 + y * 13 + (x * y) % 5) % colors.length;
       const coast = x + y;
-      const color = coast >= size * 2 - 8 ? 0x79b3b0 : coast >= size * 2 - 13 ? 0xd7c88f : colors[colorIndex];
-      polygon(terrain, tileDiamond(x, y), color, 1, coast >= size * 2 - 8 ? 0x619c9b : 0x779c7c);
+      const n = noise(x, y);
+      let color = grass[Math.floor(n * grass.length)]!;
+      if (coast >= size * 2 - 8) color = coast >= size * 2 - 5 ? 0x6fb1b4 : 0x7fbdbb;
+      else if (coast >= size * 2 - 10) color = 0xe6d7a8;
+      else if (coast >= size * 2 - 13) color = n > 0.5 ? 0xd9cd96 : 0xcfd69b;
+      polygon(terrain, tileDiamond(x, y), color, 1, coast >= size * 2 - 8 ? 0x5f9fa1 : 0x7da47a, 0.18);
+    }
+  }
+  // Flat decals: flowers and grass tufts never block placement, and a few wave crests on the water.
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const n = noise(x + 31, y + 17);
+      const coast = x + y;
+      const center = iso(x + 0.5, y + 0.5);
+      if (coast >= size * 2 - 8) {
+        if (n > 0.82) terrain.moveTo(center.x - 8, center.y).quadraticCurveTo(center.x, center.y - 3, center.x + 8, center.y)
+          .stroke({ color: 0xe4f5ef, width: 1.2, alpha: 0.55 });
+      } else if (coast < size * 2 - 13) {
+        if (n > 0.93) terrain.circle(center.x - 4, center.y, 1.3).fill(0xf2d16b).circle(center.x + 3, center.y + 2, 1.2).fill(0xf4efe2);
+        else if (n < 0.05) terrain.circle(center.x, center.y, 1.4).fill(0xe58f7a);
+        else if (n > 0.6 && n < 0.64) terrain.ellipse(center.x, center.y, 7, 3).fill({ color: 0x7ea873, alpha: 0.5 });
+      }
     }
   }
   layer.addChild(terrain);
@@ -59,141 +101,38 @@ function drawRoads(layer: Container, city: CityState) {
   const roadSet = new Set(city.roads.map(({ x, y }) => cellKey(x, y)));
   const roadGraphics = new Graphics();
   for (const { x, y } of city.roads) {
-    polygon(roadGraphics, tileDiamond(x, y), 0x56636a, 1, 0x424e54);
+    // Pale curb, then asphalt inset.
+    polygon(roadGraphics, tileDiamond(x, y), 0xd9d1bd, 1);
+    const inset = [iso(x + 0.1, y + 0.1), iso(x + 0.9, y + 0.1), iso(x + 0.9, y + 0.9), iso(x + 0.1, y + 0.9)];
+    polygon(roadGraphics, inset, 0x5b676c, 1);
+    const extend = (dx: number, dy: number) => {
+      if (!roadSet.has(cellKey(x + dx, y + dy))) return;
+      const strip = dx !== 0
+        ? [iso(dx > 0 ? x + 0.9 : x, y + 0.1), iso(dx > 0 ? x + 1 : x + 0.1, y + 0.1), iso(dx > 0 ? x + 1 : x + 0.1, y + 0.9), iso(dx > 0 ? x + 0.9 : x, y + 0.9)]
+        : [iso(x + 0.1, dy > 0 ? y + 0.9 : y), iso(x + 0.9, dy > 0 ? y + 0.9 : y), iso(x + 0.9, dy > 0 ? y + 1 : y + 0.1), iso(x + 0.1, dy > 0 ? y + 1 : y + 0.1)];
+      polygon(roadGraphics, strip, 0x5b676c, 1);
+    };
+    extend(1, 0); extend(-1, 0); extend(0, 1); extend(0, -1);
     const center = iso(x + 0.5, y + 0.5);
     const hasX = roadSet.has(cellKey(x - 1, y)) || roadSet.has(cellKey(x + 1, y));
     const hasY = roadSet.has(cellKey(x, y - 1)) || roadSet.has(cellKey(x, y + 1));
-    const axes = [
-      ...(hasX ? [[{ x: center.x - 11, y: center.y - 5.5 }, { x: center.x + 11, y: center.y + 5.5 }]] : []),
-      ...(hasY ? [[{ x: center.x + 11, y: center.y - 5.5 }, { x: center.x - 11, y: center.y + 5.5 }]] : []),
-    ];
-    for (const [start, end] of axes) {
-      roadGraphics.moveTo(start.x, start.y).lineTo(end.x, end.y).stroke({ color: 0xe9dcae, width: 1.7, alpha: 0.86 });
-    }
+    if (hasX && !hasY) roadGraphics.moveTo(center.x - 8, center.y - 4).lineTo(center.x + 8, center.y + 4).stroke({ color: 0xf3e3b0, width: 1.4, alpha: 0.85 });
+    if (hasY && !hasX) roadGraphics.moveTo(center.x + 8, center.y - 4).lineTo(center.x - 8, center.y + 4).stroke({ color: 0xf3e3b0, width: 1.4, alpha: 0.85 });
+    if (hasX && hasY) roadGraphics.circle(center.x, center.y, 2).fill({ color: 0xf3e3b0, alpha: 0.5 });
   }
   layer.addChild(roadGraphics);
 }
 
-function drawVilla(graphics: Graphics, building: Building, progress: number) {
-  const spec = BUILDINGS.villa;
-  const ground = footprint(building.x, building.y, spec.width, spec.height);
-  const lift = buildingLift(building, progress);
-  const top = ground.map((point) => ({ x: point.x, y: point.y - lift }));
-  polygon(graphics, ground, 0x647768, 0.25);
-  polygon(graphics, [ground[0], ground[1], top[1], top[0]], 0xd8c49f);
-  polygon(graphics, [ground[1], ground[2], top[2], top[1]], 0xc4ac83);
-  polygon(graphics, top, progress < 0.62 ? 0xb9a587 : 0xb86e54, 1, 0x89513e);
-
-  const center = iso(building.x + 1, building.y + 1);
-  const window = graphics;
-  window.roundRect(center.x - 7, center.y - 23, 5, 7, 1).fill(0xa7d1ca);
-  window.roundRect(center.x + 3, center.y - 23, 5, 7, 1).fill(0xa7d1ca);
-  const tree = graphics;
-  tree.rect(center.x + 16, center.y - 11, 2, 8).fill(0x765a3f);
-  tree.circle(center.x + 17, center.y - 15, 6).fill(0x4f8d63);
-}
-
-function drawPark(graphics: Graphics, building: Building) {
-  const spec = BUILDINGS.park;
-  const ground = footprint(building.x, building.y, spec.width, spec.height);
-  const upper = ground.map((point) => ({ x: point.x, y: point.y - 5 }));
-  polygon(graphics, ground, 0x708c6e, 0.24);
-  polygon(graphics, [ground[0], ground[1], upper[1], upper[0]], 0x73966d);
-  polygon(graphics, [ground[1], ground[2], upper[2], upper[1]], 0x648b62);
-  polygon(graphics, upper, 0x85ad76, 1, 0x608362);
-
-  const path = graphics;
-  const a = iso(building.x + 1.6, building.y + 0.7);
-  const b = iso(building.x + 2.4, building.y + 3.3);
-  path.moveTo(a.x, a.y - 5).lineTo(b.x, b.y - 5).stroke({ color: 0xdccba2, width: 5, alpha: 0.9 });
-  for (const [dx, dy] of [[0.65, 0.75], [3.15, 0.75], [0.8, 3.1], [3.15, 3.1]] as const) {
-    const tree = iso(building.x + dx, building.y + dy);
-    path.rect(tree.x - 1.3, tree.y - 15, 2.6, 13).fill(0x725640);
-    path.circle(tree.x, tree.y - 18, 8).fill(0x3e7958);
-    path.circle(tree.x - 4, tree.y - 16, 4).fill(0x568d61);
-  }
-}
-
-function drawClubhouse(graphics: Graphics, building: Building) {
-  const spec = BUILDINGS.clubhouse;
-  const ground = footprint(building.x, building.y, spec.width, spec.height);
-  const top = ground.map((point) => ({ x: point.x, y: point.y - 40 }));
-  polygon(graphics, ground, 0x647768, 0.25);
-  polygon(graphics, [ground[0], ground[1], top[1], top[0]], 0xe4c096);
-  polygon(graphics, [ground[1], ground[2], top[2], top[1]], 0xc99463);
-  polygon(graphics, top, 0xd98e62, 1, 0x9f6445);
-  const front = iso(building.x + 1.5, building.y + 3);
-  graphics.roundRect(front.x - 5, front.y - 24, 10, 18, 2).fill(0x425861);
-  graphics.rect(front.x - 13, front.y - 34, 26, 4).fill(0xf4d08f);
-}
-
-function drawBlock(graphics: Graphics, building: Building, progress: number, options: {
-  roof: number; sideA: number; sideB: number; window: number; floors?: number; glass?: boolean;
-}) {
-  const spec = BUILDINGS[building.kind];
-  const ground = footprint(building.x, building.y, spec.width, spec.height);
-  const lift = buildingLift(building, progress);
-  const top = ground.map((point) => ({ x: point.x, y: point.y - lift }));
-  polygon(graphics, ground, 0x657669, 0.24);
-  polygon(graphics, [ground[0], ground[1], top[1], top[0]], options.sideA);
-  polygon(graphics, [ground[1], ground[2], top[2], top[1]], options.sideB);
-  polygon(graphics, top, options.roof, 1, 0x665d49);
-
-  const floors = options.floors ?? 2;
-  const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
-  const rowGap = Math.max(8, lift / (floors + 1));
-  const columns = Math.max(2, Math.min(5, Math.floor(spec.width * 1.25)));
-  const windows = graphics;
-  for (let row = 0; row < floors; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const offsetX = (column - (columns - 1) / 2) * Math.min(11, 32 / columns);
-      const offsetY = row * rowGap;
-      windows.roundRect(center.x + offsetX - 2.6, center.y - lift + 9 + offsetY, 5.2, Math.min(7, rowGap * 0.58), 1)
-        .fill(options.window);
-    }
-  }
-  if (options.glass) {
-    windows.moveTo(center.x - 17, center.y - lift + 7).lineTo(center.x + 17, center.y - lift + 7)
-      .stroke({ color: 0xe9f6ef, width: 2, alpha: 0.58 });
-  }
-}
-
-function drawPool(graphics: Graphics, building: Building) {
-  const spec = BUILDINGS.pool;
-  const ground = footprint(building.x, building.y, spec.width, spec.height);
-  const upper = ground.map((point) => ({ x: point.x, y: point.y - 5 }));
-  polygon(graphics, ground, 0x677669, 0.25);
-  polygon(graphics, [ground[0], ground[1], upper[1], upper[0]], 0xd8d3b8);
-  polygon(graphics, [ground[1], ground[2], upper[2], upper[1]], 0xbeb89e);
-  polygon(graphics, upper, 0x56aeb8, 1, 0xf4f0d9);
-  const water = graphics;
-  const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
-  water.moveTo(center.x - 24, center.y - 4).quadraticCurveTo(center.x, center.y - 10, center.x + 24, center.y - 3)
-    .stroke({ color: 0xd8f4ea, width: 2, alpha: 0.8 });
-  water.moveTo(center.x - 20, center.y + 5).quadraticCurveTo(center.x, center.y, center.x + 20, center.y + 6)
-    .stroke({ color: 0xd8f4ea, width: 1.4, alpha: 0.7 });
-}
-
-function drawBuildingArt(graphics: Graphics, building: Building, progress: number) {
-  switch (building.kind) {
-    case 'villa': drawVilla(graphics, building, progress); break;
-    case 'duplex': drawBlock(graphics, building, progress, { roof: 0xc58b5c, sideA: 0xe0c9a2, sideB: 0xc4a57d, window: 0xa7d1ca, floors: 2 }); break;
-    case 'townhouse': drawBlock(graphics, building, progress, { roof: 0xa96d54, sideA: 0xdfc6a1, sideB: 0xc6a47d, window: 0xa7d1ca, floors: 3 }); break;
-    case 'apartment': drawBlock(graphics, building, progress, { roof: 0x7c9a9a, sideA: 0xb6c7ba, sideB: 0x8fa8a3, window: 0x83b7bd, floors: 6, glass: true }); break;
-    case 'park': drawPark(graphics, building); break;
-    case 'clubhouse': drawClubhouse(graphics, building); break;
-    case 'pool': drawPool(graphics, building); break;
-    case 'mall': drawBlock(graphics, building, progress, { roof: 0xd4d8c9, sideA: 0xc0d2cc, sideB: 0x94b6b3, window: 0x78aeb1, floors: 2, glass: true }); break;
-    case 'office': drawBlock(graphics, building, progress, { roof: 0x7e9bac, sideA: 0xa9c3c7, sideB: 0x7899a4, window: 0x5d8fa0, floors: 7, glass: true }); break;
-  }
-}
-
 function drawBuilding(layer: Container, building: Building, selected: boolean, progress: number) {
   const item = new Container();
+  item.label = 'building';
   const spec = BUILDINGS[building.kind];
   const ground = footprint(building.x, building.y, spec.width, spec.height);
   const base = new Graphics();
-  polygon(base, ground, selected ? 0xe2bd63 : 0x495d4b, selected ? 0.46 : 0.17, selected ? 0xffe1a0 : undefined);
+  polygon(base, ground, selected ? 0xffd36e : 0x3c5242, selected ? 0.5 : 0.16, selected ? 0xfff1c4 : undefined, selected ? 0.95 : 0.28);
+  if (selected) {
+    base.poly(ground.flatMap((point) => [point.x, point.y])).stroke({ color: 0xffd36e, width: 2.5, alpha: 0.9 });
+  }
   item.addChild(base);
 
   const sprite = new Graphics();
@@ -203,32 +142,44 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   if (progress < 1) {
     const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
     const scaffold = new Graphics();
-    scaffold.moveTo(center.x + 14, center.y - 40).lineTo(center.x + 14, center.y - 74)
-      .lineTo(center.x + 43, center.y - 74).stroke({ color: 0xd69f51, width: 2.5, alpha: 0.9 });
-    scaffold.moveTo(center.x + 14, center.y - 70).lineTo(center.x + 35, center.y - 70)
+    const height = buildingLift(building, progress);
+    scaffold.moveTo(center.x + 14, center.y - height + 4).lineTo(center.x + 14, center.y - height - 30)
+      .lineTo(center.x + 43, center.y - height - 30).stroke({ color: 0xd69f51, width: 2.5, alpha: 0.9 });
+    scaffold.moveTo(center.x + 14, center.y - height - 26).lineTo(center.x + 35, center.y - height - 26)
       .stroke({ color: 0xffd27f, width: 2, alpha: 0.85 });
+    scaffold.moveTo(center.x + 40, center.y - height - 30).lineTo(center.x + 40, center.y - height - 18)
+      .stroke({ color: 0x4a4a4a, width: 0.8 });
     item.addChild(scaffold);
     item.alpha = 0.74 + Math.min(0.26, progress * 0.26);
   }
-
-  const labelPoint = iso(building.x + spec.width / 2, building.y + spec.height / 2);
-  const name = new Text({
-    text: building.name,
-    style: { fontFamily: 'Inter, sans-serif', fontSize: 9, fill: '#f6f2e9', stroke: { color: '#34433c', width: 3 }, align: 'center' },
-  });
-  name.anchor.set(0.5);
-  name.x = labelPoint.x;
-  name.y = labelPoint.y - (building.kind === 'office' ? 100 : building.kind === 'apartment' ? 85 :
-    building.kind === 'mall' ? 43 : building.kind === 'clubhouse' ? 48 : building.kind === 'villa' ? 36 : 18);
-  item.addChild(name);
   item.eventMode = 'none';
+  item.zIndex = buildingDepth(building.x, building.y, spec.width, spec.height);
   layer.addChild(item);
+}
+
+function clearBuildings(buildings: Container) {
+  for (const child of [...buildings.children]) {
+    if (child.label !== 'building') continue;
+    buildings.removeChild(child);
+    child.destroy({ children: true, context: true });
+  }
+}
+
+function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null) {
+  clearBuildings(buildings);
+  for (const building of getRenderBuildings(city, plan)) {
+    const age = Date.now() - building.createdAt;
+    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)));
+  }
 }
 
 function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean) {
   if (includeTerrain) {
+    terrain.cacheAsTexture(false);
     terrain.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
     drawTerrain(terrain, plan.width);
+    // ~8k static triangles become one textured quad; redrawn only when the map itself changes.
+    terrain.cacheAsTexture({ resolution: 1, antialias: true });
   }
   roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   drawRoads(roads, city);
@@ -259,16 +210,20 @@ function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null |
     if (placement.from) polygon(buildings, placement.from, 0xe7a66f, 0.4, 0xb2633f);
     polygon(buildings, placement.points, placement.operation === 'move' ? 0x64b8d1 : 0x62c797,
       0.56, placement.operation === 'move' ? 0x287d99 : 0x287a50);
+    // Dashed blueprint outline keeps AI previews visibly distinct from built geometry.
+    const pts = placement.points;
+    for (let index = 0; index < pts.length; index += 1) {
+      const a = pts[index]!, b = pts[(index + 1) % pts.length]!;
+      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      const dashes = Math.max(2, Math.floor(length / 7));
+      for (let dash = 0; dash < dashes; dash += 2) {
+        const t1 = dash / dashes, t2 = Math.min(1, (dash + 1) / dashes);
+        buildings.moveTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1).lineTo(a.x + (b.x - a.x) * t2, a.y + (b.y - a.y) * t2);
+      }
+    }
+    buildings.stroke({ color: 0xffffff, width: 1.6, alpha: 0.9 });
   }
   layer.addChild(buildings);
-}
-
-function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null) {
-  buildings.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
-  getRenderBuildings(city, plan).sort((a, b) => a.x + a.y - (b.x + b.y)).forEach((building) => {
-    const age = Date.now() - building.createdAt;
-    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)));
-  });
 }
 
 function buildingAt(city: CityState, x: number, y: number): Building | undefined {
@@ -276,32 +231,11 @@ function buildingAt(city: CityState, x: number, y: number): Building | undefined
     occupiedCells(building).some((cell) => cell.x === x && cell.y === y));
 }
 
-const blockHeights: Partial<Record<BuildingKind, number>> = {
-  duplex: 35,
-  townhouse: 40,
-  apartment: 82,
-  mall: 34,
-  office: 96,
-};
-
-function buildingLift(building: Building, progress: number): number {
-  switch (building.kind) {
-    case 'villa': return Math.min(30, 9 + progress * 21);
-    case 'duplex': return 5 + 35 * Math.max(0.08, progress);
-    case 'townhouse': return 5 + 40 * Math.max(0.08, progress);
-    case 'apartment': return 5 + 82 * Math.max(0.08, progress);
-    case 'park':
-    case 'pool': return 5;
-    case 'clubhouse': return 40;
-    default: return 5 + (blockHeights[building.kind] ?? 0) * Math.max(0.08, progress);
-  }
-}
-
 function containsPoint(point: Point, polygonPoints: Point[]): boolean {
   let inside = false;
   for (let i = 0, j = polygonPoints.length - 1; i < polygonPoints.length; j = i, i += 1) {
-    const current = polygonPoints[i];
-    const previous = polygonPoints[j];
+    const current = polygonPoints[i]!;
+    const previous = polygonPoints[j]!;
     const crosses = (current.y > point.y) !== (previous.y > point.y) &&
       point.x < ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) + current.x;
     if (crosses) inside = !inside;
@@ -310,17 +244,22 @@ function containsPoint(point: Point, polygonPoints: Point[]): boolean {
 }
 
 export function buildingAtPoint(city: CityState, point: Point): Building | undefined {
-  const byDrawOrder = [...city.buildings].sort((a, b) => a.x + a.y - b.x - b.y).reverse();
+  const byDrawOrder = [...city.buildings].sort((a, b) => {
+    const sa = BUILDINGS[a.kind], sb = BUILDINGS[b.kind];
+    return buildingDepth(a.x, a.y, sa.width, sa.height) - buildingDepth(b.x, b.y, sb.width, sb.height);
+  }).reverse();
   for (const building of byDrawOrder) {
     const spec = BUILDINGS[building.kind];
     const ground = footprint(building.x, building.y, spec.width, spec.height);
     const progress = Math.max(0, Math.min(1, (Date.now() - building.createdAt) / 5200));
     const lift = buildingLift(building, progress);
     const top = ground.map((vertex) => ({ x: vertex.x, y: vertex.y - lift }));
+    const cap = top.map((vertex) => ({ x: vertex.x, y: vertex.y - roofCapHeight(building.kind) }));
     const visibleFaces = [
-      top,
-      [ground[0], ground[1], top[1], top[0]],
-      [ground[1], ground[2], top[2], top[1]],
+      top, cap,
+      [ground[3]!, ground[2]!, top[2]!, top[3]!],
+      [ground[1]!, ground[2]!, top[2]!, top[1]!],
+      [ground[0]!, ground[1]!, top[1]!, top[0]!],
       ground,
     ];
     if (visibleFaces.some((face) => containsPoint(point, face))) return building;
@@ -339,6 +278,8 @@ export default function CityViewport(props: Props) {
   const propsRef = useRef(props);
   const refreshRef = useRef<(() => void) | null>(null);
   const cameraRef = useRef<((request: CameraRequest) => void) | null>(null);
+  const safeAreaRef = useRef<(() => void) | null>(null);
+  const nameplateRef = useRef<(() => void) | null>(null);
   const [preview, setPreview] = useState('');
   const [renderError, setRenderError] = useState(false);
 
@@ -355,6 +296,9 @@ export default function CityViewport(props: Props) {
     if (props.cameraRequest) cameraRef.current?.(props.cameraRequest);
   }, [props.cameraRequest]);
 
+  const safe = props.safeArea ?? NO_SAFE_AREA;
+  useEffect(() => { safeAreaRef.current?.(); }, [safe.left, safe.right, safe.top, safe.bottom]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -364,7 +308,7 @@ export default function CityViewport(props: Props) {
 
     void (async () => {
       await app.init({
-        backgroundColor: 0xb9d0c1,
+        backgroundColor: SEA,
         antialias: true,
         autoDensity: true,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
@@ -378,12 +322,23 @@ export default function CityViewport(props: Props) {
       const world = new Container();
       const terrain = new Container();
       const roads = new Container();
+      const groundOverlay = new Container();
+      // Buildings and residents share one depth-sorted container so walkers pass behind and in front correctly.
       const buildings = new Container();
+      buildings.sortableChildren = true;
       const proposalOverlay = new Container();
       const ghost = new Container();
       const ghostShape = new Graphics();
-      ghost.addChild(ghostShape);
-      world.addChild(terrain, roads, buildings, proposalOverlay, ghost);
+      const ghostArt = new Graphics();
+      ghostArt.alpha = 0.62;
+      ghost.addChild(ghostShape, ghostArt);
+      const labels = new Container();
+      const nameplateBg = new Graphics();
+      const nameplate = new Text({ text: '', style: { fontFamily: 'Manrope, Inter, sans-serif', fontSize: 11, fontWeight: '700', fill: '#24382c' } });
+      nameplate.anchor.set(0.5, 1);
+      labels.addChild(nameplateBg, nameplate);
+      labels.visible = false;
+      world.addChild(terrain, roads, groundOverlay, buildings, proposalOverlay, ghost, labels);
       app.stage.addChild(world);
       // Pixi v8 skips listeners on passive containers, including the default stage.
       app.stage.eventMode = 'static';
@@ -395,13 +350,26 @@ export default function CityViewport(props: Props) {
       proposalOverlayRef.current = proposalOverlay;
       redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true);
       redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan);
+      const npcs = new NpcLayer(buildings, groundOverlay);
 
-      const home = cityView(propsRef.current.city, app.screen.width, app.screen.height);
+      const safeBox = () => {
+        const area = propsRef.current.safeArea ?? NO_SAFE_AREA;
+        const width = Math.max(120, app.screen.width - area.left - area.right);
+        const height = Math.max(120, app.screen.height - area.top - area.bottom);
+        return { width, height, cx: area.left + width / 2, cy: area.top + height / 2 };
+      };
+      const home = (() => { const box = safeBox(); return cityView(propsRef.current.city, box.width, box.height); })();
       const view = { x: 0, y: -25, scale: home.scale };
       let center = home.center;
-      const updateCamera = () => {
+      let lastFootprint = 0;
+      let following = false;
+      const updateCamera = (throttle = false) => {
+        const box = safeBox();
         world.scale.set(view.scale);
-        world.position.set(app.screen.width / 2 - center.x * view.scale + view.x, app.screen.height / 2 - center.y * view.scale + view.y);
+        world.position.set(box.cx - center.x * view.scale + view.x, box.cy - center.y * view.scale + view.y);
+        const now = performance.now();
+        if (throttle && now - lastFootprint < 120) return;
+        lastFootprint = now;
         const screenCorners = [
           { x: 0, y: 0 },
           { x: app.screen.width, y: 0 },
@@ -415,16 +383,34 @@ export default function CityViewport(props: Props) {
         });
         propsRef.current.onCameraFootprintChange(footprintPoints);
       };
+      const zoomAround = (screenPoint: Point, nextScale: number) => {
+        const box = safeBox();
+        const oldScale = view.scale;
+        const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
+        const worldX = (screenPoint.x - world.x) / oldScale;
+        const worldY = (screenPoint.y - world.y) / oldScale;
+        view.scale = clamped;
+        view.x = screenPoint.x - worldX * clamped - (box.cx - center.x * clamped);
+        view.y = screenPoint.y - worldY * clamped - (box.cy - center.y * clamped);
+      };
       cameraRef.current = (request) => {
-        if (request.cell) center = iso(request.cell.x, request.cell.y);
-        else {
-          const next = cityView(propsRef.current.city, app.screen.width, app.screen.height);
+        if (request.zoom !== undefined && !request.cell) {
+          const box = safeBox();
+          zoomAround({ x: box.cx, y: box.cy }, view.scale * request.zoom);
+        } else if (request.cell) {
+          center = iso(request.cell.x, request.cell.y);
+          if (request.scale !== undefined) view.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, request.scale));
+          view.x = 0; view.y = request.scale !== undefined ? 0 : -25;
+        } else {
+          const box = safeBox();
+          const next = cityView(propsRef.current.city, box.width, box.height);
           center = next.center; view.scale = next.scale;
+          view.x = 0; view.y = -25;
         }
-        view.x = 0; view.y = -25;
         updateCamera();
         refreshRef.current?.();
       };
+      safeAreaRef.current = () => updateCamera();
       if (propsRef.current.cameraRequest) cameraRef.current(propsRef.current.cameraRequest);
       else updateCamera();
 
@@ -432,14 +418,18 @@ export default function CityViewport(props: Props) {
       let lastPointer = { x: 0, y: 0 };
       let lastCell: Cell | null = null;
       let hoverPoint: Point | null = null;
+      let hoverBuildingId: string | null = null;
+      let hoverCitizenId: string | null = null;
       let gestureTool = propsRef.current.tool;
       const endGesture = () => {
         pointerAction = null; lastCell = null;
         propsRef.current.onEndGesture?.();
       };
       const leave = () => {
-        endGesture(); hoverPoint = null;
-        ghostShape.clear(); setPreview('');
+        endGesture(); hoverPoint = null; hoverBuildingId = null; hoverCitizenId = null;
+        ghostShape.clear(); ghostArt.clear(); setPreview('');
+        host.style.cursor = '';
+        nameplateRef.current?.();
       };
       const getLocalPoint = (event: { global: Point }) => world.toLocal(event.global);
       const handleCell = (cell: Cell, localPoint?: Point) => {
@@ -457,6 +447,43 @@ export default function CityViewport(props: Props) {
           current.onBulldoze(cell);
         }
       };
+
+      const drawNameplate = () => {
+        const current = propsRef.current;
+        const live = current.getWorld?.() ?? current.world;
+        nameplateBg.clear();
+        let text = '';
+        let anchor: Point | null = null;
+        const citizenId = hoverCitizenId ?? current.selectedCitizenId ?? null;
+        if (citizenId) {
+          const citizen = live.citizens.find((entry) => entry.id === citizenId);
+          const position = npcs.getRenderedPosition(citizenId);
+          if (citizen && position) { text = citizen.name; const point = iso(position.x, position.y); anchor = { x: point.x, y: point.y - 26 }; }
+        }
+        const buildingId = !text ? hoverBuildingId ?? current.selectedBuildingId : null;
+        if (buildingId) {
+          const building = current.city.buildings.find((entry) => entry.id === buildingId);
+          if (building) {
+            const spec = BUILDINGS[building.kind];
+            const point = iso(building.x + spec.width / 2, building.y + spec.height / 2);
+            text = building.name;
+            anchor = { x: point.x, y: point.y - buildingLift(building, 1) - roofCapHeight(building.kind) - 10 };
+          }
+        }
+        if (!text || !anchor) { labels.visible = false; return; }
+        nameplate.text = text;
+        const inverse = 1 / Math.max(0.35, Math.min(1.4, view.scale));
+        labels.scale.set(1);
+        nameplate.scale.set(inverse);
+        nameplate.position.set(anchor.x, anchor.y);
+        const width = nameplate.width + 14 * inverse, height = nameplate.height + 7 * inverse;
+        nameplateBg.roundRect(anchor.x - width / 2, anchor.y - height + 1 * inverse, width, height, 7 * inverse)
+          .fill({ color: 0xfbf7ee, alpha: 0.95 }).stroke({ color: 0x24382c, width: 1 * inverse, alpha: 0.12 });
+        nameplateBg.poly([anchor.x - 4 * inverse, anchor.y + 1 * inverse, anchor.x + 4 * inverse, anchor.y + 1 * inverse, anchor.x, anchor.y + 5 * inverse])
+          .fill({ color: 0xfbf7ee, alpha: 0.95 });
+        labels.visible = true;
+      };
+      nameplateRef.current = drawNameplate;
 
       app.stage.on('pointerdown', (event) => {
         const localPoint = getLocalPoint(event);
@@ -486,7 +513,9 @@ export default function CityViewport(props: Props) {
             else current.onSelectBuilding(null);
           }
         } else if (current.tool === 'select') {
-          current.onSelectBuilding(buildingAtPoint(current.city, localPoint)?.id ?? null);
+          const citizenId = current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
+          if (citizenId) current.onSelectCitizen?.(citizenId);
+          else current.onSelectBuilding(buildingAtPoint(current.city, localPoint)?.id ?? null);
         } else {
           const kind = current.tool as BuildingKind;
           current.onPlaceBuilding(kind, cell.x, cell.y);
@@ -494,24 +523,28 @@ export default function CityViewport(props: Props) {
       });
       const refreshPreview = () => {
         ghostShape.clear();
-        if (!hoverPoint) return;
+        ghostArt.clear();
+        if (!hoverPoint) { nameplateRef.current?.(); return; }
         const localPoint = world.toLocal(hoverPoint);
         const cell = toCell(localPoint);
         const current = propsRef.current;
         if (gestureTool !== current.tool) endGesture();
         let label = '';
+        hoverBuildingId = null;
+        hoverCitizenId = null;
         if (current.tool === 'road') {
           const validation = validateRoadPlacement(current.world, cell);
           label = validation.valid ? 'Road · Ready to build · $8' : rejectionFeedback[validation.reason];
           polygon(ghostShape, tileDiamond(cell.x, cell.y), validation.valid ? 0x8ba8ac : 0xd97962,
-            0.64, validation.valid ? 0xe9f0d5 : 0xb84c43);
+            0.64, validation.valid ? 0xe9f0d5 : 0xb84c43, 0.8);
         } else if (Object.hasOwn(BUILDINGS, current.tool)) {
           const kind = current.tool as BuildingKind;
           const spec = BUILDINGS[kind];
           const validation = validateBuildingPlacement(current.world, kind, cell);
           label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xf3da98 : 0xd97962,
-            0.58, validation.valid ? 0xf9f2d5 : 0xb84c43);
+            0.58, validation.valid ? 0xf9f2d5 : 0xb84c43, 0.9);
+          if (validation.valid) drawBuildingArt(ghostArt, { id: 'ghost', kind, x: cell.x, y: cell.y, name: '', createdAt: 0 }, 1);
         } else if (current.tool === 'move' && current.movingBuildingId) {
           const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
           if (building) {
@@ -519,21 +552,28 @@ export default function CityViewport(props: Props) {
             const validation = validateBuildingMove(current.world, building.id, cell);
             label = validation.valid ? 'Ready to move · No cost' : rejectionFeedback[validation.reason];
             polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xb9e8c2 : 0xd97962,
-              0.62, validation.valid ? 0x4d9662 : 0xb84c43);
+              0.62, validation.valid ? 0x4d9662 : 0xb84c43, 0.9);
+            if (validation.valid) drawBuildingArt(ghostArt, { ...building, x: cell.x, y: cell.y, createdAt: 0 }, 1);
           }
         } else if (current.tool === 'move' || current.tool === 'bulldoze') {
           const building = buildingAtPoint(current.city, localPoint);
           if (building) {
             const spec = BUILDINGS[building.kind];
             label = `${current.tool === 'move' ? 'Move' : 'Demolish'} ${building.name}`;
+            hoverBuildingId = building.id;
             polygon(ghostShape, footprint(building.x, building.y, spec.width, spec.height),
               current.tool === 'move' ? 0xb9e8c2 : 0xd97962, 0.5);
           } else {
             label = current.tool === 'move' ? 'Choose a building to move.' : 'Choose a building or road to demolish.';
             polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.18, 0xfff4d5);
           }
+        } else if (current.tool === 'select') {
+          hoverCitizenId = current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
+          if (!hoverCitizenId) hoverBuildingId = buildingAtPoint(current.city, localPoint)?.id ?? null;
         }
+        host.style.cursor = current.tool === 'select' && (hoverCitizenId || hoverBuildingId) ? 'pointer' : '';
         setPreview(label);
+        drawNameplate();
       };
       refreshRef.current = refreshPreview;
       app.stage.on('globalpointermove', (event) => {
@@ -551,6 +591,7 @@ export default function CityViewport(props: Props) {
           view.x += event.global.x - lastPointer.x;
           view.y += event.global.y - lastPointer.y;
           lastPointer = { x: event.global.x, y: event.global.y };
+          if (following) { following = false; current.onFollowEnd?.(); }
           updateCamera();
         } else if (pointerAction === 'paint' || pointerAction === 'bulldoze') {
           const cells = lastCell ? tileStroke(lastCell, cell, current.city.size) : [cell];
@@ -571,13 +612,7 @@ export default function CityViewport(props: Props) {
         event.preventDefault();
         const bounds = app.canvas.getBoundingClientRect();
         const mouse = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
-        const oldScale = view.scale;
-        const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, oldScale * (event.deltaY < 0 ? 1.1 : 0.91)));
-        const worldX = (mouse.x - world.x) / oldScale;
-        const worldY = (mouse.y - world.y) / oldScale;
-        view.scale = nextScale;
-        view.x = mouse.x - worldX * nextScale - (app.screen.width / 2 - center.x * nextScale);
-        view.y = mouse.y - worldY * nextScale - (app.screen.height / 2 - center.y * nextScale);
+        zoomAround(mouse, view.scale * (event.deltaY < 0 ? 1.1 : 0.91));
         updateCamera();
         refreshPreview();
       };
@@ -594,7 +629,9 @@ export default function CityViewport(props: Props) {
       // Geometry, labels, and scaffolding must finish even while simulation time is paused.
       let wasConstructing = false;
       let lastConstructionDraw = 0;
+      let frames = 0, frameWindowStart = performance.now(), frameCost = 0;
       app.ticker.add(() => {
+        const frameStart = performance.now();
         const now = Date.now();
         const current = propsRef.current;
         const constructing = current.city.buildings.some((building) => now - building.createdAt < 5200);
@@ -603,10 +640,51 @@ export default function CityViewport(props: Props) {
           lastConstructionDraw = now;
         }
         wasConstructing = constructing;
+
+        // Residents: read the authoritative snapshot after this frame's simulation advance.
+        const live = current.getWorld?.() ?? current.world;
+        const inverse = 1 / view.scale;
+        const margin = 60 * inverse;
+        const bounds: LocalBounds | null = live.citizens.length > 60 ? (() => {
+          const corners = [world.toLocal({ x: 0, y: 0 }), world.toLocal({ x: app.screen.width, y: app.screen.height })];
+          const a = toGrid({ x: corners[0]!.x - margin, y: corners[0]!.y - margin });
+          const b = toGrid({ x: corners[1]!.x + margin, y: corners[1]!.y + margin });
+          const c = toGrid({ x: corners[0]!.x - margin, y: corners[1]!.y + margin });
+          const d = toGrid({ x: corners[1]!.x + margin, y: corners[0]!.y - margin });
+          return { left: Math.min(a.x, b.x, c.x, d.x), right: Math.max(a.x, b.x, c.x, d.x),
+            top: Math.min(a.y, b.y, c.y, d.y), bottom: Math.max(a.y, b.y, c.y, d.y) };
+        })() : null;
+        npcs.setSelected(current.selectedCitizenId ?? null);
+        npcs.sync(live, frameStart, view.scale, bounds);
+
+        const followId = current.followCitizenId ?? null;
+        if (followId) {
+          const citizen = live.citizens.find((entry) => entry.id === followId);
+          const rendered = npcs.getRenderedPosition(followId);
+          const target = citizen ? (citizen.movement?.status === 'inside' || !rendered ? citizen.position : rendered) : null;
+          if (target) {
+            const goal = iso(target.x, target.y);
+            if (!following) { following = true; view.x = 0; view.y = 0; }
+            center = { x: center.x + (goal.x - center.x) * 0.18, y: center.y + (goal.y - center.y) * 0.18 };
+            updateCamera(true);
+          }
+        } else following = false;
+        if (hoverCitizenId || current.selectedCitizenId) drawNameplate();
+
+        frames += 1;
+        frameCost += performance.now() - frameStart;
+        if (frameStart - frameWindowStart >= 1000) {
+          const stats: RendererStats = { fps: Math.round(frames * 1000 / (frameStart - frameWindowStart)),
+            frameMs: Math.round(frameCost / frames * 100) / 100, residents: npcs.count,
+            visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length };
+          (window as unknown as { __tinyCityRenderer?: RendererStats }).__tinyCityRenderer = stats;
+          frames = 0; frameCost = 0; frameWindowStart = frameStart;
+        }
       });
 
       cleanup = () => {
         disconnectSimulation();
+        npcs.destroy();
         app.canvas.removeEventListener('wheel', onWheel);
         app.canvas.removeEventListener('pointerleave', leave);
         app.canvas.removeEventListener('contextmenu', preventContextMenu);
@@ -627,6 +705,8 @@ export default function CityViewport(props: Props) {
       }
       refreshRef.current = null;
       cameraRef.current = null;
+      safeAreaRef.current = null;
+      nameplateRef.current = null;
       host.replaceChildren();
       terrainRef.current = null;
       roadsRef.current = null;
@@ -643,6 +723,7 @@ export default function CityViewport(props: Props) {
     if (!terrain || !roads || !buildings) return;
     redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false);
     if (proposalOverlay) redrawProposalOverlay(proposalOverlay, props.proposal, props.world.plan);
+    nameplateRef.current?.();
   }, [props.city, props.world.plan, props.selectedBuildingId, props.proposal]);
 
   return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''}`}

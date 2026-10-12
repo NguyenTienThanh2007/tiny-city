@@ -21,6 +21,9 @@ vi.mock('./game/CityViewport', () => ({
     <output data-testid="editor-city">{JSON.stringify(props.city)}</output>
     <output data-testid="simulation-world">{JSON.stringify(props.world)}</output>
     <output data-testid="architect-overlay">{props.proposal ? JSON.stringify({ status: props.proposal.status, placements: props.proposal.placements }) : 'none'}</output>
+    <button onClick={() => props.onSelectCitizen?.(props.world.citizens[0]?.id ?? null)}>Test select citizen</button>
+    <output data-testid="selected-citizen">{props.selectedCitizenId ?? 'none'}</output>
+    <output data-testid="follow-citizen">{props.followCitizenId ?? 'none'}</output>
     <button onClick={() => props.onSimulationFrame(100)}>Test frame</button>
     <button onClick={() => props.onSimulationFrame(50)}>Test half frame</button>
     <button onClick={() => props.onPlaceBuilding('villa', 19, 10)}>Test place villa</button>
@@ -415,5 +418,103 @@ describe('acceptance history and move lifecycle', () => {
     expect(editorCity().funds).toBe(initialCity.funds);
     click('Redo');
     expect(editorCity().roads).toHaveLength(initialCity.roads.length + 2);
+  });
+});
+
+describe('living world integration', () => {
+  it('welcomes residents once from an explicit action and restores them after save/reload', () => {
+    const { unmount } = render(<App />);
+    expect(world().population).toBeUndefined();
+    expect(screen.queryByRole('button', { name: 'Test select citizen' })).toBeInTheDocument();
+    click('Live');
+    click('Welcome residents');
+    const enabled = world();
+    expect(enabled.population).toMatchObject({ version: 1, maxCitizens: 1000 });
+    expect(enabled.citizens).toHaveLength(20);
+    expect(enabled.clock.paused).toBe(false);
+    expect(screen.getByRole('heading', { name: '20 residents' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('20 residents moved in');
+    expect(screen.queryByRole('button', { name: 'Welcome residents' })).not.toBeInTheDocument();
+    click('Test frame');
+    expect(world().citizens.map((citizen: { id: string }) => citizen.id)).toEqual(enabled.citizens.map((citizen: { id: string }) => citizen.id));
+    click('Pause');
+    click('Save');
+    const savedIds = world().citizens.map((citizen: { id: string }) => citizen.id);
+    unmount();
+    render(<App />);
+    expect(world().population).toBeDefined();
+    expect(world().citizens.map((citizen: { id: string }) => citizen.id)).toEqual(savedIds);
+  });
+
+  it('scales the single authoritative clock with 1x, 2x and 4x speed', () => {
+    render(<App />);
+    // The HUD refresh is throttled while running; pausing always publishes the exact authoritative clock.
+    const frameAt = (speed: string, expected: string) => {
+      click(speed);
+      click('Resume');
+      click('Test frame');
+      click('Pause');
+      expect(screen.getByLabelText('Simulation clock')).toHaveTextContent(expected);
+    };
+    frameAt('Speed 4x', 'DAY 01 · 00:04');
+    expect(screen.getByRole('button', { name: 'Speed 4x' })).toHaveAttribute('aria-pressed', 'true');
+    frameAt('Speed 2x', 'DAY 01 · 00:06');
+    frameAt('Speed 1x', 'DAY 01 · 00:07');
+    click('Test frame');
+    expect(screen.getByLabelText('Simulation clock')).toHaveTextContent('DAY 01 · 00:07');
+  });
+
+  it('opens a resident profile from authoritative data and follows on request', () => {
+    render(<App />);
+    click('Live');
+    click('Welcome residents');
+    click('Pause');
+    click('Test select citizen');
+    const citizen = world().citizens[0];
+    expect(screen.getByTestId('selected-citizen')).toHaveTextContent(citizen.id);
+    expect(screen.getByRole('heading', { name: citizen.name })).toBeInTheDocument();
+    const home = world().plan.buildings.find((building: { id: string }) => building.id === citizen.homeBuildingId);
+    expect(screen.getByRole('button', { name: home.name })).toBeInTheDocument();
+    expect(screen.getByText('Looking for work · no open jobs')).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem').some((item) => item.getAttribute('aria-current') === 'step')).toBe(true);
+    click('Follow');
+    expect(screen.getByTestId('follow-citizen')).toHaveTextContent(citizen.id);
+    click('Close resident profile');
+    expect(screen.getByTestId('selected-citizen')).toHaveTextContent('none');
+    expect(screen.getByTestId('follow-citizen')).toHaveTextContent('none');
+  });
+
+  it('reconciles residents through manual construction, demolition and undo', () => {
+    render(<App />);
+    click('Live');
+    click('Welcome residents');
+    click('Pause');
+    click('Test place villa');
+    expect(world().citizens).toHaveLength(22);
+    const newcomers = world().citizens.filter((citizen: { homeBuildingId: string }) => citizen.homeBuildingId === 'building-1');
+    expect(newcomers).toHaveLength(2);
+    click('Bulldoze selected building');
+    expect(world().citizens).toHaveLength(20);
+    const buildings = new Set(world().plan.buildings.map((building: { id: string }) => building.id));
+    for (const citizen of world().citizens) expect(buildings.has(citizen.homeBuildingId)).toBe(true);
+    click('Undo');
+    expect(world().citizens).toHaveLength(22);
+    expectSynchronized();
+  });
+
+  it('applies an approved AI plan as one batch that houses new residents', async () => {
+    installPlanningFetch();
+    render(<App />);
+    click('Live');
+    click('Welcome residents');
+    click('Pause');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe a city change' }), { target: { value: 'Build three villas' } });
+    click('Generate AI plan');
+    await screen.findByRole('button', { name: 'Approve & build' });
+    expect(world().citizens).toHaveLength(20);
+    click('Approve & build');
+    await screen.findByText('AI city plan applied. Undo is available.');
+    expect(world().citizens).toHaveLength(26);
+    expectSynchronized();
   });
 });

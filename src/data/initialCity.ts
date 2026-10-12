@@ -15,6 +15,9 @@ for (let x = 13; x <= 23; x += 1) {
   addRoad(x, 27);
 }
 
+// Driveways connect every sample home (and the park) to the street grid, so residents can walk anywhere.
+for (const [x, y] of [[13, 14], [13, 17], [13, 22], [19, 14], [19, 17], [19, 22], [11, 15], [26, 24], [28, 20]] as const) addRoad(x, y);
+
 const homes = [
   [14, 14], [20, 14], [14, 17], [20, 17], [14, 22],
   [20, 22], [14, 25], [20, 25], [9, 15], [27, 24],

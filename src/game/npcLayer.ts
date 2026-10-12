@@ -1,0 +1,304 @@
+import { Container, Graphics, GraphicsContext } from 'pixi.js';
+import type { Citizen, Position, WorldState } from '@tiny-city/simulation';
+import { iso } from './mapGeometry';
+import {
+  blendPosition, citizenAppearance, citizenDepth, laneOffset, receiveSnapshot, screenFacing,
+  type CitizenAppearance, type MotionSample,
+} from './npcMotion';
+
+/** Local sprite units: feet at (0,0), roughly 17 units tall next to a 30-unit villa. */
+const FEET_TO_CENTER = 8;
+const FADE_PER_MS = 1 / 180;
+const LANE_EASE_PER_MS = 1 / 140;
+const WALK_CYCLES_PER_TILE = 2.6;
+
+interface NpcSprite {
+  root: Container;
+  bodyGroup: Container;
+  legLeft: Graphics;
+  legRight: Graphics;
+  face: Graphics;
+  hairFront: Graphics;
+  hairBack: Graphics;
+  ring: Graphics;
+  appearance: CitizenAppearance;
+  sample: MotionSample;
+  rendered: Position;
+  lastBase: Position;
+}
+
+export interface LocalBounds { left: number; top: number; right: number; bottom: number }
+
+/** Shared geometry: hundreds of residents reuse a few dozen GPU contexts instead of rebuilding paths. */
+class ContextCache {
+  private readonly contexts = new Map<string, GraphicsContext>();
+  get(key: string, build: (context: GraphicsContext) => void): GraphicsContext {
+    let context = this.contexts.get(key);
+    if (!context) { context = new GraphicsContext(); build(context); this.contexts.set(key, context); }
+    return context;
+  }
+  destroy(): void {
+    for (const context of this.contexts.values()) context.destroy();
+    this.contexts.clear();
+  }
+}
+
+function shade(color: number, amount: number): number {
+  const channel = (shift: number) => Math.max(0, Math.min(255, Math.round(((color >> shift) & 0xff) * amount)));
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+export class NpcLayer {
+  private readonly sprites = new Map<string, NpcSprite>();
+  private readonly cache = new ContextCache();
+  private readonly routeGraphics = new Graphics();
+  private lastState: WorldState | null = null;
+  private lastFrame = 0;
+  private selectedId: string | null = null;
+  private pulse = 0;
+
+  constructor(private readonly scene: Container, groundOverlay: Container) {
+    this.routeGraphics.eventMode = 'none';
+    groundOverlay.addChild(this.routeGraphics);
+  }
+
+  get count(): number { return this.sprites.size; }
+
+  setSelected(id: string | null): void {
+    if (this.selectedId === id) return;
+    const previous = this.selectedId ? this.sprites.get(this.selectedId) : undefined;
+    if (previous) previous.ring.visible = false;
+    this.selectedId = id;
+  }
+
+  /** Last drawn world-tile position, including interpolation and lane offset. */
+  getRenderedPosition(id: string): Position | null {
+    return this.sprites.get(id)?.rendered ?? null;
+  }
+
+  private createSprite(citizen: Citizen, world: WorldState): NpcSprite {
+    const look = citizenAppearance(citizen.id);
+    const root = new Container();
+    root.label = 'npc';
+    root.eventMode = 'none';
+    const ring = new Graphics(this.cache.get('ring', (g) => {
+      g.ellipse(0, 0, 8, 4).fill({ color: 0xffd36e, alpha: 0.28 }).ellipse(0, 0, 8, 4).stroke({ color: 0xffe7a3, width: 1.6, alpha: 0.95 });
+    }));
+    ring.visible = false;
+    const shadow = new Graphics(this.cache.get('shadow', (g) => { g.ellipse(0, 0, 4.6, 2.1).fill({ color: 0x1d2b22, alpha: 0.28 }); }));
+    const leg = (key: string) => new Graphics(this.cache.get(`leg:${key}`, (g) => {
+      g.roundRect(-0.85, 0, 1.7, 5.4, 0.8).fill(look.pants).roundRect(-0.95, 4.6, 1.9, 1.1, 0.5).fill(0x2a2622);
+    }));
+    const legLeft = leg(`${look.pants}`);
+    const legRight = leg(`${look.pants}`);
+    legLeft.position.set(-1.3, -5.6);
+    legRight.position.set(1.3, -5.6);
+    const bodyGroup = new Container();
+    const body = new Graphics(this.cache.get(`body:${look.silhouette}:${look.shirt}`, (g) => {
+      const dark = shade(look.shirt, 0.78);
+      if (look.silhouette === 'dress') {
+        g.poly([-2.6, -11.6, 2.6, -11.6, 3.8, -4.2, -3.8, -4.2]).fill(look.shirt);
+        g.poly([0.6, -11.6, 2.6, -11.6, 3.8, -4.2, 1.2, -4.2]).fill({ color: dark, alpha: 0.55 });
+      } else {
+        g.roundRect(-3.1, -11.8, 6.2, 7, 2).fill(look.shirt);
+        g.roundRect(0.7, -11.8, 2.4, 7, 1.4).fill({ color: dark, alpha: 0.5 });
+        if (look.silhouette === 'jacket') g.rect(-0.35, -11.4, 0.7, 6.4).fill({ color: 0xf6f0e2, alpha: 0.85 });
+      }
+      // Arms
+      g.roundRect(-4.1, -11.1, 1.3, 5.2, 0.65).fill(dark).roundRect(2.8, -11.1, 1.3, 5.2, 0.65).fill(dark);
+    }));
+    const head = new Graphics(this.cache.get(`head:${look.skin}`, (g) => {
+      g.rect(-0.8, -13, 1.6, 1.6).fill(shade(look.skin, 0.88));
+      g.circle(0, -14.6, 2.85).fill(look.skin);
+    }));
+    const face = new Graphics(this.cache.get('face', (g) => {
+      g.circle(-1, -14.4, 0.42).fill(0x2a2420).circle(1.15, -14.4, 0.42).fill(0x2a2420);
+      g.ellipse(-1.9, -13.5, 0.6, 0.35).fill({ color: 0xe58f7a, alpha: 0.45 });
+    }));
+    const hairFront = new Graphics(this.cache.get(`hair:${look.hairStyle}:${look.hair}:front`, (g) => {
+      const hair = look.hairStyle === 'cap' ? 0xc8714f : look.hair;
+      if (look.hairStyle === 'cap') {
+        g.arc(0, -15, 3.05, Math.PI, 0).fill(hair).roundRect(-0.4, -15.6, 4.6, 1.1, 0.5).fill(shade(hair, 0.8));
+      } else {
+        g.arc(0, -14.9, 3.05, Math.PI * 1.02, Math.PI * 1.98).fill(look.hair);
+        g.poly([-3, -15.2, -1.2, -16.9, 1.6, -16.7, 3, -15.2, 0.6, -15.9]).fill(look.hair);
+        if (look.hairStyle === 'long') g.roundRect(-3.2, -15.4, 1.6, 5, 0.8).fill(look.hair).roundRect(1.6, -15.4, 1.6, 5, 0.8).fill(look.hair);
+        if (look.hairStyle === 'bun') g.circle(0, -18.2, 1.5).fill(look.hair);
+      }
+    }));
+    const hairBack = new Graphics(this.cache.get(`hair:${look.hairStyle}:${look.hair}:back`, (g) => {
+      const hair = look.hairStyle === 'cap' ? 0xc8714f : look.hair;
+      g.circle(0, -14.7, 3.0).fill(hair);
+      if (look.hairStyle === 'long') g.roundRect(-2.6, -15, 5.2, 5.4, 1.6).fill(look.hair);
+      if (look.hairStyle === 'bun') g.circle(0, -18.2, 1.5).fill(look.hair);
+    }));
+    hairBack.visible = false;
+    bodyGroup.addChild(body);
+    if (look.accessory === 'bag') {
+      bodyGroup.addChild(new Graphics(this.cache.get(`bag:${look.pants}`, (g) => {
+        g.moveTo(-2.4, -11.4).lineTo(2.6, -6.4).stroke({ color: 0x5b4636, width: 0.7 });
+        g.roundRect(1.6, -7.6, 2.8, 2.6, 0.6).fill(0x8a6f52);
+      })));
+    } else if (look.accessory === 'scarf') {
+      bodyGroup.addChild(new Graphics(this.cache.get(`scarf:${look.shirt}`, (g) => {
+        g.roundRect(-2.6, -12.4, 5.2, 1.5, 0.7).fill(look.shirt === 0xe0c27a ? 0x5fa7a8 : 0xe0c27a);
+      })));
+    }
+    bodyGroup.addChild(head, face, hairFront, hairBack);
+    root.addChild(ring, shadow, legLeft, legRight, bodyGroup);
+    this.scene.addChild(root);
+    const { sample } = receiveSnapshot(undefined, citizen, world);
+    root.alpha = sample.alpha;
+    root.visible = sample.alpha > 0.01;
+    return { root, bodyGroup, legLeft, legRight, face, hairFront, hairBack, ring, appearance: look, sample,
+      rendered: citizen.position, lastBase: citizen.position };
+  }
+
+  /**
+   * Called once per Pixi frame after the simulation advance. Reads the authoritative snapshot, never writes it.
+   * `alpha` is the fraction of the next fixed step; positions are blended between the two latest ticks.
+   */
+  sync(world: WorldState, nowMs: number, viewScale: number, bounds: LocalBounds | null): void {
+    const dt = this.lastFrame === 0 ? 16 : Math.min(100, Math.max(0, nowMs - this.lastFrame));
+    this.lastFrame = nowMs;
+    const alpha = world.clock.accumulatedMs / world.clock.fixedStepMs;
+    const spriteScale = Math.max(1, Math.min(2.3, 0.62 / Math.max(viewScale, 0.05)));
+    const stateChanged = this.lastState !== world;
+    if (stateChanged) {
+      const live = new Set<string>();
+      for (const citizen of world.citizens) {
+        live.add(citizen.id);
+        let sprite = this.sprites.get(citizen.id);
+        if (!sprite) { sprite = this.createSprite(citizen, world); this.sprites.set(citizen.id, sprite); continue; }
+        const update = receiveSnapshot(sprite.sample, citizen, world);
+        sprite.sample = update.sample;
+        if (update.snapped && update.sample.outdoors) {
+          // Discontinuities (editor relocation, re-entry, structural edits) appear in place rather than gliding.
+          sprite.sample.offset = laneOffset(update.sample.heading, sprite.appearance.lane);
+          if (sprite.sample.alpha >= 0.99) sprite.sample.alpha = 0.35;
+        }
+      }
+      for (const [id, sprite] of this.sprites) {
+        if (live.has(id)) continue;
+        sprite.root.destroy({ children: true });
+        this.sprites.delete(id);
+        if (this.selectedId === id) this.selectedId = null;
+      }
+      this.lastState = world;
+    }
+    this.pulse = (this.pulse + dt / 900) % 1;
+    for (const [id, sprite] of this.sprites) {
+      const sample = sprite.sample;
+      const target = sample.outdoors ? 1 : 0;
+      sample.alpha += Math.sign(target - sample.alpha) * Math.min(Math.abs(target - sample.alpha), dt * FADE_PER_MS);
+      if (world.clock.paused && (sample.from.x !== sample.to.x || sample.from.y !== sample.to.y)) {
+        // Settle onto the authoritative position while paused, so resuming continues from exactly there.
+        const settle = Math.min(1, dt / 120);
+        const close = Math.abs(sample.to.x - sample.from.x) + Math.abs(sample.to.y - sample.from.y) < 0.002;
+        sample.from = close ? sample.to : { x: sample.from.x + (sample.to.x - sample.from.x) * settle, y: sample.from.y + (sample.to.y - sample.from.y) * settle };
+      }
+      const base = blendPosition(sample, alpha);
+      const travelled = Math.abs(base.x - sprite.lastBase.x) + Math.abs(base.y - sprite.lastBase.y);
+      sprite.lastBase = base;
+      const laneTarget = laneOffset(sample.heading, sprite.appearance.lane);
+      const ease = Math.min(1, dt * LANE_EASE_PER_MS);
+      sample.offset = { x: sample.offset.x + (laneTarget.x - sample.offset.x) * ease, y: sample.offset.y + (laneTarget.y - sample.offset.y) * ease };
+      const position = { x: base.x + sample.offset.x, y: base.y + sample.offset.y };
+      sprite.rendered = position;
+      const visible = sample.alpha > 0.01 && (!bounds || position.x >= bounds.left && position.x <= bounds.right &&
+        position.y >= bounds.top && position.y <= bounds.bottom);
+      sprite.root.visible = visible;
+      if (!visible) continue;
+      // Walking poses follow real displacement, so pause freezes mid-stride and faster speeds stride faster.
+      const moving = sample.outdoors && sample.moving;
+      if (moving && travelled < 1) sample.walkPhase = (sample.walkPhase + travelled * WALK_CYCLES_PER_TILE * Math.PI * 2) % (Math.PI * 2);
+      const orientation = screenFacing(sample.heading, sample.facing);
+      sample.facing = orientation.facing;
+      sample.away = orientation.away && moving;
+      const screen = iso(position.x, position.y);
+      sprite.root.position.set(screen.x, screen.y);
+      sprite.root.zIndex = citizenDepth(position) + 0.0001;
+      sprite.root.alpha = sample.alpha;
+      sprite.root.scale.set(spriteScale * sample.facing, spriteScale);
+      const swing = moving ? Math.sin(sample.walkPhase) * 0.55 : 0;
+      sprite.legLeft.rotation = swing;
+      sprite.legRight.rotation = -swing;
+      sprite.bodyGroup.y = moving ? -Math.abs(Math.sin(sample.walkPhase)) * 0.55 : 0;
+      sprite.face.visible = !sample.away;
+      sprite.hairFront.visible = !sample.away;
+      sprite.hairBack.visible = sample.away;
+      const selected = id === this.selectedId;
+      sprite.ring.visible = selected;
+      if (selected) sprite.ring.scale.set(1 + Math.sin(this.pulse * Math.PI * 2) * 0.08);
+    }
+    this.drawSelection(world, viewScale);
+  }
+
+  private drawSelection(world: WorldState, viewScale: number): void {
+    const g = this.routeGraphics;
+    g.clear();
+    if (!this.selectedId) return;
+    const citizen = world.citizens.find((entry) => entry.id === this.selectedId);
+    const sprite = this.sprites.get(this.selectedId);
+    if (!citizen || !sprite) return;
+    const movement = citizen.movement;
+    const width = Math.max(2, 2.6 / Math.max(viewScale, 0.2));
+    const destinationId = movement?.destinationBuildingId ?? citizen.targetBuildingId;
+    const destination = world.plan.buildings.find((building) => building.id === destinationId);
+    const glow = 0.55 + Math.sin(this.pulse * Math.PI * 2) * 0.2;
+    if (destination && movement?.status !== 'inside') {
+      const { x, y } = destination.position;
+      const { width: w, height: h } = destination.footprint;
+      const points = [iso(x, y), iso(x + w, y), iso(x + w, y + h), iso(x, y + h)].flatMap((point) => [point.x, point.y]);
+      g.poly(points).fill({ color: 0xffd36e, alpha: 0.14 }).poly(points).stroke({ color: 0xffd36e, width, alpha: glow });
+    }
+    if (movement?.status === 'inside' && movement.currentBuildingId) {
+      const inside = world.plan.buildings.find((building) => building.id === movement.currentBuildingId);
+      if (inside) {
+        const { x, y } = inside.position;
+        const { width: w, height: h } = inside.footprint;
+        const points = [iso(x, y), iso(x + w, y), iso(x + w, y + h), iso(x, y + h)].flatMap((point) => [point.x, point.y]);
+        g.poly(points).fill({ color: 0x8fd3c1, alpha: 0.18 }).poly(points).stroke({ color: 0x8fd3c1, width, alpha: glow });
+      }
+    }
+    if (movement?.status === 'travelling' && movement.route.length > movement.nextWaypoint) {
+      const start = iso(sprite.rendered.x, sprite.rendered.y);
+      g.moveTo(start.x, start.y);
+      for (let index = movement.nextWaypoint; index < movement.route.length; index += 1) {
+        const point = iso(movement.route[index]!.x, movement.route[index]!.y);
+        g.lineTo(point.x, point.y);
+      }
+      g.stroke({ color: 0xfff1c4, width: width * 1.9, alpha: 0.35, cap: 'round', join: 'round' });
+      g.moveTo(start.x, start.y);
+      for (let index = movement.nextWaypoint; index < movement.route.length; index += 1) {
+        const point = iso(movement.route[index]!.x, movement.route[index]!.y);
+        g.lineTo(point.x, point.y);
+      }
+      g.stroke({ color: 0xffc94d, width, alpha: 0.95, cap: 'round', join: 'round' });
+    }
+  }
+
+  /** Nearest visible resident under a world-local point, preferring the one drawn in front. */
+  pick(point: Position, viewScale: number): string | null {
+    const spriteScale = Math.max(1, Math.min(2.3, 0.62 / Math.max(viewScale, 0.05)));
+    const radius = 7 * spriteScale + 4 / Math.max(viewScale, 0.05);
+    let best: { id: string; distance: number; depth: number } | null = null;
+    for (const [id, sprite] of this.sprites) {
+      if (!sprite.root.visible || sprite.sample.alpha < 0.5) continue;
+      const dx = point.x - sprite.root.position.x;
+      const dy = point.y - (sprite.root.position.y - FEET_TO_CENTER * spriteScale);
+      const distance = Math.hypot(dx, dy * 0.8);
+      if (distance > radius) continue;
+      const depth = sprite.root.zIndex;
+      if (!best || distance < best.distance - 2 || Math.abs(distance - best.distance) <= 2 && depth > best.depth) best = { id, distance, depth };
+    }
+    return best?.id ?? null;
+  }
+
+  destroy(): void {
+    for (const sprite of this.sprites.values()) sprite.root.destroy({ children: true });
+    this.sprites.clear();
+    this.routeGraphics.destroy();
+    this.cache.destroy();
+  }
+}

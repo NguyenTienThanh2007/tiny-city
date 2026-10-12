@@ -62,7 +62,8 @@ jobs:
 
   gameplay:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 26 software-rendered browser specs, including three multi-hour living-world simulations.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

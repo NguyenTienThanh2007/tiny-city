@@ -1,0 +1,80 @@
+{
+  "script": "node scripts/npc_render_benchmark.mjs http://127.0.0.1:5173/ [--software]",
+  "measuredOn": "2026-10-12 (re-measured after terrain texture caching and removal of backdrop blur), Vite dev build, headless Chromium (Playwright 1.64), viewport 1440x900, DPR 1",
+  "method": "Road-grid city sized for the target, residents welcomed through the UI, 4x until 07:15 (morning commute), then 1x and zoomed out so the whole grid is on screen. Six one-second samples of window.__tinyCityRenderer (fps = frames rendered per second; sceneUpdateMs = per-frame JS cost of the viewport ticker callback that syncs residents, culling and selection, excluding GPU rendering).",
+  "gpu": {
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2)",
+    "results": [
+      {
+        "residents": 30,
+        "visibleMax": 19,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.04,
+        "heapMB": 98
+      },
+      {
+        "residents": 100,
+        "visibleMax": 44,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.08,
+        "heapMB": 82
+      },
+      {
+        "residents": 300,
+        "visibleMax": 218,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.19,
+        "heapMB": 93
+      },
+      {
+        "residents": 1000,
+        "visibleMax": 719,
+        "fpsMedian": 58,
+        "fpsMin": 57,
+        "sceneUpdateMsMedian": 0.53,
+        "heapMB": 104
+      }
+    ]
+  },
+  "software": {
+    "renderer": "ANGLE SwiftShader (CPU rasterizer, as used by CI)",
+    "results": [
+      {
+        "residents": 30,
+        "visibleMax": 19,
+        "fpsMedian": 30,
+        "fpsMin": 15,
+        "sceneUpdateMsMedian": 0.05,
+        "heapMB": 98
+      },
+      {
+        "residents": 100,
+        "visibleMax": 21,
+        "fpsMedian": 29,
+        "fpsMin": 17,
+        "sceneUpdateMsMedian": 0.1,
+        "heapMB": 65
+      },
+      {
+        "residents": 300,
+        "visibleMax": 179,
+        "fpsMedian": 17,
+        "fpsMin": 9,
+        "sceneUpdateMsMedian": 0.24,
+        "heapMB": 150
+      },
+      {
+        "residents": 1000,
+        "visibleMax": 716,
+        "fpsMedian": 7,
+        "fpsMin": 6,
+        "sceneUpdateMsMedian": 0.96,
+        "heapMB": 202
+      }
+    ],
+    "note": "Before the fix the same run measured 10/8/7/5 fps: blurring the live canvas behind every floating panel and re-rasterizing ~8k terrain triangles each frame dominated. The terrain is now cached as one texture and panels are opaque. For reference, the pre-redesign main production build measured ~18 frames/s and 465 ms per canvas screenshot on the sample city under SwiftShader; this branch now measures ~25-30 frames/s and ~380 ms."
+  }
+}
