@@ -1,0 +1,155 @@
+{
+  "script": "node scripts/p45_benchmark.mjs <dist/index.js>",
+  "note": "Same machine, idle, second of two runs each. before = main @ efcfcf9 simulation; after = this branch.",
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "before": [
+    {
+      "count": 100,
+      "citizens": 100,
+      "walkingAtCommute": 18,
+      "tickMs": {
+        "mean": 0.096,
+        "p95": 0.172,
+        "max": 0.326
+      },
+      "farRoadEditMs": {
+        "mean": 1.233,
+        "p95": 2.579,
+        "max": 2.579
+      },
+      "strandingEdit": {
+        "ms": 0.661,
+        "relocated": 0
+      },
+      "undoMs": 1.215,
+      "serializeMs": 1.974,
+      "saveBytes": 91151,
+      "loadMs": 1.79,
+      "homeOptionsMs": 0.315
+    },
+    {
+      "count": 1000,
+      "citizens": 1000,
+      "walkingAtCommute": 910,
+      "tickMs": {
+        "mean": 0.944,
+        "p95": 1.447,
+        "max": 2.825
+      },
+      "farRoadEditMs": {
+        "mean": 14.029,
+        "p95": 55.764,
+        "max": 55.764
+      },
+      "strandingEdit": {
+        "ms": 8.213,
+        "relocated": 0
+      },
+      "undoMs": 9.107,
+      "serializeMs": 17.201,
+      "saveBytes": 905206,
+      "loadMs": 13.305,
+      "homeOptionsMs": 1.081
+    },
+    {
+      "count": 3000,
+      "citizens": 3000,
+      "walkingAtCommute": 2646,
+      "tickMs": {
+        "mean": 3.333,
+        "p95": 5.855,
+        "max": 10.587
+      },
+      "farRoadEditMs": {
+        "mean": 91.472,
+        "p95": 355.026,
+        "max": 355.026
+      },
+      "strandingEdit": {
+        "ms": 46.622,
+        "relocated": 0
+      },
+      "undoMs": 46.098,
+      "serializeMs": 50.654,
+      "saveBytes": 2715751,
+      "loadMs": 58.195,
+      "homeOptionsMs": 3.277
+    }
+  ],
+  "after": [
+    {
+      "count": 100,
+      "citizens": 100,
+      "walkingAtCommute": 18,
+      "tickMs": {
+        "mean": 0.117,
+        "p95": 0.204,
+        "max": 0.344
+      },
+      "farRoadEditMs": {
+        "mean": 1.443,
+        "p95": 3.276,
+        "max": 3.276
+      },
+      "strandingEdit": {
+        "ms": 0.866,
+        "relocated": 0
+      },
+      "undoMs": 1.331,
+      "serializeMs": 1.746,
+      "saveBytes": 91109,
+      "loadMs": 1.892,
+      "homeOptionsMs": 0.299
+    },
+    {
+      "count": 1000,
+      "citizens": 1000,
+      "walkingAtCommute": 910,
+      "tickMs": {
+        "mean": 0.907,
+        "p95": 1.303,
+        "max": 2.79
+      },
+      "farRoadEditMs": {
+        "mean": 15.185,
+        "p95": 55.088,
+        "max": 55.088
+      },
+      "strandingEdit": {
+        "ms": 22.357,
+        "relocated": 722
+      },
+      "undoMs": 10.326,
+      "serializeMs": 14.032,
+      "saveBytes": 902963,
+      "loadMs": 11.867,
+      "homeOptionsMs": 1.098
+    },
+    {
+      "count": 3000,
+      "citizens": 3000,
+      "walkingAtCommute": 2646,
+      "tickMs": {
+        "mean": 3.318,
+        "p95": 5.935,
+        "max": 18.927
+      },
+      "farRoadEditMs": {
+        "mean": 82.188,
+        "p95": 342.401,
+        "max": 342.401
+      },
+      "strandingEdit": {
+        "ms": 83.847,
+        "relocated": 2378
+      },
+      "undoMs": 53.002,
+      "serializeMs": 59.626,
+      "saveBytes": 2711255,
+      "loadMs": 57.762,
+      "homeOptionsMs": 3.052
+    }
+  ]
+}

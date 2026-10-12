@@ -41,7 +41,7 @@ describe('Life Mode housing in fully occupied cities', () => {
     const created = sim.executeLife({ type: 'player.create', name: 'Mai', appearance: look });
     expect(created.reason).toBeNull();
     expect(sim.getPlayer()).toMatchObject({ homeBuildingId: null, movement: { status: 'unplaced' }, activity: { kind: 'idle' } });
-    expect(housingSummary(sim.getState())).toEqual({ homes: 2, rooms: 4, residents: 4, freeRooms: 0, playerRoomHeld: true });
+    expect(housingSummary(sim.getState())).toEqual({ homes: 2, rooms: 4, residents: 4, occupied: 4, freeRooms: 0, playerRoomHeld: true });
     // Life has not started: no needs progress and no actions until the character moves in.
     const needs = sim.getPlayer()!.needs;
     sim.step(300);

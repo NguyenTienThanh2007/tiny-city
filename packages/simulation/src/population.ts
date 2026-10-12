@@ -1,10 +1,12 @@
 import { randomInteger } from './random.js';
-import { buildingCenter, containsPosition, NPC_LIMITS } from './navigation.js';
+import { buildingCenter, containsPosition, NPC_LIMITS, RoadNavigator } from './navigation.js';
 import type { Building, Citizen, CitizenAttributes, CitizenMovement, DailySchedule, PopulationOptions, SimulationEvent, WorldState } from './types.js';
 
 export const providesJobs = (b: Building): boolean => b.kind === 'workplace' && b.type !== 'clubhouse';
 export const providesLeisure = (b: Building): boolean => b.kind === 'park' || b.type === 'clubhouse';
 const byId = (a: Building, b: Building) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+/** How far a stranded walker looks for a road before going home (the player's relocation radius). */
+const STRANDED_RADIUS = 8;
 const names = ['Linh', 'Minh', 'An', 'Mai', 'Hoa', 'Nam', 'Alex', 'Sam', 'Kim', 'Robin'];
 export const insideMovement = (id: string, revision: number, activity: Citizen['activity'] = 'home'): CitizenMovement => ({
   status: 'inside', heading: { x: 0, y: 0 }, currentBuildingId: id, destinationBuildingId: id,
@@ -38,6 +40,9 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   const draw = (min: number, max: number) => { const r = randomInteger(randomState, min, max); randomState = r.state; return r.value; };
   const attributes = (): CitizenAttributes => ({ age: draw(18, 75), walkingSpeed: draw(4, 8) / 20, scheduleOffset: draw(-20, 20) });
   const reserve = (counts: Map<string, number>, id: string) => counts.set(id, (counts.get(id) ?? 0) + 1);
+  // Built lazily: only a city edit that strands a walking resident needs road lookups.
+  let navigator: RoadNavigator | undefined;
+  const nav = () => navigator ??= new RoadNavigator(world.plan);
   const validHomes = new Map<string, string>();
   for (const c of world.citizens.slice(0, world.population.maxCitizens)) {
     const home = buildings.get(c.homeBuildingId);
@@ -81,13 +86,31 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
       const activity = c.activity === 'travel' ? interior.id === home.id ? 'home' : interior.id === work ? 'work' : 'leisure' : c.activity;
       position = buildingCenter(interior); movement = insideMovement(interior.id, world.revision, activity);
     } else if (previous && previous.plan !== world.plan) {
-      const current = interior && containsPosition(interior, position) ? interior.id : null;
-      movement = { ...movement, currentBuildingId: current, destinationBuildingId: movement.destinationBuildingId !== null && buildings.has(movement.destinationBuildingId) ? movement.destinationBuildingId : null,
-        route: [], nextWaypoint: 0, plannedRevision: -1, status: current ? 'inside' : 'waiting', heading: { x: 0, y: 0 } };
+      const current = interior && containsPosition(interior, position) ? interior : undefined;
+      // Stopped on a building's entrance leg: the resident is inside it only if that building is theirs to be in, and
+      // then does what that building is for (never the activity of a destination it had not reached yet).
+      const inside = current === undefined ? null : current.id === home.id ? 'home' : current.id === work ? 'work' :
+        providesLeisure(current) && movement.arrivalActivity === 'leisure' && movement.destinationBuildingId === current.id ? 'leisure' : null;
+      if (current && inside) { position = buildingCenter(current); movement = insideMovement(current.id, world.revision, inside); }
+      else movement = { ...movement, currentBuildingId: current?.id ?? null, destinationBuildingId: movement.destinationBuildingId !== null && buildings.has(movement.destinationBuildingId) ? movement.destinationBuildingId : null,
+        route: [], nextWaypoint: 0, plannedRevision: -1, status: 'waiting', heading: { x: 0, y: 0 } };
+    }
+    let recovered = recoverHome;
+    if (previous && previous.plan !== world.plan && movement.status !== 'inside') {
+      // A walker left off the network (its road removed, or a building restored on top of it by undo) can never route
+      // again from there: step to the nearest road like the player does, or go home when no road is close.
+      const tile = { x: Math.floor(position.x), y: Math.floor(position.y) }, cell = nav().grid.get(tile);
+      const walkable = cell?.type === 'road' || cell?.type === 'building' && cell.buildingId === movement.currentBuildingId;
+      if (!walkable) {
+        const road = nav().nearestRoad(position, STRANDED_RADIUS);
+        if (road) { position = { x: road.x + 0.5, y: road.y + 0.5 }; movement = { ...movement, currentBuildingId: null, status: 'waiting', route: [], nextWaypoint: 0, plannedRevision: -1, heading: { x: 0, y: 0 } }; }
+        else { position = buildingCenter(home); movement = insideMovement(home.id, world.revision, c.activity === 'sleep' ? 'sleep' : 'home'); recovered = true; }
+        if (!isNew) events.push({ type: 'citizen.moved', tick, citizenId: c.id, position, heading: { x: 0, y: 0 } });
+      }
     }
     const target = c.targetBuildingId !== null && buildings.has(c.targetBuildingId) ? c.targetBuildingId : null;
     const result: Citizen = { ...c, workBuildingId: work, attributes: attrs, scheduleMode: mode, schedule, position, movement,
-      targetBuildingId: recoverHome ? home.id : target, activity: recoverHome ? movement.arrivalActivity : movement.status === 'waiting' ? 'idle' : c.activity === 'travel' && movement.status === 'inside' ? movement.arrivalActivity : c.activity };
+      targetBuildingId: recovered ? home.id : target, activity: recovered ? movement.arrivalActivity : movement.status === 'waiting' ? 'idle' : c.activity === 'travel' && movement.status === 'inside' ? movement.arrivalActivity : c.activity };
     if (!isNew && (old.homeBuildingId !== home.id || old.workBuildingId !== work)) events.push({ type: 'citizen.assignment-changed', tick, citizenId: c.id, homeBuildingId: home.id, workBuildingId: work });
     return result;
   };

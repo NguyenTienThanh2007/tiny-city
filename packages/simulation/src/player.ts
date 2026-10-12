@@ -91,7 +91,12 @@ export interface HomeOption {
   readonly buildingId: string;
   readonly name: string;
   readonly capacity: number;
+  /** Assigned NPC residents (wherever they are right now: at home, at work or out). Visitors never count. */
   readonly residents: number;
+  /** Rooms taken: assigned residents plus the player when this is their home. */
+  readonly occupied: number;
+  /** max(0, capacity − occupied). */
+  readonly freeRooms: number;
   readonly available: boolean;
   readonly roadConnected: boolean;
   readonly current: boolean;
@@ -104,8 +109,9 @@ export function playerHomeOptions(world: WorldState, navigator?: RoadNavigator):
   const current = world.player?.homeBuildingId ?? null;
   return world.plan.buildings.filter((b) => b.kind === 'home').map((b) => {
     const residents = counts.get(b.id) ?? 0;
-    return { buildingId: b.id, name: b.name, capacity: b.capacity, residents, current: b.id === current,
-      available: b.id !== current && residents < b.capacity, roadConnected: nav.getAccessPoints(b.id).length > 0 };
+    const occupied = residents + (b.id === current ? 1 : 0);
+    return { buildingId: b.id, name: b.name, capacity: b.capacity, residents, occupied, freeRooms: Math.max(0, b.capacity - occupied),
+      current: b.id === current, available: b.id !== current && occupied < b.capacity, roadConnected: nav.getAccessPoints(b.id).length > 0 };
   });
 }
 
@@ -725,6 +731,8 @@ export interface HousingSummary {
   readonly homes: number;
   readonly rooms: number;
   readonly residents: number;
+  /** Rooms taken: residents plus the housed player. */
+  readonly occupied: number;
   readonly freeRooms: number;
   readonly playerRoomHeld: boolean;
 }
@@ -735,7 +743,7 @@ export function housingSummary(world: WorldState): HousingSummary {
   const residents = world.citizens.filter((c) => ids.has(c.homeBuildingId)).length;
   const rooms = homes.reduce((sum, h) => sum + h.capacity, 0);
   const playerRoom = world.player?.homeBuildingId && ids.has(world.player.homeBuildingId) ? 1 : 0;
-  return { homes: homes.length, rooms, residents, freeRooms: Math.max(0, rooms - residents - playerRoom),
+  return { homes: homes.length, rooms, residents, occupied: residents + playerRoom, freeRooms: Math.max(0, rooms - residents - playerRoom),
     playerRoomHeld: world.player !== undefined && world.player.homeBuildingId === null && world.population !== undefined };
 }
 
