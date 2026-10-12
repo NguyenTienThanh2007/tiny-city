@@ -61,6 +61,12 @@ type Props = {
   followPlayer?: boolean;
   lifeFeedback?: LifeFeedback | null;
   homeHighlights?: readonly HomeHighlight[] | null;
+  /** AI Architect: buildings an ambiguous or blocked request refers to (candidate, chosen, to remove, to move). */
+  targetHighlights?: readonly TargetHighlight[];
+};
+export type TargetHighlight = { id: string; tone: 'candidate' | 'selected' | 'remove' | 'move' };
+const TARGET_TONES: Record<TargetHighlight['tone'], [number, number]> = {
+  candidate: [0xffd36e, 0xc8902a], selected: [0x62c797, 0x1f6f58], remove: [0xe36f73, 0xa33449], move: [0x64b8d1, 0x287d99],
 };
 
 const SEA = 0x8fc3c0;
@@ -326,9 +332,21 @@ function redrawCity(terrain: Container, roads: Container, buildings: Container, 
   redrawBuildings(buildings, city, plan, selectedId, registry, textures);
 }
 
-function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null | undefined, sourcePlan: CityPlan) {
+function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null | undefined, sourcePlan: CityPlan, targets: readonly TargetHighlight[] = []) {
   layer.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
   layer.eventMode = 'none';
+  if (targets.length) {
+    const marks = new Graphics();
+    for (const target of targets) {
+      const building = sourcePlan.buildings.find((entry) => entry.id === target.id);
+      if (!building) continue;
+      const [fill, line] = TARGET_TONES[target.tone];
+      const points = footprint(building.position.x, building.position.y, building.footprint.width, building.footprint.height);
+      polygon(marks, points, fill, target.tone === 'candidate' ? 0.35 : 0.55, line, 1);
+      marks.poly(points.flatMap((point) => [point.x, point.y])).stroke({ color: 0xffffff, width: 2, alpha: 0.9 });
+    }
+    layer.addChild(marks);
+  }
   if (!proposal || proposal.status === 'REJECTED') return;
 
   const geometry = proposalOverlayGeometry(proposal, sourcePlan);
@@ -507,7 +525,7 @@ export default function CityViewport(props: Props) {
       const textures = new BuildingTextures(app.renderer as Renderer, graveyard);
       texturesRef.current = textures;
       redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true, registry, textures);
-      redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan);
+      redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan, propsRef.current.targetHighlights);
       const npcs = new NpcLayer(buildings, groundOverlay);
       const lifeMarkers = new Container();
       world.addChildAt(lifeMarkers, world.getChildIndex(labels));
@@ -1086,9 +1104,9 @@ export default function CityViewport(props: Props) {
     redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false, registryRef.current, texturesRef.current, roadsChanged);
     if (roadsChanged) refreshGroundRef.current?.();
     afterRedrawRef.current?.(props.world.plan);
-    if (proposalOverlay) redrawProposalOverlay(proposalOverlay, props.proposal, props.world.plan);
+    if (proposalOverlay) redrawProposalOverlay(proposalOverlay, props.proposal, props.world.plan, props.targetHighlights);
     nameplateRef.current?.();
-  }, [props.city, props.world.plan, props.selectedBuildingId, props.proposal]);
+  }, [props.city, props.world.plan, props.selectedBuildingId, props.proposal, props.targetHighlights]);
 
   return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''} ${props.lifeMode ? 'is-life' : ''}`}
     aria-label="Isometric 64 by 64 city map" />

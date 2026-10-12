@@ -4,11 +4,51 @@ Branch `feature/ai-architect-2`, created from `origin/main` @ `131f1df` (Phase 4
 
 ## AI ARCHITECT 2.0 ACCEPTANCE
 
-**Status: not started — not accepted.** The AI Architect 2.0 requirements referenced by the housing addendum ("all
-previous AI Architect 2.0 requirements") were never provided in this session. No AI Architect behavior was changed on
-this branch, and none is claimed. The existing Phase 2 AI Architect still passes its regression suites: architect
-unit tests 31/31, API 61/61, and the `ai-architect` e2e spec as part of the 35/35 run. The Life Mode e2e also
-covers an AI preview and approval with a character present.
+**Status: accepted.** Details are in [`docs/ai-architect/ai-architect-2.md`](../ai-architect/ai-architect-2.md).
+
+### Root cause of the reported failure (reproduced against the live backends)
+
+- `GET http://127.0.0.1:8000/v1/city/status` returned `404 {"detail":"Not Found"}`, and so did
+  `POST http://127.0.0.1:8000/v1/city/plan`.
+- Port 8000, the planner's default and the Vite proxy target, was held by an unrelated local FastAPI app, "F01 API".
+- The client read the first 404 as an older TINY CITY API ("Planner online · readiness unknown"). It read the second
+  as a malformed error ("The planning service returned an invalid error response.").
+- The real TINY CITY API on a free port answered `/v1/city/status` with the service identity, Gemini configured and
+  the planner ready. A live plan request returned `200 VALIDATED`.
+- A latent server hang on fast-failing plan requests (the disconnect-monitor race) was found and fixed.
+
+### Criteria
+
+| Requirement | Result | Evidence |
+| --- | --- | --- |
+| Real API error contracts | Pass | `apps/api/tests/test_reliability.py` (unknown route/method, invalid JSON, unexpected error with request ID, no internals) |
+| Readiness and wrong-service diagnosis | Pass | `src/aiArchitect/connection.test.ts` (the F01 case, older API, proxy errors); e2e "a different service on the planner port…" |
+| Dev proxy and port conflicts | Pass | Port 8787 default, `npm run dev:api` (manually verified: names "F01 API" on 8000, detects a running planner on 8787), proxy tests |
+| Vietnamese and English prompts | Pass | All 8 required prompts in `packages/ai-architect/tests/architect2.test.ts`; live Gemini check (below) |
+| Building creation and multi-building plans | Pass | 10 villas + 2 apartments with connected roads; 8 villas + 2 parks clustered; exact quantities, no silent reduction |
+| Exact and ambiguous demolition | Pass | Resolver tests; "Phá apartment đi" asks between two apartments; "bên trái" resolves the leftmost; ties ask |
+| Destructive authorization and protected buildings | Pass | Authorization required with protection on or off; only the listed IDs are unlocked; request-level "giữ …" |
+| Building relocation | Pass | Moves to a lot that already touches a road, after authorization; no new roads |
+| Road operations | Pass | "connect roads", tile add/remove by coordinates, `preserveRoads` conflict, roads unchanged when preserved |
+| Population and housing invariants | Pass | Impact (displaced or re-housed residents, player home); simulation invariants via the shared reducer |
+| Preview immutability, atomic approval, stale revisions | Pass | Unit (`PlanReview`) and e2e (save before and after preview, manual edit makes the plan stale) |
+| Undo/redo and save/load | Pass | e2e: demolition undo, redo, reload |
+| UX | Pass | Plan-panel target choice, authorization, impact list, wrong-service and recovery cards, preview and confirmation (screenshots `docs/ai-architect/screenshots/01`–`06`, reviewed) |
+| Housing integration | Pass | AI-built housing keeps a room for the waiting character, who moves in, walks and reloads (unit and e2e) |
+
+### Live Gemini check (bounded, local key; credentials never printed)
+
+Model `gemini-3.5-flash-lite`, 4 requests in total. The test city had one apartment because a second test placement
+did not fit.
+
+| Prompt | Structured intent from Gemini | Planner result |
+| --- | --- | --- |
+| Xây 2 biệt thự gần công viên | 2 villas, near park | `VALIDATED`, 2 placements (before the 2.0 changes) |
+| Phá apartment đi. | `demolishTargets: [{apartment, quantity 1}]` | Authorization required (protected), exact building |
+| Remove the two apartment buildings but preserve the roads. | `quantity 2`, `preserveRoads: true` | Rejected: "the city has 1" (correct) |
+| Xây 10 biệt thự và 2 chung cư, thêm đường kết nối. | 10 villas + 2 apartments | `VALIDATED`, 12 placements |
+
+CI never calls Gemini: the specs use the `mock` and `local` provider modes.
 
 ## LIFE MODE HOUSING ACCEPTANCE
 
@@ -92,7 +132,38 @@ Screenshots (reviewed): `docs/life/screenshots/16-no-free-home.jpg`, `22-recover
   pick any free room.
 - There is no "delete character" action; a waiting character stays until it moves in.
 
+### Combined test results (2026-10-12, after AI Architect 2.0)
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` | Pass |
+| `npm test` | 127 passed |
+| `npm run test:simulation` | 270 passed |
+| `npm run test:architect` | 52 passed (21 new AI Architect 2.0 tests) |
+| `npm run security` | 0 findings |
+| `npm run build` | Pass |
+| API `uv run --locked --extra dev python -m pytest -q -W error` | 66 passed (5 new) |
+| `npm run test:e2e` (mock and local providers, no paid calls) | 39 passed (4 new in `e2e/ai-architect-2.spec.ts`) |
+
+Real browser verification:
+- **A. AI Architect building and demolition:** `e2e/ai-architect-2.spec.ts` drives build, choose, authorize,
+  preview, confirm, undo, redo and reload against the real API.
+- **B. Life Mode housing:** `e2e/life-mode.spec.ts` covers create character, full housing, build a villa, choose a
+  home, spawn, walk and reload (desktop and phone). The AI variant (AI builds the housing) is in
+  `ai-architect-2.spec.ts`.
+
+### CI fix: flaky "meet a resident" step (PR #12, run 38263645579)
+
+- **Failure:** `e2e/life-mode.spec.ts` › "complete life…" failed in the Gameplay E2E job with
+  `expect("Kim 4Travelling · 3 tiles away").toContain("Kim 5")`.
+- **Root cause:** a race in the test, not in the product.
+  - The "Nearby residents" list is sorted by live distance and re-renders about every 100 ms while the clock runs.
+  - The test read the first entry's text, then called `.first().click()`, which resolved the locator again.
+  - In between, Kim 5 had moved closer than Kim 4. The click opened Kim 5's profile correctly, but the test compared
+    it with the name it had read earlier.
+- **Fix:** the test now reads the first resident's name and clicks that exact resident by name, then asserts the
+  profile shows the same resident. No product code changed.
+
 ### Overall
 
-Not accepted overall: the Life Mode housing fix passes, but AI Architect 2.0 has not been implemented because its
-requirements were not provided.
+Both systems pass their acceptance criteria.

@@ -32,7 +32,7 @@ API (from `apps/api`; requires `npm run build:architect` at root first because t
 ```sh
 uv sync --locked --extra dev
 uv run --locked --extra dev python -m pytest -q -W error
-uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8787
 ```
 
 CI (`.github/workflows/phase-0-ci.yml`) runs: typecheck, test:architect, security, test:simulation, test, build; API pytest; Playwright e2e.
@@ -68,4 +68,7 @@ Contract docs live under `docs/` (`simulation/`, `ai-architect/`, `npc/`). Read 
 - `GEMINI_API_KEY` goes only in the gitignored `apps/api/.env` (copy `.env.example`). Never put it in a `VITE_` variable or browser storage. If there's no key, `/v1/city/plan` returns `PROVIDER_NOT_CONFIGURED`. `TINY_CITY_PROVIDER_MODE=mock` turns on a fixed fixture.
 - Playwright starts its own servers: a production build plus preview on port 4173, and the API on port 8012 in mock mode with an empty key override, so ordinary e2e runs never make paid calls. Don't change that.
 - `TINY_CITY_LIVE_UI=1 npm run test:e2e` runs only `e2e/ai-architect-live.spec.ts` against real Gemini (paid). It's forbidden when `CI` is set. `python -m tiny_city_api.live_smoke` is also paid.
-- `VITE_AI_ARCHITECT_API_URL` overrides the default API base URL `http://127.0.0.1:8000`.
+- `VITE_AI_ARCHITECT_API_URL` overrides the default API base URL `http://127.0.0.1:8787`.
+- The planner's default port is 8787 (8000 collided with another local app and made every request 404). `npm run dev:api` starts the API, refuses an occupied port and names its owner; `TINY_CITY_API_PORT` is shared with `npm run dev`. Provider modes: `gemini` (paid), `mock` (fixed fixture, used by most e2e specs), `local` (deterministic offline VI/EN rules in `packages/ai-architect/src/interpret.ts`; `e2e/ai-architect-2.spec.ts` talks to a third Playwright server on 8015 in this mode). Every `/v1` failure must use the `{requestId, error}` contract.
+
+**AI Architect 2.0**: demolitions and moves use target selectors (`demolishTargets`/`moveTargets`) resolved deterministically by `resolveTarget` (`packages/ai-architect/src/targets.ts`); never pick one of several matches. Ambiguity returns `clarifications`, protected/destructive edits return `authorization`; the UI re-plans the same intent via `/v1/city/plan/validate` (no second AI call) and still requires preview + destructive confirmation. Proposals carry `impact`. Regenerate `docs/ai-architect/examples` with `node scripts/architect_examples.mjs` after planner changes (the fixture test checks the digest).

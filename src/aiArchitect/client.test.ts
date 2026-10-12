@@ -12,7 +12,7 @@ const constraints: PlanningConstraints = {
 
 const intent: ArchitectIntent = {summary:'Add a park',language:'en',style:'compact',near:'existing',region:null,
   budgetLimit:null,connectRoads:true,builds:[{buildingType:'park',quantity:1,preferredPosition:null}],
-  moves:[],demolish:[],roadAdd:[],roadRemove:[],preserveBuildingIds:[],unsupportedRequests:[],ambiguities:[]};
+  moves:[],demolish:[],roadAdd:[],roadRemove:[],preserveBuildingIds:[],unsupportedRequests:[],ambiguities:[],demolishTargets:[],moveTargets:[],preserveRoads:false,preserveTypes:[]};
 const fixture = () => {
   const snapshot=createCityWorld(initialCity);
   return createProposal(snapshot,snapshot.revision,intent,1,constraints);

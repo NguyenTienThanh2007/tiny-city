@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     gemini_retries: int = Field(default=1, ge=0, le=2)
     gemini_max_output_tokens: int = Field(default=4096, ge=256, le=8192)
     gemini_max_context_chars: int = Field(default=32000, ge=1000, le=64000)
-    tiny_city_provider_mode: str = Field(default='gemini', pattern='^(gemini|mock)$')
+    # gemini: paid interpretation; mock: fixed demo fixture; local: deterministic offline VI/EN rules (no AI calls).
+    tiny_city_provider_mode: str = Field(default='gemini', pattern='^(gemini|mock|local)$')
     tiny_city_cors_origins: str = 'http://localhost:5173,http://127.0.0.1:5173'
     tiny_city_planner_timeout_seconds: float = Field(default=15, ge=1, le=30)
     tiny_city_max_inflight: int = Field(default=2, ge=1, le=8)

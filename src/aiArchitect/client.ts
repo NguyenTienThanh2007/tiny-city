@@ -7,6 +7,7 @@ import type {
   PlanningConstraints,
   PlanningRequest,
   PlanningResponse,
+  ValidationRequest,
 } from '@tiny-city/ai-architect';
 
 import { resolveApiBaseUrl } from './devProxy';
@@ -100,9 +101,29 @@ export function apiBaseUrl(): string {
 
 /** Backend reachability and provider readiness, from cheap GET endpoints that never call Gemini. */
 export type PlannerConnection =
-  | { readonly state: 'connected'; readonly providerMode: 'gemini' | 'mock' | 'custom'; readonly providerConfigured: boolean; readonly plannerReady: boolean }
+  | { readonly state: 'connected'; readonly providerMode: 'gemini' | 'mock' | 'local' | 'custom'; readonly providerConfigured: boolean; readonly plannerReady: boolean; readonly model: string | null }
   | { readonly state: 'reachable'; readonly reason: string }
+  /** Something else answers at the planner address (another app on the same port, or a wrong URL). */
+  | { readonly state: 'wrong-service'; readonly reason: string; readonly serviceName: string | null }
   | { readonly state: 'unavailable'; readonly reason: string };
+
+/** Identifies what answered with a 404: an older TINY CITY API, or a different service on the same port. */
+async function identifyService(fetcher: typeof fetch, signal: AbortSignal): Promise<{ tinyCity: boolean; name: string | null }> {
+  try {
+    const health = await fetcher(`${apiBaseUrl()}/health`, { method: 'GET', signal });
+    const body: unknown = await health.json().catch(() => null);
+    if (health.ok && isRecord(body) && body.service === 'tiny-city-api') return { tinyCity: true, name: 'TINY CITY API' };
+  } catch { /* fall through */ }
+  try {
+    const docs = await fetcher(`${apiBaseUrl()}/openapi.json`, { method: 'GET', signal });
+    const body: unknown = await docs.json().catch(() => null);
+    const title = isRecord(body) && isRecord(body.info) && typeof body.info.title === 'string' ? body.info.title.slice(0, 60) : null;
+    return { tinyCity: title === 'TINY CITY API', name: title };
+  } catch { return { tinyCity: false, name: null }; }
+}
+const wrongService = (name: string | null): PlannerConnection => ({ state: 'wrong-service', serviceName: name,
+  reason: `${name ? `“${name}”` : 'A different service'} is answering at the planner address instead of the TINY CITY API, so planning requests fail with HTTP 404. ` +
+    `It is probably another app using the same port. Start the planner with npm run dev:api (it picks a free port and checks for this), or set TINY_CITY_API_PROXY_TARGET.` });
 
 export async function checkPlannerConnection(fetcher: typeof fetch = fetch, timeoutMs = 4000): Promise<PlannerConnection> {
   const controller = new AbortController();
@@ -112,19 +133,22 @@ export async function checkPlannerConnection(fetcher: typeof fetch = fetch, time
     let payload: unknown = null;
     try { payload = await response.json(); } catch { /* handled below */ }
     if (response.status === 404) {
-      // Something answered, so the address is reachable; it just predates the status route (or is another service).
-      return { state: 'reachable', reason: 'The server answered but has no planner status route, so provider readiness is unknown. Restart the API from apps/api to get full diagnostics.' };
+      // A 404 is either an older TINY CITY API without the status route, or a different service on this port.
+      const identity = await identifyService(fetcher, controller.signal);
+      if (!identity.tinyCity) return wrongService(identity.name);
+      return { state: 'reachable', reason: 'This TINY CITY API predates readiness reporting. Restart it from this branch (npm run dev:api) for full diagnostics.' };
     }
     if (!response.ok) {
       const reason = isArchitectError(payload) ? payload.error.message : `The planning service answered with HTTP ${response.status}.`;
       return { state: 'unavailable', reason };
     }
-    if (!isRecord(payload) || payload.status !== 'ok' || !isRecord(payload.provider) ||
-        !['gemini', 'mock', 'custom'].includes(String(payload.provider.mode)) || typeof payload.provider.configured !== 'boolean') {
-      return { state: 'unavailable', reason: 'The service at this address is not the TINY CITY planning API.' };
+    if (!isRecord(payload) || payload.status !== 'ok' || !isRecord(payload.provider) || (payload.service !== undefined && payload.service !== 'tiny-city-api') ||
+        !['gemini', 'mock', 'local', 'custom'].includes(String(payload.provider.mode)) || typeof payload.provider.configured !== 'boolean') {
+      return wrongService(null);
     }
-    return { state: 'connected', providerMode: payload.provider.mode as 'gemini' | 'mock' | 'custom',
-      providerConfigured: payload.provider.configured, plannerReady: payload.planner === 'ready' };
+    return { state: 'connected', providerMode: payload.provider.mode as 'gemini' | 'mock' | 'local' | 'custom',
+      providerConfigured: payload.provider.configured, plannerReady: payload.planner === 'ready',
+      model: typeof payload.provider.model === 'string' ? payload.provider.model : null };
   } catch {
     return { state: 'unavailable', reason: controller.signal.aborted ? 'The planning service did not answer in time.' : 'Could not reach the planning service.' };
   } finally {
@@ -132,17 +156,35 @@ export async function checkPlannerConnection(fetcher: typeof fetch = fetch, time
   }
 }
 
-export async function requestCityPlan(
-  request: PlanningRequest,
-  signal: AbortSignal,
-  fetcher: typeof fetch = fetch,
-): Promise<PlanningResponse> {
+/**
+ * A failure that does not use the planner's error contract came from something else: a different service on the
+ * port, a proxy or gateway. Say which HTTP status it was and what to do, instead of "invalid error response".
+ */
+export function foreignHttpError(status: number): ArchitectClientError {
+  if (status === 404 || status === 405) {
+    return new ArchitectClientError('PLANNER_NOT_FOUND', `The planner address answered HTTP ${status}: this is not the TINY CITY planning API. Another app is probably using the port — start the planner with npm run dev:api or point TINY_CITY_API_PROXY_TARGET at it.`, null, false);
+  }
+  if (status === 413) return new ArchitectClientError('REQUEST_TOO_LARGE', 'The city is too large to send for planning (HTTP 413).', null, false);
+  if (status >= 500) return new ArchitectClientError('PROVIDER_UNAVAILABLE', `The planning service or a proxy failed with HTTP ${status}. Check that the planner is running, then retry.`, null, true);
+  return new ArchitectClientError('PLANNER_HTTP_ERROR', `The planning service answered HTTP ${status} without a planner error. Check the API address and version.`, null, false);
+}
+
+const EMPTY_IMPACT = { buildingsAdded: 0, buildingsRemoved: 0, buildingsMoved: 0, roomsAdded: 0, roomsRemoved: 0, residentsRemoved: 0, residentsRehoused: 0, playerHomeRemoved: false };
+
+/** Older planners omit the 2.0 fields; normalize so the UI always has clarifications, authorization and impact. */
+function normalizeProposal(proposal: PlanProposal): PlanProposal {
+  const raw = proposal as Partial<PlanProposal> & PlanProposal;
+  return { ...raw, clarifications: Array.isArray(raw.clarifications) ? raw.clarifications : [],
+    authorization: isRecord(raw.authorization) ? raw.authorization : null, impact: isRecord(raw.impact) ? raw.impact : EMPTY_IMPACT };
+}
+
+async function postPlanning(path: string, body: unknown, signal: AbortSignal, fetcher: typeof fetch): Promise<PlanningResponse> {
   let response: Response;
   try {
-    response = await fetcher(`${apiBaseUrl()}/v1/city/plan`, {
+    response = await fetcher(`${apiBaseUrl()}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
       signal,
     });
   } catch (error) {
@@ -154,6 +196,7 @@ export async function requestCityPlan(
   try {
     payload = await response.json();
   } catch {
+    if (!response.ok) throw foreignHttpError(response.status);
     throw new ArchitectClientError('PROVIDER_INVALID_RESPONSE', 'The planning service returned unreadable data.');
   }
 
@@ -161,11 +204,23 @@ export async function requestCityPlan(
     if (isArchitectError(payload)) {
       throw new ArchitectClientError(payload.error.code, payload.error.message, payload.requestId, payload.error.retryable);
     }
-    throw new ArchitectClientError('PROVIDER_INVALID_RESPONSE', 'The planning service returned an invalid error response.');
+    throw foreignHttpError(response.status);
   }
 
   if (!isRecord(payload) || typeof payload.requestId !== 'string' || !isProposal(payload.proposal)) {
     throw new ArchitectClientError('PROVIDER_INVALID_RESPONSE', 'The planning service returned an invalid proposal.');
   }
-  return payload as unknown as PlanningResponse;
+  return { requestId: payload.requestId, proposal: normalizeProposal(payload.proposal) };
+}
+
+export function requestCityPlan(request: PlanningRequest, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<PlanningResponse> {
+  return postPlanning('/v1/city/plan', request, signal, fetcher);
+}
+
+/**
+ * Re-plans an already interpreted intent (no AI call): used after the user picks targets for an ambiguous request
+ * or explicitly authorizes protected/destructive edits.
+ */
+export function requestPlanValidation(request: ValidationRequest, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<PlanningResponse> {
+  return postPlanning('/v1/city/plan/validate', request, signal, fetcher);
 }

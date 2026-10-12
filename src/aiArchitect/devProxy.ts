@@ -2,7 +2,7 @@
  * Dev-server-only same-origin proxy for the planning API.
  *
  * `npm run dev` listens on all interfaces so phones and tablets on the LAN can open the game. Calling
- * `http://127.0.0.1:8000` from those devices targets the device itself and fails CORS, which surfaced as
+ * `http://127.0.0.1:8787` from those devices targets the device itself and fails CORS, which surfaced as
  * PROVIDER_UNAVAILABLE. Routing `/api/*` through Vite keeps requests same-origin in development without
  * widening the backend's CORS allowlist. Production builds never use this proxy.
  */
@@ -10,7 +10,9 @@
 import type { ProxyOptions } from 'vite';
 
 export const DEV_API_PREFIX = '/api';
-export const DEFAULT_API_TARGET = 'http://127.0.0.1:8000';
+/** Dedicated default port: 8000 is commonly taken by other local tools, which made the planner appear broken. */
+export const DEFAULT_API_PORT = 8787;
+export const DEFAULT_API_TARGET = `http://127.0.0.1:${DEFAULT_API_PORT}`;
 
 interface HttpResponseLike {
   headersSent: boolean;
@@ -26,7 +28,7 @@ export function proxyUnavailableBody(target: string): string {
     requestId: 'dev-proxy',
     error: {
       code: 'PROVIDER_UNAVAILABLE',
-      message: `The local planning API is not reachable at ${target}. Start it from apps/api, then retry.`,
+      message: `The local planning API is not reachable at ${target}. Start it with npm run dev:api, then retry.`,
       retryable: true,
     },
   });

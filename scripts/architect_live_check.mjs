@@ -5,7 +5,7 @@ import * as ai from '../packages/ai-architect/dist/index.js';
 
 // Only the backend loads credentials. This separately invoked check uses HTTP
 // and isolated simulation worlds; it never touches a user's game or save.
-const base = new URL(process.argv[2] ?? 'http://127.0.0.1:8000');
+const base = new URL(process.argv[2] ?? 'http://127.0.0.1:8787');
 if(base.protocol!=='http:' || !['localhost','127.0.0.1','[::1]'].includes(base.hostname) || base.username || base.password || base.search || base.hash || base.pathname!=='/') {
   console.log(JSON.stringify({result:'FAIL',code:'INVALID_LOCAL_BACKEND_URL'}));process.exit(1);
 }

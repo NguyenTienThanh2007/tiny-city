@@ -2,8 +2,9 @@ import { applyCityCommandBatch, BUILDING_CATALOG, CONSTRUCTION_COSTS, deserializ
   footprintTiles, isBuildingType, OccupancyGrid, RoadGraph, tileKey, validateBuildingMove, validateBuildingPlacement } from '@tiny-city/simulation';
 import type { Building, BuildingType, CityCommand, Position, WorldState } from '@tiny-city/simulation';
 import { DEFAULT_CONSTRAINTS, LIMITS, PlanError } from './contracts.js';
-import type { ArchitectIntent, PlanProposal, PlanningConstraints, PlanWarning } from './contracts.js';
+import type { ArchitectIntent, PlanAuthorization, PlanClarification, PlanImpact, PlanProposal, PlanningConstraints, PlanWarning } from './contracts.js';
 import { cityFingerprint, digestPayload, hash } from './integrity.js';
+import { resolveTarget, targetLabel, validSelector } from './targets.js';
 
 const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -12,7 +13,12 @@ const point = (v: unknown) => record(v) && typeof v.x === 'number' && typeof v.y
 const points = (v: unknown) => Array.isArray(v) && v.length <= LIMITS.operations && v.every(point);
 
 export function decodeIntent(value: unknown): ArchitectIntent {
-  if (!record(value) || Object.keys(value).some(k => !['summary','language','style','near','region','budgetLimit','connectRoads','builds','moves','demolish','roadAdd','roadRemove','preserveBuildingIds','unsupportedRequests','ambiguities'].includes(k)) ||
+  if (!record(value) || Object.keys(value).some(k => !['summary','language','style','near','region','budgetLimit','connectRoads','builds','moves','demolish','roadAdd','roadRemove','preserveBuildingIds','unsupportedRequests','ambiguities','demolishTargets','moveTargets','preserveRoads','preserveTypes'].includes(k)) ||
+    (value.demolishTargets !== undefined && !(Array.isArray(value.demolishTargets) && value.demolishTargets.length <= 16 && value.demolishTargets.every(validSelector))) ||
+    (value.moveTargets !== undefined && !(Array.isArray(value.moveTargets) && value.moveTargets.length <= 16 && value.moveTargets.every(m => record(m) &&
+      Object.keys(m).every(k => ['target','near','position'].includes(k)) && validSelector(m.target) && ['existing','park','road','center'].includes(String(m.near)) && (m.position === null || point(m.position))))) ||
+    (value.preserveRoads !== undefined && typeof value.preserveRoads !== 'boolean') ||
+    (value.preserveTypes !== undefined && !(Array.isArray(value.preserveTypes) && value.preserveTypes.length <= 9 && value.preserveTypes.every(isBuildingType))) ||
     typeof value.summary !== 'string' || value.summary.length > 512 || !['en','vi'].includes(String(value.language)) ||
     !['compact','coastal','mixed'].includes(String(value.style)) || !['existing','park','road','center'].includes(String(value.near)) ||
     typeof value.connectRoads !== 'boolean' || !(value.budgetLimit === null || integer(value.budgetLimit)) ||
@@ -24,7 +30,8 @@ export function decodeIntent(value: unknown): ArchitectIntent {
     !Array.isArray(value.ambiguities) || !value.ambiguities.every(s => typeof s === 'string' && s.length <= 256) || value.ambiguities.length > 32) {
     throw new PlanError('INVALID_REQUEST', 'Invalid structured planning intent.');
   }
-  const intent = JSON.parse(JSON.stringify(value)) as ArchitectIntent;
+  // Older (Phase 2) intents omit the 2.0 fields; normalize so planning and digests are identical either way.
+  const intent = { demolishTargets: [], moveTargets: [], preserveRoads: false, preserveTypes: [], ...JSON.parse(JSON.stringify(value)) } as ArchitectIntent;
   if (intent.builds.reduce((sum,b) => sum + b.quantity,0) > LIMITS.buildings) throw new PlanError('CONTEXT_LIMIT', 'At most 32 buildings may be requested.');
   return intent;
 }
@@ -131,8 +138,46 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
   const warn=(code:string,message:string)=>warnings.push({code,message});
   let draft=world, commands:CityCommand[]=[], fulfilled=true, fatal=false, scans=0;
   const budget = Math.min(world.budget.balance,intent.budgetLimit ?? world.budget.balance,constraints.budgetLimit ?? world.budget.balance);
-  const preserved = new Set([...intent.preserveBuildingIds,...constraints.preserveBuildingIds]);
+  const preserved = new Set([...intent.preserveBuildingIds,...constraints.preserveBuildingIds,
+    ...world.plan.buildings.filter(b=>b.type && intent.preserveTypes.includes(b.type)).map(b=>b.id)]);
   const removedRoads = new Set(intent.roadRemove.map(tileKey));
+  const clarifications: PlanClarification[] = [];
+  let authorization: PlanAuthorization | null = null;
+  // Resolve every target selector against the real city before any edit is planned.
+  const demolishIds: string[] = [...intent.demolish];
+  intent.demolishTargets.forEach((selector, index) => {
+    const result = resolveTarget(world, selector);
+    if (result.kind === 'resolved') demolishIds.push(...result.ids);
+    else if (result.kind === 'choose') clarifications.push({ kind: 'demolish', index, quantity: result.quantity, candidates: [...result.candidates],
+      message: `${result.candidates.length} ${targetLabel(selector, true)} match. Choose ${result.quantity === 1 ? 'which one' : `which ${result.quantity}`} to demolish.` });
+    else { fatal = true; fulfilled = false; warn(result.code, result.message); }
+  });
+  const moveIds: { id: string; near: ArchitectIntent['near']; position: Position | null }[] = intent.moves.map(m => ({ id: m.buildingId, near: intent.near, position: m.position }));
+  intent.moveTargets.forEach((move, index) => {
+    const result = resolveTarget(world, move.target);
+    if (result.kind === 'resolved') moveIds.push(...result.ids.map(id => ({ id, near: move.near, position: move.position })));
+    else if (result.kind === 'choose') clarifications.push({ kind: 'move', index, quantity: result.quantity, candidates: [...result.candidates],
+      message: `${result.candidates.length} ${targetLabel(move.target, true)} match. Choose ${result.quantity === 1 ? 'which one' : `which ${result.quantity}`} to move.` });
+    else { fatal = true; fulfilled = false; warn(result.code, result.message); }
+  });
+  const uniqueDemolitions = [...new Set(demolishIds)];
+  if (clarifications.length) { fatal = true; fulfilled = false; warn('TARGET_SELECTION_REQUIRED', clarifications.map(c => c.message).join(' ')); }
+  if (intent.preserveRoads && intent.roadRemove.length) { fatal = true; fulfilled = false; warn('ROAD_PRESERVATION_CONFLICT', 'The request both removes roads and asks to keep them.'); }
+  // Authorization: exact destructive edits and edits to protected buildings must be explicitly allowed.
+  if (!fatal) {
+    const blockedDemolish = uniqueDemolitions.filter(id => !constraints.allowDestructive || !constraints.allowedDemolitions.includes(id) || preserved.has(id));
+    const blockedMoves = moveIds.map(m => m.id).filter(id => preserved.has(id));
+    const protectedIds = [...new Set([...uniqueDemolitions, ...moveIds.map(m => m.id)])].filter(id => preserved.has(id));
+    if (blockedDemolish.length || blockedMoves.length) {
+      const typeProtected = protectedIds.filter(id => !constraints.preserveBuildingIds.includes(id) && !intent.preserveBuildingIds.includes(id));
+      authorization = { demolish: blockedDemolish, move: blockedMoves, protectedIds, destructiveRequired: blockedDemolish.length > 0,
+        message: protectedIds.length
+          ? `${protectedIds.length} requested building${protectedIds.length === 1 ? ' is' : 's are'} protected${typeProtected.length ? ' by this request' : ' by “Protect existing buildings”'}. Allow changing exactly these buildings to continue.`
+          : `Demolishing ${blockedDemolish.length} building${blockedDemolish.length === 1 ? '' : 's'} needs your explicit authorization.` };
+      fatal = true; fulfilled = false;
+      warn(protectedIds.length ? 'PRESERVATION_CONFLICT' : 'DESTRUCTIVE_NOT_AUTHORIZED', authorization.message);
+    }
+  }
   if(intent.roadAdd.some(p=>removedRoads.has(tileKey(p)))) {
     fatal=true;fulfilled=false;warn('CONFLICTING_ROAD_EDIT','A road tile cannot be requested for both addition and removal.');
   }
@@ -145,13 +190,10 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
   const failed=(code:string,message:string)=>{fulfilled=false; warn(code,message); if (!constraints.allowPartial) fatal=true;};
   for(const text of intent.unsupportedRequests) failed('UNSUPPORTED_REQUEST',text);
   for(const text of intent.ambiguities) failed('AMBIGUOUS_REQUEST',text);
-  for(const id of intent.demolish) {
-    if (!constraints.allowDestructive || !constraints.allowedDemolitions.includes(id) || preserved.has(id)) {
-      fatal=true; fulfilled=false; warn('DESTRUCTIVE_NOT_AUTHORIZED',`Demolition of ${id} is not authorized.`); break;
-    }
+  if (!fatal) for(const id of uniqueDemolitions) {
     if (!commit([{type:'city.demolish',buildingId:id}])) failed('DEMOLITION_REJECTED',`Cannot demolish ${id}.`);
   }
-  if (intent.roadRemove.length) {
+  if (!fatal && intent.roadRemove.length) {
     const allowed = new Set(constraints.allowedRoadRemovals.map(tileKey));
     if (!constraints.allowDestructive || intent.roadRemove.some(p=>!allowed.has(tileKey(p)))) {
       fatal=true; fulfilled=false; warn('DESTRUCTIVE_NOT_AUTHORIZED','Road removal requires explicit tile authorization.');
@@ -159,12 +201,27 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
   }
   if (!fatal && intent.roadAdd.length && !commit([{type:'city.edit-roads',add:intent.roadAdd,remove:[]}])) failed('ROAD_EDIT_REJECTED','Requested road additions conflict with the map, budget or operation limit.');
 
-  const place = (type:BuildingType, preferred:Position|null, moveId?:string):boolean=>{
-    if (moveId && preserved.has(moveId)) {fatal=true;warn('PRESERVATION_CONFLICT',`Building ${moveId} must be preserved.`);return false;}
+  const placedThisPlan: Position[] = [];
+  const place = (type:BuildingType, preferred:Position|null, moveId?:string, near?:ArchitectIntent['near']):boolean=>{
     const definition=BUILDING_CATALOG[type];
     if(definition.footprint.width>draft.plan.width || definition.footprint.height>draft.plan.height) return false;
     if (!moveId && world.budget.balance-draft.budget.balance+definition.cost > budget) return false;
-    for(const position of candidates(draft,intent,preferred,seed)) {
+    // Keep a multi-building request together: later buildings anchor on the ones already placed.
+    const anchorIntent = near ? { ...intent, near } : intent;
+    const clusterAnchor = !preferred && !moveId && placedThisPlan.length && intent.near !== 'center'
+      ? { x: Math.round(placedThisPlan.reduce((n,p)=>n+p.x,0)/placedThisPlan.length), y: Math.round(placedThisPlan.reduce((n,p)=>n+p.y,0)/placedThisPlan.length) } : null;
+    // Road-aware choice: among the nearest legal lots, prefer one that needs no new road, then the fewest road tiles.
+    const pending: { position: Position; batch: CityCommand[]; roads: number }[] = [];
+    let looked = 0;
+    const accept = (position: Position, batch: CityCommand[]) => {
+      if(!commit(batch)) return false;
+      if(!moveId) placedThisPlan.push(position);
+      if(preferred && (position.x!==preferred.x || position.y!==preferred.y)) warn('RELOCATED','A requested footprint was relocated to the nearest searched legal lot.');
+      if(batch.length>1 && !world.plan.roads.length && commands.filter(c=>c.type==='city.edit-roads').length===1) warn('NEW_ROAD_NETWORK','No existing roads were available; the district starts a new connected network.');
+      return true;
+    };
+    for(const position of candidates(draft,anchorIntent,preferred ?? clusterAnchor,seed)) {
+      if (pending.length && ++looked > 48) break;
       if (++scans > LIMITS.candidates) {warn('SEARCH_LIMIT','The bounded placement search was exhausted.');return false;}
       if (intent.region && (position.x<intent.region.x || position.y<intent.region.y || position.x+definition.footprint.width>intent.region.x+intent.region.width || position.y+definition.footprint.height>intent.region.y+intent.region.height)) continue;
       const validation=moveId ? validateBuildingMove(draft,moveId,position) : validateBuildingPlacement(draft,type,position);
@@ -173,21 +230,26 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
       const needsLink=definition.requiresRoad || intent.connectRoads;
       const roads=needsLink ? roadLink(draft,candidate,seed,removedRoads) : [];
       if (roads === null) continue;
+      // "Next to a road" means a lot that already touches one.
+      if(near === 'road' && roads.length) continue;
       const roadCost=roads.length*CONSTRUCTION_COSTS.road;
       if(world.budget.balance-draft.budget.balance+roadCost+(moveId?0:definition.cost)>budget) continue;
       const batch:CityCommand[]=[];
       if(roads.length) batch.push({type:'city.edit-roads',add:roads,remove:[]});
       batch.push(moveId ? {type:'city.move-building',buildingId:moveId,position} : {type:'city.build',buildingType:type,position});
-      if(!commit(batch)) continue;
-      if(preferred && (position.x!==preferred.x || position.y!==preferred.y)) warn('RELOCATED','A requested footprint was relocated to the nearest searched legal lot.');
-      if(roads.length && !world.plan.roads.length && commands.filter(c=>c.type==='city.edit-roads').length===1) warn('NEW_ROAD_NETWORK','No existing roads were available; the district starts a new connected network.');
-      return true;
+      if((preferred && position.x===preferred.x && position.y===preferred.y) || roads.length===0) {
+        if(accept(position,batch)) return true;
+        continue;
+      }
+      pending.push({ position, batch, roads: roads.length });
     }
+    // Stable sort keeps distance order among lots needing the same number of new road tiles.
+    for(const option of pending.sort((a,b)=>a.roads-b.roads)) if(accept(option.position, option.batch)) return true;
     return false;
   };
-  if (!fatal) for(const move of intent.moves) {
-    const building=draft.plan.buildings.find(b=>b.id===move.buildingId);
-    if (!building?.type || !place(building.type,move.position,move.buildingId)) failed('MOVE_UNFULFILLED',`Could not move ${move.buildingId}.`);
+  if (!fatal) for(const move of moveIds) {
+    const building=draft.plan.buildings.find(b=>b.id===move.id);
+    if (!building?.type || !place(building.type,move.position,move.id,move.near)) failed('MOVE_UNFULFILLED',`Could not find a legal lot to move ${building?.name ?? move.id}${move.near === 'road' ? ' beside an existing road' : ''}.`);
     if(fatal) break;
   }
   const buildRequests=intent.near==='park' ? [...intent.builds].sort((a,b)=>Number(b.buildingType==='park')-Number(a.buildingType==='park')) : intent.builds;
@@ -220,7 +282,7 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
       beforeGraph.getAdjacentComponents(b).length>0 && afterGraph.getAdjacentComponents(draft.plan.buildings.find(next=>next.id===b.id)!).length===0);
     if(isolated.length) warn('ROAD_ACCESS_LOST',`Road removals disconnect ${isolated.length} existing building(s).`);
   }
-  if(!commands.length) {fatal=true;fulfilled=false;warn('EMPTY_PLAN','No executable city edits were produced.');}
+  if(!commands.length && !fatal) {fatal=true;fulfilled=false;warn('EMPTY_PLAN','No executable city edits were produced.');}
   if(fatal) {commands=[];draft=world;}
   const full=applyCityCommandBatch(world,commands);
   if(commands.length && !full.applied) throw new PlanError('PLAN_REJECTED','Final atomic validation failed.');
@@ -233,12 +295,40 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
     }
   }
   const edits=commands.filter(c=>c.type==='city.edit-roads');
+  // Describe what the plan actually does (not a fixed template), so a demolition never reads like a new district.
+  const explain=()=>{
+    if(fatal) return clarifications.length ? 'Several buildings match; choose which ones before a plan can be prepared.'
+      : authorization ? authorization.message : 'The request could not be planned safely; see the warnings.';
+    const parts:string[]=[];
+    const built=commands.filter(c=>c.type==='city.build').length, removed=commands.filter(c=>c.type==='city.demolish').length, moved=commands.filter(c=>c.type==='city.move-building').length;
+    if(built) parts.push(`${built} new building${built===1?'':'s'} on legal ${intent.style} lots, preferring lots that already touch a road`);
+    if(moved) parts.push(`${moved} building${moved===1?'':'s'} moved to the nearest legal lot`);
+    if(removed) parts.push(`exactly ${removed} resolved building${removed===1?'':'s'} removed`);
+    const roadTiles=edits.reduce((n,c)=>n+c.add.length,0);
+    if(roadTiles) parts.push(`${roadTiles} road tile${roadTiles===1?'':'s'} added to keep everything connected`);
+    const text=parts.join('; ') || 'no change';
+    return `${text[0]!.toUpperCase()}${text.slice(1)}. Every step is validated by the city simulation.`;
+  };
+  const after=full.state, beforeIds=new Set(world.plan.buildings.map(b=>b.id)), afterIds=new Set(after.plan.buildings.map(b=>b.id));
+  const rooms=(plan:typeof world.plan)=>plan.buildings.filter(b=>b.kind==='home').reduce((n,b)=>n+b.capacity,0);
+  const removedHomes=world.plan.buildings.filter(b=>!afterIds.has(b.id)&&b.kind==='home').reduce((n,b)=>n+b.capacity,0);
+  const afterCitizens=new Map(after.citizens.map(c=>[c.id,c]));
+  const impact:PlanImpact={
+    buildingsAdded:after.plan.buildings.filter(b=>!beforeIds.has(b.id)).length,
+    buildingsRemoved:world.plan.buildings.filter(b=>!afterIds.has(b.id)).length,
+    buildingsMoved:placements.filter(p=>p.operation==='move').length,
+    roomsAdded:Math.max(0,rooms(after.plan)-rooms(world.plan)+removedHomes), roomsRemoved:removedHomes,
+    residentsRemoved:world.citizens.filter(c=>!afterCitizens.has(c.id)).length,
+    residentsRehoused:world.citizens.filter(c=>afterCitizens.has(c.id)&&afterCitizens.get(c.id)!.homeBuildingId!==c.homeBuildingId).length,
+    playerHomeRemoved:!!world.player?.homeBuildingId && !afterIds.has(world.player.homeBuildingId),
+  };
   const proposal:PlanProposal={contractVersion:1,planId:'',digest:'',sourceWorldId:world.id,sourceRevision:world.revision,
     sourceFingerprint:await cityFingerprint(world),seed,status:fatal?'REJECTED':'VALIDATED',intent,constraints,
-    summary:intent.summary,explanation:`Deterministic ${intent.style} district; legal lots and shortest free road links are validated by the Phase 1 simulation.`,
+    summary:intent.summary,explanation:explain(),
     placements,roads:{add:edits.flatMap(c=>c.add),remove:edits.flatMap(c=>c.remove)},
     projectedPlan:full.state.plan,estimatedCost:world.budget.balance-draft.budget.balance,projectedBudget:draft.budget.balance,
-    validation:{valid:!fatal,fulfilled,operationCount:operationCount(commands)},warnings,commands};
+    validation:{valid:!fatal,fulfilled,operationCount:operationCount(commands)},warnings,commands,
+    clarifications,authorization,impact};
   proposal.digest=await hash(digestPayload(proposal));proposal.planId=`plan-${proposal.digest}`;
   return proposal;
 }

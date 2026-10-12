@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { checkPlannerConnection, apiBaseUrl } from './client';
+import { checkPlannerConnection, apiBaseUrl, foreignHttpError, requestCityPlan } from './client';
 import { createDevApiProxy, DEFAULT_API_TARGET, proxyUnavailableBody, resolveApiBaseUrl } from './devProxy';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -42,7 +42,7 @@ describe('planner base URL and dev proxy', () => {
 describe('planner connection status', () => {
   it('reports provider readiness from the status endpoint', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ status: 'ok', provider: { mode: 'gemini', configured: false }, planner: 'ready' }));
-    await expect(checkPlannerConnection(fetcher)).resolves.toEqual({ state: 'connected', providerMode: 'gemini', providerConfigured: false, plannerReady: true });
+    await expect(checkPlannerConnection(fetcher)).resolves.toEqual({ state: 'connected', providerMode: 'gemini', providerConfigured: false, plannerReady: true, model: null });
     expect(String(fetcher.mock.calls[0]![0])).toBe('/api/v1/city/status');
     expect(fetcher.mock.calls[0]![1]).toMatchObject({ method: 'GET' });
   });
@@ -50,15 +50,37 @@ describe('planner connection status', () => {
   it('distinguishes network failure, proxy errors and foreign services', async () => {
     await expect(checkPlannerConnection(vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch'))))
       .resolves.toEqual({ state: 'unavailable', reason: 'Could not reach the planning service.' });
-    const proxied = await checkPlannerConnection(vi.fn<typeof fetch>().mockResolvedValue(json(JSON.parse(proxyUnavailableBody('http://127.0.0.1:8000')), 503)));
-    expect(proxied).toMatchObject({ state: 'unavailable', reason: expect.stringContaining('not reachable at http://127.0.0.1:8000') });
+    const proxied = await checkPlannerConnection(vi.fn<typeof fetch>().mockResolvedValue(json(JSON.parse(proxyUnavailableBody('http://127.0.0.1:8787')), 503)));
+    expect(proxied).toMatchObject({ state: 'unavailable', reason: expect.stringContaining('not reachable at http://127.0.0.1:8787') });
     await expect(checkPlannerConnection(vi.fn<typeof fetch>().mockResolvedValue(json({ hello: 'world' }))))
-      .resolves.toMatchObject({ state: 'unavailable', reason: expect.stringContaining('not the TINY CITY planning API') });
+      .resolves.toMatchObject({ state: 'wrong-service', reason: expect.stringContaining('instead of the TINY CITY API') });
     await expect(checkPlannerConnection(vi.fn<typeof fetch>().mockResolvedValue(new Response('<html>', { status: 502 }))))
       .resolves.toMatchObject({ state: 'unavailable', reason: expect.stringContaining('HTTP 502') });
-    // An older API without the status route still answered: reachable, readiness unknown.
-    await expect(checkPlannerConnection(vi.fn<typeof fetch>().mockResolvedValue(json({ detail: 'Not Found' }, 404))))
-      .resolves.toMatchObject({ state: 'reachable', reason: expect.stringContaining('readiness is unknown') });
+    // An older TINY CITY API without the status route identifies itself through /health.
+    const older = vi.fn<typeof fetch>((url) => Promise.resolve(String(url).endsWith('/health')
+      ? json({ status: 'ok', service: 'tiny-city-api', phase: 0 }) : json({ detail: 'Not Found' }, 404)));
+    await expect(checkPlannerConnection(older)).resolves.toMatchObject({ state: 'reachable', reason: expect.stringContaining('predates readiness') });
+  });
+
+  it('names a different app answering on the planner port (the reported F01 API case)', async () => {
+    // Reproduces the real conflict: another FastAPI app on port 8000 answered 404 {"detail":"Not Found"} for every TINY CITY route.
+    const foreign = vi.fn<typeof fetch>((url) => Promise.resolve(String(url).endsWith('/openapi.json')
+      ? json({ openapi: '3.1.0', info: { title: 'F01 API', version: '0.1.0' }, paths: {} }) : json({ detail: 'Not Found' }, 404)));
+    const result = await checkPlannerConnection(foreign);
+    expect(result).toMatchObject({ state: 'wrong-service', serviceName: 'F01 API' });
+    expect(result.state === 'wrong-service' && result.reason).toContain('npm run dev:api');
+  });
+
+  it('turns non-contract HTTP failures into actionable planner errors instead of "invalid error response"', async () => {
+    const request = { contractVersion: 1 as const, prompt: 'Xây 2 biệt thự', world: {} as never, sourceRevision: 0 };
+    const signal = new AbortController().signal;
+    await expect(requestCityPlan(request, signal, vi.fn<typeof fetch>().mockResolvedValue(json({ detail: 'Not Found' }, 404))))
+      .rejects.toMatchObject({ code: 'PLANNER_NOT_FOUND', message: expect.stringContaining('HTTP 404') });
+    await expect(requestCityPlan(request, signal, vi.fn<typeof fetch>().mockResolvedValue(new Response('<html>Bad gateway</html>', { status: 502 }))))
+      .rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE', retryable: true, message: expect.stringContaining('HTTP 502') });
+    await expect(requestCityPlan(request, signal, vi.fn<typeof fetch>().mockResolvedValue(json({ requestId: 'r1', error: { code: 'PROVIDER_AUTH', message: 'Gemini authentication failed.', retryable: false } }, 502))))
+      .rejects.toMatchObject({ code: 'PROVIDER_AUTH', requestId: 'r1' });
+    expect(foreignHttpError(418)).toMatchObject({ code: 'PLANNER_HTTP_ERROR' });
   });
 
   it('times out instead of hanging', async () => {

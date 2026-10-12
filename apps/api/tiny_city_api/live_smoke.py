@@ -9,7 +9,7 @@ from .config import Settings
 
 CHECK = Path(__file__).resolve().parents[3] / 'scripts/architect_live_check.mjs'
 
-async def main(base_url='http://127.0.0.1:8000'):
+async def main(base_url='http://127.0.0.1:8787'):
     settings = Settings()
     if not settings.gemini_api_key.get_secret_value().strip():
         print('NOT VERIFIED: GEMINI_API_KEY is missing. No live request was made.')
@@ -55,5 +55,5 @@ async def main(base_url='http://127.0.0.1:8000'):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base-url', default='http://127.0.0.1:8000')
+    parser.add_argument('--base-url', default='http://127.0.0.1:8787')
     raise SystemExit(asyncio.run(main(parser.parse_args().base_url)))

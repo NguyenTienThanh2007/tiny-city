@@ -13,10 +13,10 @@ npm run build:architect
 # Backend
 cd apps/api
 uv sync --locked --extra dev
-uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8787
 ```
 
-Open `http://127.0.0.1:8000/docs`. Development CORS permits localhost/127.0.0.1:5173 and POST; set `TINY_CITY_CORS_ORIGINS` for another explicit local frontend origin. The service is intended for local use. Public deployment needs authentication and a durable quota/replay policy at the service boundary; process-local limits do not provide account authentication or persistent billing quotas.
+Open `http://127.0.0.1:8787/docs`. Development CORS permits localhost/127.0.0.1:5173 and POST; set `TINY_CITY_CORS_ORIGINS` for another explicit local frontend origin. The service is intended for local use. Public deployment needs authentication and a durable quota/replay policy at the service boundary; process-local limits do not provide account authentication or persistent billing quotas.
 
 For a manual offline backend demo, start with `TINY_CITY_PROVIDER_MODE=mock`. That mode is explicit, returns the documented fixed fixture, and labels its summary as an offline fixture; it does not interpret arbitrary prompts or masquerade as Gemini. `/plan/validate` always works offline with structured intent. Tests inject fake providers and never need real credentials.
 
@@ -32,7 +32,7 @@ const request: PlanningRequest = {
   sourceRevision: getSnapshot().revision, seed: 7,
   constraints: { allowPartial: false, allowDestructive: false },
 };
-const response = await fetch('http://127.0.0.1:8000/v1/city/plan', {
+const response = await fetch('http://127.0.0.1:8787/v1/city/plan', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(request), signal: abortController.signal,
 });

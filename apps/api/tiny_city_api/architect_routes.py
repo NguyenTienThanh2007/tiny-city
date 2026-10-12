@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 from .architect_errors import ArchitectError
 from .architect_models import ErrorResponse, PlanningRequest, PlannerStatusResponse, ProviderStatus, ValidationRequest, PlanningResponse
 from .planner_bridge import WORKER
-from .providers import GeminiProvider, MockProvider
+from .providers import GeminiProvider, LocalRulesProvider, MockProvider
 
 router = APIRouter(prefix='/v1/city', tags=['AI city architect'])
 ERRORS = {code: {'model': ErrorResponse} for code in (409,413,422,429,502,503,504)}
@@ -32,17 +32,27 @@ async def planner_status(request: Request) -> PlannerStatusResponse:
     """Cheap readiness report for the client: never calls the AI provider or reveals credentials."""
     provider = request.app.state.provider
     settings = request.app.state.settings
+    model = None
     if isinstance(provider, MockProvider):
         mode, configured = 'mock', True
+    elif isinstance(provider, LocalRulesProvider):
+        mode, configured = 'local', True
     elif isinstance(provider, GeminiProvider):
-        mode, configured = 'gemini', bool(settings.gemini_api_key.get_secret_value().strip())
+        mode, configured, model = 'gemini', bool(settings.gemini_api_key.get_secret_value().strip()), settings.gemini_model
     else:
         mode, configured = 'custom', True
-    return PlannerStatusResponse(provider=ProviderStatus(mode=mode, configured=configured), planner='ready' if WORKER.is_file() else 'not-built')
+    return PlannerStatusResponse(provider=ProviderStatus(mode=mode, configured=configured, model=model), planner='ready' if WORKER.is_file() else 'not-built')
 
-async def disconnect_monitor(request: Request):
-    while not await request.is_disconnected():
-        await asyncio.sleep(0.1)
+async def disconnect_monitor(request: Request, stop: asyncio.Event):
+    # An explicit stop flag ends the loop even if a cancellation is swallowed inside Starlette's
+    # is_disconnected() cancel scope (that race used to leave fast-failing requests hanging forever).
+    while not stop.is_set():
+        if await request.is_disconnected():
+            return
+        try:
+            await asyncio.wait_for(stop.wait(), 0.1)
+        except TimeoutError:
+            pass
 
 async def execute(request: Request, data, interpret: bool):
     services = request.app.state
@@ -65,14 +75,24 @@ async def execute(request: Request, data, interpret: bool):
         proposal = await services.bridge.call('plan', world=data.world, sourceRevision=data.sourceRevision,
             seed=data.seed, constraints=data.constraints.model_dump(), intent=intent.model_dump())
         return PlanningResponse(requestId=request.state.request_id, proposal=proposal)
-    worker = asyncio.create_task(work())
-    disconnected = asyncio.create_task(disconnect_monitor(request))
+    async def guarded():
+        try:
+            return await work()
+        except ArchitectError:
+            raise
+        except Exception:
+            # Unexpected failures still answer with the documented contract (no internals leak).
+            raise ArchitectError('INTERNAL_ERROR', 'The planning service hit an unexpected error. Retry, or check the API log for this request ID.', 500, True) from None
+    worker = asyncio.create_task(guarded())
+    stop = asyncio.Event()
+    disconnected = asyncio.create_task(disconnect_monitor(request, stop))
     try:
         done, _ = await asyncio.wait((worker,disconnected), return_when=asyncio.FIRST_COMPLETED)
         if worker in done:
             return await worker
         raise ArchitectError('REQUEST_CANCELLED','Planning was cancelled by the client.',499)
     finally:
+        stop.set()
         for task in (worker,disconnected):
             if not task.done():
                 task.cancel()

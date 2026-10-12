@@ -14,12 +14,13 @@ npm run dev
 In another terminal, start the local planning API from `apps/api` after configuring `GEMINI_API_KEY` in the backend-only `apps/api/.env` file. Copy `.env.example` if that file does not exist; never put the Gemini key in a `VITE_` variable or browser storage.
 
 ```sh
-cd apps/api
-uv sync --locked --extra dev
-uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8000
+(cd apps/api && uv sync --locked --extra dev)
+npm run dev:api
 ```
 
-In development the frontend calls the planner through Vite's same-origin proxy at `/api` (forwarded to `http://127.0.0.1:8000`; set `TINY_CITY_API_PROXY_TARGET` for another address), so phones and tablets on your LAN that open the dev server also reach the API without CORS changes. Production builds call `http://127.0.0.1:8000` by default. Set `VITE_AI_ARCHITECT_API_URL` only when the API uses another base URL. The AI panel shows the planner connection (reachable, mock/demo mode, provider key configured, planner built) from the cheap `GET /v1/city/status` endpoint and offers Retry and setup steps when the API is unreachable; it never substitutes mock output in a real session. The prompt produces a temporary map preview; only **Approve & build** applies the validated batch through the live simulation.
+`npm run dev:api` starts the API on port 8787 (override with `TINY_CITY_API_PORT`, and start `npm run dev` with the same variable). If another program already holds the port it names it and suggests a free one instead of starting — another app on the planner port previously made every AI request fail with "invalid error response". Manual equivalent: `cd apps/api && uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8787`. Set `TINY_CITY_PROVIDER_MODE=local` for the deterministic offline Vietnamese/English interpreter (no AI calls) or `mock` for the fixed demo fixture.
+
+In development the frontend calls the planner through Vite's same-origin proxy at `/api` (forwarded to `http://127.0.0.1:8787`; set `TINY_CITY_API_PROXY_TARGET` for another address), so phones and tablets on your LAN that open the dev server also reach the API without CORS changes. Production builds call `http://127.0.0.1:8787` by default. Set `VITE_AI_ARCHITECT_API_URL` only when the API uses another base URL. The AI panel shows the planner connection (reachable, mock/demo mode, provider key configured, planner built) from the cheap `GET /v1/city/status` endpoint and offers Retry and setup steps when the API is unreachable; it never substitutes mock output in a real session. The prompt produces a temporary map preview; only **Approve & build** applies the validated batch through the live simulation.
 
 ## Controls
 

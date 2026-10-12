@@ -141,12 +141,14 @@ test('complete life: create, choose a home, walk, visit, meet a resident, rest, 
   await expect(status(page)).toContainText('Enjoying Sunny Park', { timeout: 30_000 });
   const nearby = page.getByRole('list', { name: 'Nearby residents' });
   await expect(nearby.getByRole('button').first()).toBeVisible({ timeout: 30_000 });
-  const neighbour = (await nearby.getByRole('button').first().textContent())!;
-  await nearby.getByRole('button').first().click();
+  // The list re-sorts by live distance while the clock runs, so click the resident that was read, not "first" again.
+  const neighbour = (await nearby.getByRole('button').first().evaluate((el) => el.querySelector('span')?.firstChild?.textContent ?? ''));
+  expect(neighbour).not.toBe('');
+  await nearby.getByRole('button', { name: new RegExp(`^${neighbour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`) }).click();
   const profile = page.locator('.citizen-inspector');
   await expect(profile).toBeVisible();
   const residentName = (await profile.getByRole('heading').first().textContent())!;
-  expect(neighbour).toContain(residentName);
+  expect(residentName).toBe(neighbour);
   await profile.getByRole('region', { name: 'Interact' }).getByRole('button', { name: /^Greet/ }).click();
   await page.getByRole('button', { name: 'Close resident profile' }).click();
   await expect(diary(page)).toContainText(`You met ${residentName}.`, { timeout: 20_000 });

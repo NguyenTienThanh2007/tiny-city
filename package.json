@@ -25,7 +25,8 @@
     "test:e2e": "playwright test",
     "build:architect": "npm run build:simulation && npm run build --workspace @tiny-city/ai-architect",
     "test:architect": "npm run build:architect && npm test --workspace @tiny-city/ai-architect",
-    "security": "python3 scripts/check_secrets.py"
+    "security": "python3 scripts/check_secrets.py",
+    "dev:api": "node scripts/dev_api.mjs"
   },
   "dependencies": {
     "@tiny-city/ai-architect": "*",
