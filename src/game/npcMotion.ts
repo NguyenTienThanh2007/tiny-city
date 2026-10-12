@@ -147,14 +147,3 @@ export function citizenDepth(position: Position): number {
 export function buildingDepth(x: number, y: number, width: number, height: number): number {
   return x + y + (width + height) / 2;
 }
-
-/** Daylight tint for the scene overlay, from the authoritative minute of day. */
-export function skyTint(minuteOfDay: number): { color: string; opacity: number } {
-  const hour = (((minuteOfDay % 1440) + 1440) % 1440) / 60;
-  if (hour >= 7 && hour < 17.5) return { color: '#fff4d6', opacity: 0 };
-  if (hour >= 17.5 && hour < 19.5) return { color: '#f2a65a', opacity: 0.1 + (hour - 17.5) * 0.04 };
-  if (hour >= 19.5 && hour < 21) return { color: '#3a4a7a', opacity: 0.14 + (hour - 19.5) * 0.07 };
-  if (hour >= 21 || hour < 5) return { color: '#1d2a4d', opacity: 0.3 };
-  if (hour >= 5 && hour < 6) return { color: '#3a4a7a', opacity: 0.3 - (hour - 5) * 0.14 };
-  return { color: '#f6b98a', opacity: 0.12 - (hour - 6) * 0.12 };
-}

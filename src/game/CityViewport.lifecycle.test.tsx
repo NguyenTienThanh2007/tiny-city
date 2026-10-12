@@ -21,7 +21,8 @@ describe('renderer startup failure', () => {
       onBulldoze={vi.fn()} onCameraFootprintChange={vi.fn()} /></StrictMode>);
     expect(await screen.findByRole('alert')).toHaveTextContent('renderer could not start');
     expect(screen.getAllByRole('alert')).toHaveLength(1);
-    expect(mocks.init).toHaveBeenCalledTimes(2);
+    // Pixi lifecycles are serialized: the StrictMode mount that was disposed first never creates a renderer.
+    expect(mocks.init).toHaveBeenCalledTimes(1);
     expect(document.querySelectorAll('canvas')).toHaveLength(0);
   });
 });

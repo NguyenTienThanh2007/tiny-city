@@ -1,5 +1,5 @@
 import { Container, Graphics, GraphicsContext } from 'pixi.js';
-import type { Citizen, Position, WorldState } from '@tiny-city/simulation';
+import type { Citizen, CitizenActivity, Position, WorldState } from '@tiny-city/simulation';
 import { iso } from './mapGeometry';
 import {
   blendPosition, citizenAppearance, citizenDepth, laneOffset, receiveSnapshot, screenFacing,
@@ -11,10 +11,22 @@ const FEET_TO_CENTER = 8;
 const FADE_PER_MS = 1 / 180;
 const LANE_EASE_PER_MS = 1 / 140;
 const WALK_CYCLES_PER_TILE = 2.6;
+/** Residents read clearly at normal zoom and keep a minimum on-screen size when zoomed out. */
+const BASE_SCALE = 1.15;
+export function npcSpriteScale(viewScale: number): number {
+  return Math.max(BASE_SCALE, Math.min(2.4, 0.7 / Math.max(viewScale, 0.05)));
+}
+const ACTIVITY_COLORS: Record<CitizenActivity, number> = {
+  travel: 0xd9962f, work: 0x4f84a8, leisure: 0x6c9d5a, home: 0xc8714f, sleep: 0x6a6ca6, idle: 0x8f9a91,
+};
 
 interface NpcSprite {
   root: Container;
+  figure: Container;
   bodyGroup: Container;
+  hoverRing: Graphics;
+  badge: Graphics;
+  activity: CitizenActivity;
   legLeft: Graphics;
   legRight: Graphics;
   face: Graphics;
@@ -55,7 +67,9 @@ export class NpcLayer {
   private lastState: WorldState | null = null;
   private lastFrame = 0;
   private selectedId: string | null = null;
+  private hoveredId: string | null = null;
   private pulse = 0;
+  private tint = 0xffffff;
 
   constructor(private readonly scene: Container, groundOverlay: Container) {
     this.routeGraphics.eventMode = 'none';
@@ -63,6 +77,31 @@ export class NpcLayer {
   }
 
   get count(): number { return this.sprites.size; }
+
+  setHovered(id: string | null): void { this.hoveredId = id; }
+
+  /** Night/dusk multiply tint for figures only; selection and hover rings stay bright. */
+  setTint(tint: number): void {
+    if (tint === this.tint) return;
+    this.tint = tint;
+    for (const sprite of this.sprites.values()) sprite.figure.tint = tint;
+  }
+
+  private badgeContext(activity: CitizenActivity): GraphicsContext {
+    return this.cache.get(`badge:${activity}`, (g) => {
+      g.roundRect(-5.5, -30, 11, 9, 4.5).fill(ACTIVITY_COLORS[activity]).stroke({ color: 0xffffff, width: 1, alpha: 0.95 });
+      g.poly([-1.6, -21, 1.6, -21, 0, -19]).fill(ACTIVITY_COLORS[activity]);
+      const white = 0xffffff;
+      switch (activity) {
+        case 'work': g.roundRect(-2.8, -27.4, 5.6, 4, 0.8).fill(white).rect(-1.2, -28.4, 2.4, 1.1).fill(white); break;
+        case 'home': g.poly([-3, -25, 0, -28, 3, -25]).fill(white).rect(-2, -25, 4, 2.6).fill(white); break;
+        case 'leisure': g.ellipse(0, -25.5, 2.2, 3).fill(white); break;
+        case 'sleep': g.moveTo(-2, -27.6).lineTo(2, -27.6).lineTo(-2, -23.4).lineTo(2, -23.4).stroke({ color: white, width: 1.1 }); break;
+        case 'travel': g.moveTo(-3, -25.5).lineTo(2.6, -25.5).stroke({ color: white, width: 1.2 }).poly([1, -27.4, 3.4, -25.5, 1, -23.6]).fill(white); break;
+        default: g.circle(-2.2, -25.5, 0.8).fill(white).circle(0, -25.5, 0.8).fill(white).circle(2.2, -25.5, 0.8).fill(white);
+      }
+    });
+  }
 
   setSelected(id: string | null): void {
     if (this.selectedId === id) return;
@@ -82,10 +121,23 @@ export class NpcLayer {
     root.label = 'npc';
     root.eventMode = 'none';
     const ring = new Graphics(this.cache.get('ring', (g) => {
-      g.ellipse(0, 0, 8, 4).fill({ color: 0xffd36e, alpha: 0.28 }).ellipse(0, 0, 8, 4).stroke({ color: 0xffe7a3, width: 1.6, alpha: 0.95 });
+      g.ellipse(0, 0, 9, 4.5).fill({ color: 0xffd36e, alpha: 0.32 }).ellipse(0, 0, 9, 4.5).stroke({ color: 0xffc94d, width: 2, alpha: 1 })
+        .ellipse(0, 0, 11.5, 5.8).stroke({ color: 0xfff1c4, width: 1, alpha: 0.7 });
     }));
     ring.visible = false;
-    const shadow = new Graphics(this.cache.get('shadow', (g) => { g.ellipse(0, 0, 4.6, 2.1).fill({ color: 0x1d2b22, alpha: 0.28 }); }));
+    const hoverRing = new Graphics(this.cache.get('hover-ring', (g) => {
+      g.ellipse(0, 0, 8.5, 4.2).fill({ color: 0xffffff, alpha: 0.18 }).ellipse(0, 0, 8.5, 4.2).stroke({ color: 0xffffff, width: 1.4, alpha: 0.9 });
+    }));
+    hoverRing.visible = false;
+    const badge = new Graphics(this.badgeContext(citizen.activity));
+    badge.visible = false;
+    const shadow = new Graphics(this.cache.get('shadow', (g) => { g.ellipse(0, 0, 5, 2.3).fill({ color: 0x14221a, alpha: 0.38 }); }));
+    // Dark silhouette behind the figure keeps residents legible on asphalt and grass alike.
+    const outline = new Graphics(this.cache.get('outline', (g) => {
+      g.roundRect(-4.9, -12.7, 9.8, 8.6, 2.6).fill({ color: 0x14221a, alpha: 0.5 });
+      g.circle(0, -14.8, 3.75).fill({ color: 0x14221a, alpha: 0.5 });
+      g.roundRect(-2.6, -5.8, 5.2, 6.2, 1.4).fill({ color: 0x14221a, alpha: 0.42 });
+    }));
     const leg = (key: string) => new Graphics(this.cache.get(`leg:${key}`, (g) => {
       g.roundRect(-0.85, 0, 1.7, 5.4, 0.8).fill(look.pants).roundRect(-0.95, 4.6, 1.9, 1.1, 0.5).fill(0x2a2622);
     }));
@@ -145,12 +197,15 @@ export class NpcLayer {
       })));
     }
     bodyGroup.addChild(head, face, hairFront, hairBack);
-    root.addChild(ring, shadow, legLeft, legRight, bodyGroup);
+    const figure = new Container();
+    figure.addChild(shadow, outline, legLeft, legRight, bodyGroup);
+    figure.tint = this.tint;
+    root.addChild(ring, hoverRing, figure, badge);
     this.scene.addChild(root);
     const { sample } = receiveSnapshot(undefined, citizen, world);
     root.alpha = sample.alpha;
     root.visible = sample.alpha > 0.01;
-    return { root, bodyGroup, legLeft, legRight, face, hairFront, hairBack, ring, appearance: look, sample,
+    return { root, figure, bodyGroup, hoverRing, badge, activity: citizen.activity, legLeft, legRight, face, hairFront, hairBack, ring, appearance: look, sample,
       rendered: citizen.position, lastBase: citizen.position };
   }
 
@@ -162,7 +217,7 @@ export class NpcLayer {
     const dt = this.lastFrame === 0 ? 16 : Math.min(100, Math.max(0, nowMs - this.lastFrame));
     this.lastFrame = nowMs;
     const alpha = world.clock.accumulatedMs / world.clock.fixedStepMs;
-    const spriteScale = Math.max(1, Math.min(2.3, 0.62 / Math.max(viewScale, 0.05)));
+    const spriteScale = npcSpriteScale(viewScale);
     const stateChanged = this.lastState !== world;
     if (stateChanged) {
       const live = new Set<string>();
@@ -170,6 +225,7 @@ export class NpcLayer {
         live.add(citizen.id);
         let sprite = this.sprites.get(citizen.id);
         if (!sprite) { sprite = this.createSprite(citizen, world); this.sprites.set(citizen.id, sprite); continue; }
+        if (sprite.activity !== citizen.activity) { sprite.activity = citizen.activity; sprite.badge.context = this.badgeContext(citizen.activity); }
         const update = receiveSnapshot(sprite.sample, citizen, world);
         sprite.sample = update.sample;
         if (update.snapped && update.sample.outdoors) {
@@ -223,13 +279,20 @@ export class NpcLayer {
       const swing = moving ? Math.sin(sample.walkPhase) * 0.55 : 0;
       sprite.legLeft.rotation = swing;
       sprite.legRight.rotation = -swing;
-      sprite.bodyGroup.y = moving ? -Math.abs(Math.sin(sample.walkPhase)) * 0.55 : 0;
+      // Walkers bob with their stride; waiting residents breathe gently so idle reads differently from walking.
+      sprite.bodyGroup.y = moving ? -Math.abs(Math.sin(sample.walkPhase)) * 0.55 : Math.sin(this.pulse * Math.PI * 4 + sample.walkPhase) * 0.25;
       sprite.face.visible = !sample.away;
       sprite.hairFront.visible = !sample.away;
       sprite.hairBack.visible = sample.away;
       const selected = id === this.selectedId;
       sprite.ring.visible = selected;
-      if (selected) sprite.ring.scale.set(1 + Math.sin(this.pulse * Math.PI * 2) * 0.08);
+      sprite.badge.visible = selected;
+      sprite.hoverRing.visible = !selected && id === this.hoveredId;
+      if (selected) {
+        sprite.ring.scale.set(1 + Math.sin(this.pulse * Math.PI * 2) * 0.08);
+        sprite.badge.scale.x = sample.facing;
+        sprite.badge.y = Math.sin(this.pulse * Math.PI * 2) * 0.8;
+      }
     }
     this.drawSelection(world, viewScale);
   }
@@ -280,8 +343,8 @@ export class NpcLayer {
 
   /** Nearest visible resident under a world-local point, preferring the one drawn in front. */
   pick(point: Position, viewScale: number): string | null {
-    const spriteScale = Math.max(1, Math.min(2.3, 0.62 / Math.max(viewScale, 0.05)));
-    const radius = 7 * spriteScale + 4 / Math.max(viewScale, 0.05);
+    const spriteScale = npcSpriteScale(viewScale);
+    const radius = 7.5 * spriteScale + 5 / Math.max(viewScale, 0.05);
     let best: { id: string; distance: number; depth: number } | null = null;
     for (const [id, sprite] of this.sprites) {
       if (!sprite.root.visible || sprite.sample.alpha < 0.5) continue;
