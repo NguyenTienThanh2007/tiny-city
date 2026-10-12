@@ -4,6 +4,8 @@ import type { CityPlan } from '@tiny-city/simulation';
 import { iso } from './mapGeometry';
 import { planDecor, TALL_DECOR, type Decor } from './worldDecor';
 import { tree } from './buildingArt';
+import { currentArt } from './art/artLibrary';
+import { selectDecorAsset } from './art/artManifest';
 
 /**
  * Landscaping and streetlights. Tall items join the depth-sorted scene (so residents and buildings layer
@@ -18,12 +20,16 @@ export class DecorLayer {
   private readonly lampGlows: Graphics[] = [];
   private readonly tinted: Array<Graphics | Sprite> = [];
   private ground = new Graphics();
+  /** Flat baked sprites (flower patches) inside the cached ground layer, and baked ground shadows. */
+  private readonly flat: Sprite[] = [];
+  private readonly shadowSprites: Sprite[] = [];
   private hidden: Container[] = [];
   private tint = 0xffffff;
   private glow = 0;
   private items: Decor[] = [];
 
-  constructor(private readonly scene: Container, groundLayer: Container, private readonly renderer: Renderer | null = null) {
+  constructor(private readonly scene: Container, private readonly groundLayer: Container, private readonly renderer: Renderer | null = null,
+    private readonly shadowLayer: Container | null = null) {
     groundLayer.addChild(this.ground);
   }
 
@@ -42,15 +48,35 @@ export class DecorLayer {
     this.tinted.length = 0;
     this.hidden = [];
     this.ground.clear();
+    for (const sprite of this.flat) sprite.destroy();
+    for (const sprite of this.shadowSprites) sprite.destroy();
+    this.flat.length = 0;
+    this.shadowSprites.length = 0;
   }
 
   rebuild(plan: CityPlan): void {
     this.clear();
     this.items = planDecor(plan);
     const g = this.ground;
+    const art = currentArt();
     for (const decor of this.items) {
       const p = iso(decor.at.x, decor.at.y);
-      if (decor.kind === 'flowers') {
+      const baked = art ? selectDecorAsset(art.index, decor.kind, decor.variant) : null;
+      const shadowTexture = baked ? art!.frame(baked.shadow) : null;
+      if (shadowTexture && this.shadowLayer) {
+        const shadow = new Sprite(shadowTexture);
+        shadow.position.set(p.x, p.y);
+        if (decor.kind !== 'lamp') shadow.scale.set(decor.size);
+        this.shadowLayer.addChild(shadow);
+        this.shadowSprites.push(shadow);
+      }
+      const flatTexture = decor.kind === 'flowers' && baked ? art!.frame(baked.color) : null;
+      if (flatTexture) {
+        const sprite = new Sprite(flatTexture);
+        sprite.position.set(p.x, p.y);
+        this.groundLayer.addChild(sprite);
+        this.flat.push(sprite);
+      } else if (decor.kind === 'flowers') {
         const colors = [[0xf2c14e, 0xf4efe2], [0xe58f7a, 0xf2c14e], [0xb9a3d6, 0xf4efe2]][decor.variant]!;
         g.ellipse(p.x, p.y, 7, 3.2).fill({ color: 0x6f9a62, alpha: 0.55 });
         for (const [dx, dy, c] of [[-3, 0, 0], [2, -1, 1], [0, 1.5, 0], [4, 1, 1], [-1, -1.6, 1]] as const) g.circle(p.x + dx, p.y + dy, 1.2).fill(colors[c]);
@@ -87,6 +113,10 @@ export class DecorLayer {
 
   /** A sprite of the shared texture when a renderer is available; vector Graphics otherwise (tests). */
   private body(decor: Decor): Graphics | Sprite {
+    const art = currentArt();
+    const baked = art ? selectDecorAsset(art.index, decor.kind, decor.variant) : null;
+    const bakedTexture = baked ? art!.frame(baked.color) : null;
+    if (bakedTexture) return new Sprite(bakedTexture);
     const key = `${decor.kind}:${decor.variant}`;
     const context = this.context(key, (c) => this.draw(c, decor));
     if (!this.renderer) return new Graphics(context);
@@ -107,7 +137,7 @@ export class DecorLayer {
   private draw(c: GraphicsContext, decor: Decor): void {
     // Draw through a temporary Graphics wrapper so the shared tree helper can be reused.
     const g = new Graphics(c);
-    if (decor.kind === 'tree') tree(g, { x: 0, y: 0 }, 1, false, decor.variant);
+    if (decor.kind === 'tree' || decor.kind === 'accent' || decor.kind === 'streetTree') tree(g, { x: 0, y: 0 }, 1, false, decor.variant);
     else if (decor.kind === 'palm') tree(g, { x: 0, y: 0 }, 1, true, decor.variant);
     else if (decor.kind === 'bush') {
       const tones = [[0x4f8d61, 0x67a273], [0x5e9459, 0x7aae6c], [0x467f63, 0x5f9a78]][decor.variant]!;

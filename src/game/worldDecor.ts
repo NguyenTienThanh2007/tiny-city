@@ -6,7 +6,7 @@ import type { CityPlan, Position } from '@tiny-city/simulation';
  * cannot look like they block a buildable lot. Streetlights stand on the curb of real road tiles only.
  */
 
-export type DecorKind = 'tree' | 'palm' | 'bush' | 'flowers' | 'stones' | 'lamp';
+export type DecorKind = 'tree' | 'accent' | 'streetTree' | 'palm' | 'bush' | 'flowers' | 'stones' | 'lamp';
 export interface Decor {
   readonly kind: DecorKind;
   /** Tile that owns the decoration (for hiding under previews and rebuilds). */
@@ -16,8 +16,12 @@ export interface Decor {
   readonly variant: number;
   readonly size: number;
 }
-export const TALL_DECOR: ReadonlySet<DecorKind> = new Set(['tree', 'palm', 'bush', 'lamp']);
+export const TALL_DECOR: ReadonlySet<DecorKind> = new Set(['tree', 'accent', 'streetTree', 'palm', 'bush', 'lamp']);
+/** Decorations that stand on the curb of a real road tile (outside the walking lanes). */
+export const CURB_DECOR: ReadonlySet<DecorKind> = new Set(['lamp', 'streetTree']);
 export const MAX_DECOR = 900;
+/** Tree variants map to species in the baked art (broadleaf ×3, blossom, cypress, …); the vector fallback cycles 3 tones. */
+export const TREE_SPECIES = 7;
 
 const key = (x: number, y: number) => `${x},${y}`;
 
@@ -80,7 +84,10 @@ export function planDecor(plan: CityPlan): Decor[] {
       }
       const near = developedRing.has(k);
       if (!nearBuilding.has(k) && !near && grove(x, y) > 0.62 && n < 0.42) {
-        decor.push({ kind: 'tree', tile: { x, y }, at: jitter, variant, size: 0.85 + tileNoise(x, y, 23) * 0.4 });
+        // Species cluster by grove (mostly one kind per 5×5 patch) with occasional mixing, like planted woodland.
+        const species = tileNoise(x, y, 31) < 0.7 ? Math.floor(tileNoise(Math.floor(x / 5), Math.floor(y / 5), 37) * TREE_SPECIES) : Math.floor(tileNoise(x, y, 41) * TREE_SPECIES);
+        const accent = tileNoise(x, y, 43) < 0.06;
+        decor.push({ kind: accent ? 'accent' : 'tree', tile: { x, y }, at: jitter, variant: accent ? variant : species, size: 0.85 + tileNoise(x, y, 23) * 0.4 });
       } else if (!nearBuilding.has(k) && n > 0.965) {
         decor.push({ kind: 'bush', tile: { x, y }, at: jitter, variant, size: 0.8 + tileNoise(x, y, 29) * 0.4 });
       } else if (n < 0.035 || n > 0.94 && near) {
@@ -98,6 +105,19 @@ export function planDecor(plan: CityPlan): Decor[] {
     const open = sides.find(([dx, dy]) => !roads.has(key(road.x + dx, road.y + dy)));
     if (!open) continue;
     decor.push({ kind: 'lamp', tile: { x: road.x, y: road.y }, at: { x: road.x + 0.5 + open[0] * 0.42, y: road.y + 0.5 + open[1] * 0.42 }, variant: 0, size: 1 });
+  }
+  // Street trees on the curb between lamps, only beside open ground (not in front of a building's entrance lot).
+  for (const road of plan.roads) {
+    if (decor.length >= MAX_DECOR) break;
+    if ((road.x * 7 + road.y * 13) % 6 !== 3) continue;
+    const sides = [[0, 1], [1, 0], [0, -1], [-1, 0]] as const;
+    const open = sides.find(([dx, dy]) => {
+      const k = key(road.x + dx, road.y + dy);
+      return !roads.has(k) && !occupied.has(k) && !blocked.has(k);
+    });
+    if (!open) continue;
+    decor.push({ kind: 'streetTree', tile: { x: road.x, y: road.y }, at: { x: road.x + 0.5 + open[0] * 0.43, y: road.y + 0.5 + open[1] * 0.43 },
+      variant: Math.floor(tileNoise(road.x, road.y, 47) * 4), size: 0.8 + tileNoise(road.x, road.y, 53) * 0.15 });
   }
   return decor;
 }
