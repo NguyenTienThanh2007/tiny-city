@@ -951,9 +951,9 @@ function App() {
         <div className="zoom-controls" role="group" aria-label="Camera">
           <button className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomCamera(1.25)}><Icon name="plus" size={16} /></button>
           <button className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomCamera(0.8)}><Icon name="minus" size={16} /></button>
-          <button className="icon-button camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => { setFollowCitizenId(null); navigateCamera(); }}><Icon name="center" size={16} /></button>
+          <button className="icon-button camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => { setFollowCitizenId(null); setFollowPlayer(false); navigateCamera(); }}><Icon name="center" size={16} /></button>
         </div>
-        <MiniMap city={city} citizens={citizens} cameraFootprint={cameraFootprint} selectedCitizenId={selectedCitizenId} selectedFootprint={selectedFootprint} onNavigate={(cell) => { setFollowCitizenId(null); navigateCamera(cell); }} />
+        <MiniMap city={city} citizens={citizens} cameraFootprint={cameraFootprint} selectedCitizenId={selectedCitizenId} selectedFootprint={selectedFootprint} onNavigate={(cell) => { setFollowCitizenId(null); setFollowPlayer(false); navigateCamera(cell); }} />
       </div>
 
       <div className="tool-hint" aria-hidden="true"><span className="control-dot" />{toolHint}<span className="control-separator">·</span>Scroll to zoom<span className="control-separator">·</span>Shift + drag to pan</div>

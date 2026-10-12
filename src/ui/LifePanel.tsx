@@ -166,7 +166,7 @@ export function LifePanel({ player, world, actions, log, paused, following, plac
       {busy && <button className="outline-action" onClick={onCancel}>Cancel</button>}
     </div>
     {paused && <div className="hint-banner"><Icon name="clock" size={14} /><span>Time is paused, so you and your needs stand still.</span>
-      <button className="text-button" onClick={onResume}>Resume</button></div>}
+      <button className="text-button" onClick={onResume}>Resume time</button></div>}
     {place}
     {!place && <>
       <div className="section-heading"><span>NEEDS</span><small>100 is fully satisfied</small></div>

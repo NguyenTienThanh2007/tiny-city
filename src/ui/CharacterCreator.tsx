@@ -120,7 +120,7 @@ export function CharacterCreator({ initial, editing, onCancel, onSubmit }: {
       </div>
       <footer className="creator-foot">
         <button type="button" className="reject-plan" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="approve-plan" aria-disabled={!valid}>{editing ? 'Save look' : 'Next: choose a home'} <Icon name="arrow" size={15} /></button>
+        <button type="submit" className={`approve-plan ${valid ? '' : 'is-incomplete'}`}>{editing ? 'Save look' : 'Next: choose a home'} <Icon name="arrow" size={15} /></button>
       </footer>
     </form>
   </div>;

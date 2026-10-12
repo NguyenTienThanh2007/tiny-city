@@ -881,7 +881,8 @@ kbd { font-family: var(--font-ui); }
 .swatch-row, .choice-row { display: flex; flex-wrap: wrap; gap: 7px; }
 .swatch { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; }
 .swatch input, .choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.swatch span { width: 26px; height: 26px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); transition: transform .15s; }
+.swatch span { width: 26px; height: 26px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); transition: transform .15s; pointer-events: none; }
+.swatch input, .choice input { z-index: 1; }
 .swatch:hover span { transform: scale(1.08); }
 .swatch.is-selected { box-shadow: 0 0 0 2px var(--ivory), 0 0 0 4px var(--forest-700); }
 .swatch:focus-within, .choice:focus-within { outline: 2px solid var(--forest-500); outline-offset: 2px; }
@@ -890,7 +891,7 @@ kbd { font-family: var(--font-ui); }
 .choice.is-selected { background: var(--forest-700); border-color: var(--forest-700); color: var(--ivory); }
 .creator-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); background: var(--paper); }
 .creator-foot .approve-plan { display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; }
-.creator-foot .approve-plan[aria-disabled='true'] { opacity: .55; }
+.creator-foot .approve-plan.is-incomplete { opacity: .55; }
 
 /* Compact Life HUD */
 .life-strip {
