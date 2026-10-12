@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BUILDING_CATALOG, containsPosition, createWorld, deserializeWorld, housingSummary, playerHomeOptions, providesLeisure,
+  BUILDING_CATALOG, containsPosition, createWorld, getGameTime, deserializeWorld, housingSummary, playerHomeOptions, providesLeisure,
   serializeWorld, Simulation, validateWorld,
 } from '../src/index.js';
 import type { BuildingType, CityCommand, CitySnapshot, LifeCommand, PlayerAppearance, Position, WorldState } from '../src/index.js';
@@ -231,5 +231,21 @@ describe('Phase 4.5 confirmed bug regressions', () => {
     checkInvariants(sim.getState(), 'after undoing the demolition');
     sim.step(600);
     checkInvariants(sim.getState(), 'after resuming');
+  });
+
+  it('evening leisure spreads across public venues instead of filling the first one by id', () => {
+    const roads = Array.from({ length: 36 }, (_, i) => ({ x: i + 1, y: 5 }));
+    const sim = new Simulation(createWorld({ id: 'venues', seed: 'venues', startingFunds: 10_000, clock: { paused: true },
+      plan: { id: 'venues-plan', name: 'Venues', width: 40, height: 20, blockedTiles: [], roads, buildings: [
+        npcBuilding('apt', 'apartment', 2, 6), npcBuilding('club', 'clubhouse', 8, 6), npcBuilding('park', 'park', 14, 6), npcBuilding('pool', 'pool', 20, 6),
+      ] } }));
+    sim.enablePopulation({ maxCitizens: 1000 });
+    const used = new Set<string>();
+    for (let i = 0; i < 4000 && getGameTime(sim.getState().clock).minuteOfDay < 19 * 60; i += 1) {
+      sim.step(1);
+      for (const c of sim.getState().citizens) if (c.activity === 'leisure' && c.movement?.status === 'inside') used.add(c.movement.currentBuildingId!);
+    }
+    // 24 residents, three venues with room for 20–30 each: before the fix everyone went to "club" (first id).
+    expect([...used].sort()).toEqual(['club', 'park', 'pool']);
   });
 });

@@ -1,6 +1,28 @@
 import { buildingCenter, containsPosition, NPC_LIMITS, RoadNavigator } from './navigation.js';
 import { insideMovement, providesLeisure } from './population.js';
-import type { Citizen, CitizenMovement, ScheduleEntry, SimulationEvent, WorldState } from './types.js';
+import type { Building, Citizen, CitizenMovement, ScheduleEntry, SimulationEvent, WorldState } from './types.js';
+
+/** FNV-1a: a stable, platform-independent 32-bit hash. */
+function hash(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h;
+}
+
+/**
+ * Each resident has a deterministic personal ranking of public venues (rendezvous hashing), so evenings spread across
+ * every park, pool and clubhouse instead of filling the first by ID; adding a venue only moves the residents who now
+ * prefer it. Falls through the ranking while a venue is full.
+ */
+export function preferredVenue(citizenId: string, venues: readonly Building[], hasRoom: (venue: Building) => boolean): string | null {
+  let best: Building | null = null, bestScore = -1;
+  for (const venue of venues) {
+    if (!hasRoom(venue)) continue;
+    const score = hash(`${citizenId}|${venue.id}`);
+    if (score > bestScore || score === bestScore && best !== null && venue.id < best.id) { best = venue; bestScore = score; }
+  }
+  return best?.id ?? null;
+}
 
 export function scheduledEntry(citizen: Citizen, minute: number): ScheduleEntry {
   let active = citizen.schedule.entries[0]!;
@@ -31,7 +53,7 @@ export function advanceDailyLife(world: WorldState, navigator: RoadNavigator, mi
     if (activity === 'leisure') {
       const available = (id: string | null) => { const b = navigator.getBuilding(id); return b && providesLeisure(b) && (reservations.get(b.id) ?? 0) < b.capacity ? b.id : null; };
       destination = available(destination) ?? available(oldMovement.arrivalActivity === 'leisure' ? oldMovement.destinationBuildingId : null) ??
-        leisure.find(b => (reservations.get(b.id) ?? 0) < b.capacity)?.id ?? null;
+        preferredVenue(c.id, leisure, (b) => (reservations.get(b.id) ?? 0) < b.capacity);
       if (destination) reservations.set(destination, (reservations.get(destination) ?? 0) + 1);
       else { activity = 'home'; destination = c.homeBuildingId; }
     }
