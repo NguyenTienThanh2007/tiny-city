@@ -78,8 +78,9 @@ export function cityView(city: CityState, width: number, height: number): { cent
   const left = Math.min(...xs), right = Math.max(...xs);
   const top = Math.min(...ys) - 100, bottom = Math.max(...ys);
   return { center: { x: (left + right) / 2, y: (top + bottom) / 2 },
-    scale: Math.max(MIN_SCALE, Math.min(0.86, Math.max(100, width - 120) / (right - left),
-      Math.max(100, height - 230) / (bottom - top))) };
+    // Callers pass the visible (HUD-free) area, so only a small breathing margin is reserved here.
+    scale: Math.max(MIN_SCALE, Math.min(0.86, Math.max(100, width - Math.min(120, width * 0.1)) / (right - left),
+      Math.max(100, height - Math.min(80, height * 0.12)) / (bottom - top))) };
 }
 
 /** Fill skipped pointer samples with an orthogonally connected tile stroke. */
