@@ -1,0 +1,24 @@
+{
+  "script": "node scripts/npc_render_benchmark.mjs http://127.0.0.1:5173/ [--software]",
+  "measuredOn": "2026-10-12, Vite dev build, headless Chromium (Playwright 1.64), viewport 1440x900, DPR 1",
+  "method": "Road-grid city sized for the target, residents welcomed through the UI, 4x until 07:15 (morning commute), then 1x and zoomed out so the whole grid is on screen. Six one-second samples of window.__tinyCityRenderer (fps = frames rendered per second; sceneUpdateMs = per-frame JS cost of the viewport ticker callback that syncs residents, culling and selection, excluding GPU rendering).",
+  "gpu": {
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2)",
+    "results": [
+      { "residents": 30, "visibleMax": 19, "fpsMedian": 60, "fpsMin": 59, "sceneUpdateMsMedian": 0.05, "heapMB": 111 },
+      { "residents": 100, "visibleMax": 42, "fpsMedian": 60, "fpsMin": 59, "sceneUpdateMsMedian": 0.19, "heapMB": 111 },
+      { "residents": 300, "visibleMax": 210, "fpsMedian": 60, "fpsMin": 59, "sceneUpdateMsMedian": 0.23, "heapMB": 93 },
+      { "residents": 1000, "visibleMax": 714, "fpsMedian": 58, "fpsMin": 57, "sceneUpdateMsMedian": 0.73, "heapMB": 242 }
+    ]
+  },
+  "software": {
+    "renderer": "ANGLE SwiftShader (CPU rasterizer, as used by CI)",
+    "results": [
+      { "residents": 30, "visibleMax": 16, "fpsMedian": 10, "fpsMin": 8, "sceneUpdateMsMedian": 0.07, "heapMB": 104 },
+      { "residents": 100, "visibleMax": 20, "fpsMedian": 8, "fpsMin": 6, "sceneUpdateMsMedian": 0.13, "heapMB": 98 },
+      { "residents": 300, "visibleMax": 202, "fpsMedian": 7, "fpsMin": 6, "sceneUpdateMsMedian": 0.35, "heapMB": 133 },
+      { "residents": 1000, "visibleMax": 715, "fpsMedian": 5, "fpsMin": 4, "sceneUpdateMsMedian": 1.08, "heapMB": 159 }
+    ],
+    "note": "Software rasterization is fill-rate bound by the full-map vector terrain at every population size; resident sync stays near 1 ms even at 1000."
+  }
+}
