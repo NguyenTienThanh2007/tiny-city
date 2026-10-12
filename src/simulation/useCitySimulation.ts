@@ -1,27 +1,63 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Simulation } from '@tiny-city/simulation';
 import type { CityCommand, CitySnapshot, PopulationOptions, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../types';
 import { createCityWorld } from './cityAdapter';
 
+export type SimulationSpeed = 1 | 2 | 4;
+export const SIMULATION_SPEEDS: readonly SimulationSpeed[] = [1, 2, 4];
+type EventListener = (events: readonly SimulationEvent[], state: WorldState) => void;
+
+/** Frequent per-tick bookkeeping that should not, on its own, force a React render of the whole HUD. */
+const ROUTINE_EVENTS = new Set<SimulationEvent['type']>(['clock.ticked', 'citizen.moved']);
+/** HUD refresh cadence while only routine movement happens. Pixi reads live state every frame regardless. */
+const HUD_REFRESH_MS = 100;
+/** Hidden-tab time is ignored, and one long frame can never replay more than this much real time. */
+const MAX_FRAME_MS = 250;
+
 export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   const [simulation] = useState(() => new Simulation(restoredWorld ?? createCityWorld(city)));
   const [world, setWorld] = useState(simulation.getState());
   const [lastEvent, setLastEvent] = useState<SimulationEvent | null>(null);
+  const [speed, setSpeedState] = useState<SimulationSpeed>(1);
+  const speedRef = useRef<SimulationSpeed>(1);
+  const listenersRef = useRef(new Set<EventListener>());
+  const lastPublishRef = useRef(0);
+  const pendingEventRef = useRef<SimulationEvent | null>(null);
+
+  const notify = useCallback((result: SimulationResult) => {
+    if (result.events.length === 0) return;
+    for (const listener of listenersRef.current) listener(result.events, result.state);
+  }, []);
+
+  const rememberEvent = useCallback((events: readonly SimulationEvent[]) => {
+    const event = [...events].reverse().find((entry) => !ROUTINE_EVENTS.has(entry.type) &&
+      entry.type !== 'city.road-network-changed' && entry.type !== 'city.budget-changed') ?? events.at(-1);
+    if (event) pendingEventRef.current = event;
+  }, []);
 
   const publish = useCallback((result: SimulationResult) => {
+    rememberEvent(result.events);
+    notify(result);
+    lastPublishRef.current = performance.now();
     setWorld(result.state);
-    const event = [...result.events].reverse().find((entry) => entry.type !== 'clock.ticked' &&
-      entry.type !== 'city.road-network-changed' && entry.type !== 'city.budget-changed') ?? result.events.at(-1);
-    if (event) setLastEvent(event);
-  }, []);
+    if (pendingEventRef.current) setLastEvent(pendingEventRef.current);
+  }, [notify, rememberEvent]);
 
   const advance = useCallback((elapsedMs: number) => {
     // Pixi remains the only frame driver. Ignore hidden-tab time; cap long resumed frames.
     if (document.visibilityState === 'hidden' || simulation.getState().clock.paused) return;
-    const result = simulation.advance(Math.min(elapsedMs, 250));
-    if (result.steps > 0) publish(result);
-  }, [simulation, publish]);
+    // Speed scales the real time fed to the one authoritative fixed-step clock; no second timer exists.
+    const result = simulation.advance(Math.min(elapsedMs, MAX_FRAME_MS) * speedRef.current);
+    if (result.steps === 0) return;
+    const significant = result.events.some((event) => !ROUTINE_EVENTS.has(event.type));
+    if (significant || performance.now() - lastPublishRef.current >= HUD_REFRESH_MS) {
+      publish(result);
+    } else {
+      rememberEvent(result.events);
+      notify(result);
+    }
+  }, [simulation, publish, notify, rememberEvent]);
 
   const execute = useCallback((command: CityCommand) => {
     const result = simulation.execute(command);
@@ -41,12 +77,30 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
     else simulation.pause();
     setWorld(simulation.getState());
   }, [simulation]);
+  const resume = useCallback(() => {
+    if (!simulation.getState().clock.paused) return;
+    simulation.resume();
+    setWorld(simulation.getState());
+  }, [simulation]);
 
   const step = useCallback(() => {
     if (simulation.getState().clock.paused) publish(simulation.step());
   }, [simulation, publish]);
 
+  const setSpeed = useCallback((next: SimulationSpeed) => {
+    speedRef.current = next;
+    setSpeedState(next);
+  }, []);
+
+  const subscribe = useCallback((listener: EventListener) => {
+    listenersRef.current.add(listener);
+    return () => { listenersRef.current.delete(listener); };
+  }, []);
+
   const getSnapshot = useCallback(() => simulation.getState(), [simulation]);
-  const enablePopulation = useCallback((options: PopulationOptions = {}) => publish(simulation.enablePopulation(options)), [simulation,publish]);
-  return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, step, getSnapshot, enablePopulation };
+  const getCitizen = useCallback((id: string) => simulation.getCitizen(id), [simulation]);
+  const getBuildingOccupancy = useCallback((id: string) => simulation.getBuildingOccupancy(id), [simulation]);
+  const enablePopulation = useCallback((options: PopulationOptions = {}) => publish(simulation.enablePopulation(options)), [simulation, publish]);
+  return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
+    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy };
 }
