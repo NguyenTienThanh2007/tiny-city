@@ -38,6 +38,7 @@ export const rejectionText: Record<LifeRejectionReason, string> = {
   'citizen-unavailable': 'They are inside a home or workplace. Catch them on the street or at a park.',
   'too-tired': 'You are exhausted. Rest at home first.',
   'nothing-to-cancel': 'You are not doing anything right now.',
+  'not-placed': 'Choose a home first — your life starts when you move in.',
 };
 
 export const failureText: Record<PlayerFailureReason, string> = {
@@ -134,7 +135,9 @@ export function reducePlayerLog(state: PlayerLogState, events: readonly Simulati
   const added: Omit<PlayerLogEntry, 'id' | 'time'>[] = [];
   for (const e of events) {
     switch (e.type) {
-      case 'player.created': added.push({ tone: 'good', icon: 'home', text: `${e.player.name} moved into ${building(e.player.homeBuildingId)?.name ?? 'a new home'}.` }); break;
+      case 'player.created': added.push(e.player.homeBuildingId
+        ? { tone: 'good', icon: 'home', text: `${e.player.name} moved into ${building(e.player.homeBuildingId)?.name ?? 'a new home'}.` }
+        : { tone: 'info', icon: 'person', text: `${e.player.name} is ready to move in.` }); break;
       case 'player.moved-in': added.push({ tone: 'good', icon: 'home', text: `Moved into ${building(e.homeBuildingId)?.name ?? 'a new home'}.` }); break;
       case 'player.home-lost': added.push({ tone: 'warn', icon: 'warning', text: 'Your home was removed. Choose a new one to rest and eat.' }); break;
       case 'player.relocated': added.push({ tone: e.stranded ? 'warn' : 'info', icon: 'pin', text: e.stranded ? 'The road under you was removed and none is nearby.' : e.reason === 'building-moved' ? 'You moved along with the building.' : 'You stepped onto the nearest road.' }); break;

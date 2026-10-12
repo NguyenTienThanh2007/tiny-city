@@ -177,7 +177,8 @@ export interface PlayerActivity {
 }
 
 export interface PlayerMovement {
-  readonly status: 'inside' | 'travelling' | 'standing';
+  /** 'unplaced': created but not yet moved in (no world position, no needs progress). */
+  readonly status: 'inside' | 'travelling' | 'standing' | 'unplaced';
   readonly heading: Position;
   /** Building the player is inside, or whose private entrance leg they are on. */
   readonly currentBuildingId: string | null;
@@ -204,7 +205,10 @@ export interface PlayerCharacter {
   readonly id: string;
   readonly name: string;
   readonly appearance: PlayerAppearance;
-  /** Null only after the home was lost (demolished); the player then chooses a new home. */
+  /**
+   * Null before the first move-in (unplaced) or after the home was lost. While null, population reconciliation keeps
+   * one room free for the player instead of creating new residents in it; existing residents are never displaced.
+   */
   readonly homeBuildingId: string | null;
   readonly position: Position;
   readonly movement: PlayerMovement;
@@ -223,7 +227,7 @@ export type PlayerDestination =
 export type PlayerActionKind = 'rest' | 'eat' | 'visit' | 'greet' | 'socialize';
 
 export type LifeCommand =
-  | { readonly type: 'player.create'; readonly name: string; readonly appearance: PlayerAppearance; readonly homeBuildingId: string }
+  | { readonly type: 'player.create'; readonly name: string; readonly appearance: PlayerAppearance; readonly homeBuildingId?: string }
   | { readonly type: 'player.customize'; readonly name: string; readonly appearance: PlayerAppearance }
   | { readonly type: 'player.move-in'; readonly homeBuildingId: string }
   | { readonly type: 'player.move-to'; readonly destination: PlayerDestination }
@@ -233,7 +237,7 @@ export type LifeCommand =
 export type LifeRejectionReason = 'invalid-command' | 'player-exists' | 'player-not-found' | 'invalid-name' |
   'invalid-appearance' | 'home-not-found' | 'not-a-home' | 'home-full' | 'already-home' | 'no-home' |
   'invalid-destination' | 'unreachable' | 'stranded' | 'building-not-found' | 'not-leisure' | 'no-venue' | 'venue-full' |
-  'citizen-not-found' | 'citizen-unavailable' | 'too-tired' | 'nothing-to-cancel';
+  'citizen-not-found' | 'citizen-unavailable' | 'too-tired' | 'nothing-to-cancel' | 'not-placed';
 
 export type PlayerSocialTopic = 'introduction' | 'commute' | 'leisure' | 'neighbourhood' | 'rest';
 

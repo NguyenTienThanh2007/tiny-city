@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { needLevel, PLAYER_BALANCE } from '@tiny-city/simulation';
-import type { Citizen, HomeOption, LifeRejectionReason, PlayerActionAvailability, PlayerCharacter, PlayerNeed, WorldState } from '@tiny-city/simulation';
+import type { Citizen, HomeOption, HousingSummary, LifeRejectionReason, PlayerActionAvailability, PlayerCharacter, PlayerNeed, WorldState } from '@tiny-city/simulation';
 import { activityLabels } from '../simulation/citizenView';
 import { CitizenAvatar } from './CitizenAvatar';
 import { describePlayer, NEED_LABELS, needWord, rejectionText, type PlayerLogEntry } from '../simulation/playerView';
@@ -37,7 +37,7 @@ const ACTION_META: Record<Exclude<ActionId, 'cancel' | 'greet' | 'socialize'>, {
 };
 const SHORT_REASON: Partial<Record<LifeRejectionReason, string>> = {
   'already-home': 'Already home', 'no-home': 'Need a home', 'unreachable': 'No road there', 'stranded': 'No road nearby',
-  'too-tired': 'Too tired', 'venue-full': 'Full right now', 'no-venue': 'No park yet', 'citizen-unavailable': 'Indoors right now',
+  'too-tired': 'Too tired', 'venue-full': 'Full right now', 'no-venue': 'No park yet', 'citizen-unavailable': 'Indoors right now', 'not-placed': 'Move in first',
 };
 
 export function ActionButton({ label, icon, hint, availability, onClick }: { label: string; icon: string; hint: string; availability: PlayerActionAvailability | undefined; onClick: () => void }) {
@@ -72,8 +72,12 @@ export function LifeEntry({ populationEnabled, onCreate }: { populationEnabled: 
   </section>;
 }
 
-export function HomePicker({ options, selectedId, purpose, populationEnabled, welcome, onWelcomeChange, onSelect, onConfirm, onBack, onBuildHome, kindOf }: {
+export function HomePicker({ options, selectedId, purpose, populationEnabled, welcome, onWelcomeChange, onSelect, onConfirm, onBack, onBuildHome, kindOf,
+  housing, fresh, playerName }: {
   options: readonly HomeOption[];
+  housing: HousingSummary;
+  fresh: ReadonlySet<string>;
+  playerName: string | null;
   selectedId: string | null;
   purpose: 'create' | 'move';
   populationEnabled: boolean;
@@ -87,23 +91,36 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
 }) {
   const available = options.filter((o) => o.available);
   const selected = options.find((o) => o.buildingId === selectedId) ?? null;
+  // Free and newly built homes first, then the rest in city order.
+  const ordered = [...options].sort((a, b) => Number(b.available) - Number(a.available) || Number(fresh.has(b.buildingId)) - Number(fresh.has(a.buildingId)));
   return <section className="life-panel home-picker" aria-labelledby="home-heading">
     <div className="panel-topline"><span>{purpose === 'create' ? 'LIFE MODE · STEP 2 OF 2' : 'LIFE MODE · MOVE HOME'}</span>
       <button className="panel-close" aria-label="Back" onClick={onBack}><Icon name="close" size={16} /></button></div>
     <h2 id="home-heading">Choose your home</h2>
     <p className="panel-lede">Green homes have a free room. You take one room; residents are never moved out for you.</p>
-    {available.length === 0 && <div className="hint-banner" role="status"><Icon name="warning" size={14} />
-      <span>{options.length === 0 ? 'There are no homes yet.' : 'Every home is full right now.'} Build a villa, townhouse or apartment beside a road, then come back.</span></div>}
-    {available.length === 0 && <button className="primary-action subtle" onClick={onBuildHome}><Icon name="villa" size={15} /> Build a home</button>}
+    {available.length === 0 && <div className="housing-recovery" role="region" aria-label="No free home">
+      <div className="housing-recovery-head"><Icon name="home" size={18} />
+        <strong>{options.length === 0 ? 'There are no homes yet' : 'Every home is full right now'}</strong></div>
+      {options.length > 0 && <div className="housing-meter" aria-label={`${housing.residents} of ${housing.rooms} rooms taken`}>
+        <span><b>{housing.residents}</b> of {housing.rooms} rooms taken in {housing.homes} home{housing.homes === 1 ? '' : 's'}</span>
+        <span className="meter"><i style={{ width: `${housing.rooms ? Math.min(100, housing.residents / housing.rooms * 100) : 0}%` }} /></span>
+      </div>}
+      <p>Residents are never moved out to make room for you. Build a villa, townhouse or apartment beside a road
+        {playerName ? <> and one room is kept free for <b>{playerName}</b></> : null} — new residents will not take it.</p>
+      {playerName && <p className="housing-saved"><Icon name="check" size={13} /> {playerName} is saved and waiting. You can come back here any time from the Life tab.</p>}
+      <button className="primary-action" onClick={onBuildHome}><Icon name="villa" size={15} /> Build a home</button>
+    </div>}
+    {available.length > 0 && fresh.size > 0 && <div className="hint-banner fresh-banner" role="status"><Icon name="sparkle" size={14} />
+      <span>New housing is ready{playerName ? ` — a room is waiting for ${playerName}` : ''}. Choose a highlighted home.</span></div>}
     <ul className="home-list" aria-label="Homes">
-      {options.map((o) => {
+      {ordered.map((o) => {
         const kind = kindOf(o.buildingId);
         const state = o.current ? 'Your home' : o.available ? (o.roadConnected ? 'Free room' : 'Free room · no road') : 'Full';
         return <li key={o.buildingId}>
-          <button type="button" className={`home-option ${o.available ? 'is-available' : 'is-full'} ${selectedId === o.buildingId ? 'is-selected' : ''}`}
+          <button type="button" className={`home-option ${o.available ? 'is-available' : 'is-full'} ${selectedId === o.buildingId ? 'is-selected' : ''} ${fresh.has(o.buildingId) ? 'is-fresh' : ''}`}
             aria-pressed={selectedId === o.buildingId} disabled={!o.available} onClick={() => onSelect(o.buildingId)}>
             {kind && <BuildingThumb kind={kind} />}
-            <span className="home-copy"><strong>{o.name}</strong><small>{o.residents} of {o.capacity} rooms taken</small></span>
+            <span className="home-copy"><strong>{o.name}{fresh.has(o.buildingId) && <em className="new-chip">New</em>}</strong><small>{o.residents} of {o.capacity} rooms taken</small></span>
             <span className={`home-chip ${o.available ? 'ok' : ''}`}>{state}</span>
           </button>
         </li>;

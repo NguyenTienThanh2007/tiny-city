@@ -32,6 +32,17 @@ Screenshots referenced below are in `docs/life/screenshots/` and were captured w
    - A confirm card explains the occupancy rule, warns when the home has no road, and offers to welcome residents
      too (checked by default when none live there yet).
    - With no free room, the picker says so and offers **Build a home**, which opens Build mode with the villa tool.
+   **Full-housing recovery** (`16`, `22`–`24`):
+   1. The character is created when you continue from the creator and is saved while waiting.
+   2. With no free room, the picker explains why, shows the real counts ("20 of 20 rooms taken in 10 homes"), says
+      residents are never moved out, and offers **Build a home**.
+   3. In Build mode a **Back to home selection** chip ("Mai needs a home") stays visible, and the Life tab title
+      reads "Choose a home for Mai".
+   4. Once a build frees a room (the engine holds one for the waiting character), a notice names the home, and the
+      chip shows the free room count.
+   5. Back in home selection, new homes are listed first with a **New** chip and a gold halo badge on the map.
+   6. Confirm, then move in to spawn and play. No restart or save editing is needed. On phones, Build mode opens with
+      the map visible.
 4. **First spawn** (`05`): the character appears inside their home, shown by a terracotta pin over the roof. Time
    resumes, the camera focuses, and a welcome toast explains the controls.
 

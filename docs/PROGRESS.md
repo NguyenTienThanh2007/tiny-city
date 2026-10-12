@@ -80,3 +80,12 @@ Results: typecheck pass · unit 122 · simulation 261 · architect 31 · securit
 Notes for resuming: the browser pane in this desktop app is often hidden, which (by design) freezes the clock;
 use Playwright (`e2e/life-mode.spec.ts`, `scripts/capture_life.mjs`) for timed checks. Software-render benchmarks
 must run on an otherwise idle machine.
+
+## AI Architect 2.0 + Life Mode housing fix (branch `feature/ai-architect-2`, from `origin/main` @ `131f1df`)
+
+- [x] Life Mode housing: reproduced (engine + browser), unplaced characters, held room for a homeless player,
+  recovery UX (explanation, Build a home, Back to home selection chip, New homes), tests, docs
+  (`docs/acceptance/ai-architect-2-and-life-housing.md`).
+- [ ] AI Architect 2.0: requirements not provided in this session; nothing implemented yet.
+
+Results: typecheck pass · unit 123 · simulation 270 · architect 31 · security 0 · build pass · API 61 · e2e 35.

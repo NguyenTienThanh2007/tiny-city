@@ -24,6 +24,6 @@ export type { LegacyWorldOptions } from './serialization.js';
 export { RoadNavigator, NPC_LIMITS, buildingCenter, containsPosition } from './navigation.js';
 export type { NavigationStats, RouteResult } from './navigation.js';
 export { createDailyRoutine, providesJobs, providesLeisure } from './population.js';
-export { PLAYER_ID, PLAYER_APPEARANCE_OPTIONS, PLAYER_BALANCE, PLAYER_LIMITS, applyLifeCommand, isPlayerAppearance, needLevel,
-  normalizePlayerName, playerActionAvailability, playerHomeOptions } from './player.js';
-export type { HomeOption, PlayerActionAvailability } from './player.js';
+export { PLAYER_ID, PLAYER_APPEARANCE_OPTIONS, PLAYER_BALANCE, PLAYER_LIMITS, applyLifeCommand, housingSummary, isPlayerAppearance,
+  isPlayerPlaced, needLevel, normalizePlayerName, playerActionAvailability, playerHomeOptions } from './player.js';
+export type { HomeOption, HousingSummary, PlayerActionAvailability } from './player.js';
