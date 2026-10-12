@@ -105,3 +105,14 @@ The remote branch existed with no commits beyond `main`; reused. Acceptance: `do
   `scripts/p45_benchmark.mjs` (results in `docs/acceptance/phase-4-5-benchmark-results.json`)
 
 Design gaps for Living Society (Phase 7): synchronized routines (±20 min), no weekends, sample city has no jobs.
+
+## Visual World 3.0A graphics foundation (branch `feature/visual-world-3a`, from `origin/main` @ `8d25d5a`)
+
+Phase 4.5 (#13) is merged and green. Acceptance: `docs/visual-world-3/acceptance-3.0a.md`.
+
+- [x] Rendering audit (options A–E) → offline Three.js bake to iso sprite atlases plus a Pixi runtime (`docs/visual-world-3/rendering-architecture.md`)
+- [x] Art pipeline: `scripts/art/` (kit, stage with colour + GTAO, shadow and emissive passes, packer, review sheet), manifest validation, fallback
+- [x] Slice assets: villa ×4, townhouse ×3, apartment ×3 (both facings), park ×3, 16 road masks, 12 trees/shrubs, lamp, benches, planter, flowers
+- [x] Runtime: baked buildings, roads, decor; ground shadow layer; warm night glow; sprite ghost; reveal-mask construction; terrain painter; `sun` lighting; street trees
+- [x] Visual QA: before/after at matched cameras (`docs/visual-world-3/screenshots`), benchmark (`benchmark-3.0a.json`)
+- [ ] After review: 3.0B (duplex, clubhouse, pool, mall, office; roads and public spaces; vegetation) on `feature/visual-world-3b`
