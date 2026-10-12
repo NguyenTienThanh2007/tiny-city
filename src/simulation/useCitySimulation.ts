@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Simulation } from '@tiny-city/simulation';
-import type { CityCommand, CitySnapshot, PopulationOptions, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
+import type { CityCommand, CitySnapshot, LifeCommand, PopulationOptions, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../types';
 import { createCityWorld } from './cityAdapter';
 
@@ -69,6 +69,13 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
     publish(result);
     return result;
   }, [simulation, publish]);
+  /** Phase 4 Life Mode commands go through the same simulation instance and publish immediately. */
+  const executeLife = useCallback((command: LifeCommand) => {
+    const result = simulation.executeLife(command);
+    publish(result);
+    return result;
+  }, [simulation, publish]);
+  const getNavigator = useCallback(() => simulation.getNavigator(), [simulation]);
   const restoreCity = useCallback((snapshot: CitySnapshot) => publish(simulation.restoreCity(snapshot)), [simulation, publish]);
   const getCitySnapshot = useCallback(() => simulation.getCitySnapshot(), [simulation]);
 
@@ -102,5 +109,5 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   const getBuildingOccupancy = useCallback((id: string) => simulation.getBuildingOccupancy(id), [simulation]);
   const enablePopulation = useCallback((options: PopulationOptions = {}) => publish(simulation.enablePopulation(options)), [simulation, publish]);
   return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy };
+    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy, executeLife, getNavigator };
 }

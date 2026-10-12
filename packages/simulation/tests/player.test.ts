@@ -165,10 +165,11 @@ describe('needs', () => {
     const sim = withPlayer();
     sim.step(60);
     const { needs } = sim.getPlayer()!;
-    expect(needs.energy).toBeCloseTo(80 - 60 * PLAYER_BALANCE.decay.energy, 6);
-    expect(needs.hunger).toBeCloseTo(70 - 60 * PLAYER_BALANCE.decay.hunger, 6);
-    expect(needs.social).toBeCloseTo(55 - 60 * PLAYER_BALANCE.decay.social, 6);
-    sim.step(4000);
+    const start = PLAYER_BALANCE.initialNeeds;
+    expect(needs.energy).toBeCloseTo(start.energy - 60 * PLAYER_BALANCE.decay.energy, 6);
+    expect(needs.hunger).toBeCloseTo(start.hunger - 60 * PLAYER_BALANCE.decay.hunger, 6);
+    expect(needs.social).toBeCloseTo(start.social - 60 * PLAYER_BALANCE.decay.social, 6);
+    sim.step(6000);
     for (const value of Object.values(sim.getPlayer()!.needs)) { expect(value).toBeGreaterThanOrEqual(0); expect(value).toBeLessThanOrEqual(100); }
     expect(sim.getPlayer()!.needs).toMatchObject({ energy: 0, hunger: 0, social: 0 });
     valid(sim);
@@ -193,7 +194,7 @@ describe('needs', () => {
     const sim = withPlayer();
     const events = runUntil(sim, (ev) => ev.some((e) => e.type === 'player.need-changed' && e.need === 'hunger' && e.level === 'low'));
     expect(events.filter((e) => e.type === 'player.need-changed').map((e) => e.type === 'player.need-changed' && `${e.need}:${e.level}`)).toContain('hunger:low');
-    expect(sim.getPlayer()!.needs.mood).toBeLessThan(70);
+    expect(sim.getPlayer()!.needs.mood).toBeLessThan(PLAYER_BALANCE.initialNeeds.mood);
   });
 
   it('exhaustion blocks socializing and visits but not resting', () => {
@@ -323,7 +324,7 @@ describe('activities', () => {
     sim.executeLife({ type: 'player.start-activity', activity: 'eat' });
     sim.step(10);
     const hunger = sim.getPlayer()!.needs.hunger;
-    expect(hunger).toBeCloseTo(70 + 10 * PLAYER_BALANCE.activities.eat.hunger, 6);
+    expect(hunger).toBeCloseTo(PLAYER_BALANCE.initialNeeds.hunger + 10 * PLAYER_BALANCE.activities.eat.hunger, 6);
     expect(sim.executeLife({ type: 'player.cancel' }).events[0]).toMatchObject({ outcome: { kind: 'eat', result: 'cancelled', elapsedMinutes: 10 } });
     expect(sim.getPlayer()!.needs.hunger).toBe(hunger);
     expect(sim.getPlayer()!.movement.status).toBe('inside');

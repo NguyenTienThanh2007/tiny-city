@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
-import type { SimulationEvent, WorldState } from '@tiny-city/simulation';
+import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
+import type { LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { PlanProposal, PlanningConstraints, PlanningHost } from '@tiny-city/ai-architect';
 import CityViewport from './game/CityViewport';
-import type { CameraRequest, SafeArea } from './game/CityViewport';
+import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea } from './game/CityViewport';
+import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
+import { ActionButton, HomePicker, LifeEntry, LifePanel, LifeStrip, PlaceCard } from './ui/LifePanel';
+import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, rejectionText, type PlayerLogState } from './simulation/playerView';
+import { DEFAULT_APPEARANCE } from './game/playerLook';
 import { Icon } from './ui/Icon';
 import { MiniMap } from './ui/MiniMap';
 import { SimulationDock } from './ui/SimulationDock';
@@ -26,7 +30,10 @@ import { projectCity } from './simulation/cityAdapter';
 import { BUILDINGS, type BuildingKind, type CityState, type Cell, type Tool } from './types';
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
-type BaseMode = 'build' | 'live';
+type BaseMode = 'build' | 'live' | 'life';
+/** Life Mode onboarding: look & name in the creator, then a home chosen on the map. */
+type LifeFlow = { step: 'identity'; draft: CharacterDraft; editing: boolean } |
+  { step: 'home'; draft: CharacterDraft | null; purpose: 'create' | 'move'; selectedId: string | null };
 const GUIDE_KEY = 'tiny-city-guide-hidden';
 const promptSuggestions = [
   'Build three villas around a small park',
@@ -111,7 +118,7 @@ function App() {
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
   const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy } = useCitySimulation(loaded.city, loaded.world);
+    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator } = useCitySimulation(loaded.city, loaded.world);
   const [baseMode, setBaseMode] = useState<BaseMode>('build');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCitizenId, setSelectedCitizenId] = useState<string | null>(null);
@@ -127,6 +134,14 @@ function App() {
   const connectionCheckedAt = useRef(0);
   const plannerFormRef = useRef<HTMLFormElement>(null);
   const [fundsDelta, setFundsDelta] = useState<{ id: number; amount: number } | null>(null);
+  const [lifeFlow, setLifeFlow] = useState<LifeFlow | null>(null);
+  const [welcomeWithPlayer, setWelcomeWithPlayer] = useState(true);
+  const [followPlayer, setFollowPlayer] = useState(true);
+  const [lifePlaceId, setLifePlaceId] = useState<string | null>(null);
+  const [lifeFeedback, setLifeFeedback] = useState<LifeFeedback | null>(null);
+  const [lifeEdits, setLifeEdits] = useState(0);
+  const [playerLog, setPlayerLog] = useState<PlayerLogState>(emptyPlayerLog);
+  const playerLogRef = useRef<PlayerLogState>(emptyPlayerLog);
   const cityRef = useRef(city);
   cityRef.current = city;
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -358,6 +373,9 @@ function App() {
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === 'Escape') setLifePlaceId(null);
+      // Build shortcuts never change tools while you control your character.
+      if (baseModeRef.current === 'life' && event.key !== 'Escape' && event.key !== ' ') return;
       const shortcuts: Record<string, Tool> = { v: 'select', r: 'road', m: 'move', x: 'bulldoze',
         ...Object.fromEntries(buildingKinds.map((kind, index) => [String(index + 1), kind])) };
       const next = shortcuts[key];
@@ -653,18 +671,155 @@ function App() {
   };
   const zoomCamera = (zoom: number) => setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, zoom }));
 
-  const chooseMode = (next: 'build' | 'plan' | 'live') => {
-    setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null);
+  const chooseMode = (next: 'build' | 'plan' | 'live' | 'life') => {
+    setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null); setLifePlaceId(null);
     if (next === 'plan') {
       setArchitectPanelOpen((open) => compact ? !open : true);
       setSheetOpen(false);
       return;
     }
     setArchitectPanelOpen(false);
+    if (next !== 'life' && lifeFlow?.step === 'home') setLifeFlow(null);
     if (compact) setSheetOpen((open) => baseMode === next && mode === next ? !open : true);
     setBaseMode(next);
     if (next === 'live') { setTool('select'); setUnseenFeed(0); }
+    if (next === 'life') { setTool('select'); setFollowPlayer(true); }
   };
+
+  // ---------- Phase 4 Life Mode ----------
+  const player = world.player ?? null;
+  const lifeActive = mode === 'life';
+  const runLife = useCallback((command: LifeCommand, success?: string) => {
+    const result = executeLife(command);
+    if (!result.applied) { if (result.reason) showNotice(rejectionText[result.reason]); return result; }
+    setSaved(false);
+    setLifeEdits((count) => count + 1);
+    if (success) showNotice(success);
+    else if (getSnapshot().clock.paused && command.type !== 'player.cancel' && command.type !== 'player.customize') showNotice('Time is paused. Press Resume (Space) to set off.');
+    return result;
+  }, [executeLife, showNotice, getSnapshot]);
+  const focusPlayer = useCallback(() => {
+    const current = getSnapshot().player;
+    if (current) setCameraRequest((request) => ({ id: (request?.id ?? 0) + 1, cell: current.position, scale: 1.2 }));
+  }, [getSnapshot]);
+  useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
+    const next = reducePlayerLog(playerLogRef.current, events, state);
+    if (next !== playerLogRef.current) { playerLogRef.current = next; setPlayerLog(next); }
+    if (events.some((event) => event.type === 'player.home-lost')) { showNotice('Your home was removed. Choose a new home in Life mode.'); return; }
+    const failed = events.find((event) => event.type === 'player.activity-ended' && event.outcome.result === 'failed');
+    if (failed?.type === 'player.activity-ended' && failed.outcome.reason) showNotice(`${activityNames[failed.outcome.kind]} stopped: ${failureText[failed.outcome.reason]}.`);
+  }), [subscribe, showNotice]);
+  const lifeActions: readonly PlayerActionAvailability[] = useMemo(() => player && (lifeActive || selectedCitizenId) && !lifeFlow
+    ? playerActionAvailability(world, getNavigator(), selectedCitizenId ?? undefined) : [], [player, lifeActive, lifeFlow, world, getNavigator, selectedCitizenId]);
+  // Residents close to the player (on the street within six tiles, or in the same venue), nearest first.
+  const nearby = useMemo(() => {
+    if (!player || !lifeActive) return [];
+    const venue = player.movement.status === 'inside' ? player.movement.currentBuildingId : null;
+    const names = new Map(world.plan.buildings.map((b) => [b.id, b.name]));
+    return world.citizens.flatMap((citizen) => {
+      const m = citizen.movement;
+      if (venue && m?.status === 'inside' && m.currentBuildingId === venue) return [{ citizen, distance: 0, where: `here at ${names.get(venue) ?? 'this place'}` }];
+      if (!m || m.status === 'inside' || m.currentBuildingId !== null) return [];
+      const distance = Math.hypot(citizen.position.x - player.position.x, citizen.position.y - player.position.y);
+      return distance <= 6 ? [{ citizen, distance, where: `${Math.max(1, Math.round(distance))} tile${Math.round(distance) === 1 ? '' : 's'} away` }] : [];
+    }).sort((a, b) => a.distance - b.distance || (a.citizen.id < b.citizen.id ? -1 : 1)).slice(0, 4);
+  }, [player, lifeActive, world.citizens, world.plan.buildings]);
+  const dryRun = (command: LifeCommand): PlayerActionAvailability => {
+    const result = applyLifeCommand(world, command, getNavigator());
+    return { action: 'cancel', available: result.reason === null, reason: result.reason };
+  };
+  const homeOptions = useMemo(() => lifeFlow?.step === 'home' ? playerHomeOptions(world, getNavigator()) : [],
+    // Vacancies change only with the plan, residents or the player's home.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lifeFlow?.step, world.plan, world.citizens.length, world.player?.homeBuildingId, getNavigator]);
+  const homeSelectedId = lifeFlow?.step === 'home' ? lifeFlow.selectedId : null;
+  const homeHighlights: HomeHighlight[] | null = useMemo(() => lifeFlow?.step === 'home' ? homeOptions.flatMap((option) => {
+    const building = world.plan.buildings.find((entry) => entry.id === option.buildingId);
+    return building ? [{ id: building.id, x: building.position.x, y: building.position.y, width: building.footprint.width, height: building.footprint.height,
+      available: option.available, selected: option.buildingId === homeSelectedId }] : [];
+  }) : null, [lifeFlow?.step, homeOptions, homeSelectedId, world.plan]);
+  const openCreator = () => { setLifeFlow({ step: 'identity', draft: { name: '', appearance: DEFAULT_APPEARANCE }, editing: false }); setSelectedCitizenId(null); };
+  const selectHome = (id: string) => {
+    if (lifeFlow?.step !== 'home') return;
+    setLifeFlow({ ...lifeFlow, selectedId: id });
+    const building = getSnapshot().plan.buildings.find((entry) => entry.id === id);
+    if (building) setCameraRequest((request) => ({ id: (request?.id ?? 0) + 1, cell: { x: building.position.x + building.footprint.width / 2, y: building.position.y + building.footprint.height / 2 } }));
+  };
+  const confirmHome = () => {
+    if (lifeFlow?.step !== 'home' || !lifeFlow.selectedId) return;
+    if (lifeFlow.purpose === 'move') {
+      const result = runLife({ type: 'player.move-in', homeBuildingId: lifeFlow.selectedId }, 'You moved into your new home.');
+      if (result.applied) { setLifeFlow(null); focusPlayer(); }
+      return;
+    }
+    if (!lifeFlow.draft) return;
+    const result = runLife({ type: 'player.create', name: lifeFlow.draft.name, appearance: lifeFlow.draft.appearance, homeBuildingId: lifeFlow.selectedId });
+    if (!result.applied) return;
+    if (welcomeWithPlayer && !getSnapshot().population) enablePopulation({ maxCitizens: 1000 });
+    resume();
+    setLifeFlow(null); setFollowPlayer(true); setBaseMode('life'); setSheetOpen(false); focusPlayer();
+    showNotice(`Welcome home, ${lifeFlow.draft.name}! Click a road to walk, or choose an action.`);
+  };
+  const onLifeTarget = (target: LifeTarget) => {
+    if (lifeFlow?.step === 'home') {
+      if (target.type !== 'building') return;
+      const option = homeOptions.find((entry) => entry.buildingId === target.id);
+      if (option?.available) selectHome(target.id);
+      else showNotice(option ? rejectionText[option.current ? 'already-home' : 'home-full'] : 'Choose one of the highlighted homes.');
+      return;
+    }
+    if (!player) { if (target.type === 'citizen' && populationEnabled) selectCitizen(target.id); return; }
+    if (target.type === 'player') { setSelectedCitizenId(null); setLifePlaceId(null); if (compact) setSheetOpen(true); return; }
+    if (target.type === 'citizen') { selectCitizen(target.id); return; }
+    if (target.type === 'building') { setSelectedCitizenId(null); setLifePlaceId(target.id); if (compact) setSheetOpen(true); return; }
+    const result = runLife({ type: 'player.move-to', destination: { type: 'tile', position: target.cell } });
+    setLifeFeedback((current) => ({ id: (current?.id ?? 0) + 1, cell: target.cell, ok: result.applied }));
+    if (result.applied) { setLifePlaceId(null); setSelectedCitizenId(null); }
+  };
+  const lifePlace = lifeActive && player && lifePlaceId ? world.plan.buildings.find((entry) => entry.id === lifePlaceId) ?? null : null;
+  const placeCard = (() => {
+    if (!lifePlace || !player) return null;
+    const runLifeAction = (command: LifeCommand) => { if (runLife(command).applied) setLifePlaceId(null); };
+    const kind = city.buildings.find((entry) => entry.id === lifePlace.id)?.kind ?? 'villa';
+    const occupancy = getBuildingOccupancy(lifePlace.id);
+    const own = lifePlace.id === player.homeBuildingId;
+    const vacancy = lifePlace.kind === 'home' ? lifePlace.capacity - world.citizens.filter((c) => c.homeBuildingId === lifePlace.id).length - (own ? 1 : 0) : 0;
+    const detail = own ? `Your home · ${occupancy.residentIds.length + 1} of ${lifePlace.capacity} rooms taken`
+      : lifePlace.kind === 'home' ? `${BUILDINGS[kind].label} · ${vacancy > 0 ? `${vacancy} free room${vacancy === 1 ? '' : 's'}` : 'no free rooms'}`
+      : isLeisure(lifePlace) ? `${BUILDINGS[kind].label} · ${occupancy.visitorIds.length} of ${lifePlace.capacity} visitors now`
+      : `${BUILDINGS[kind].label} · ${occupancy.workerIds.length} working here · not open to visit`;
+    const walk = <ActionButton key="walk" label="Walk here" icon="walk" hint={own ? 'Go inside' : 'Stop at the entrance'}
+      availability={dryRun({ type: 'player.move-to', destination: { type: 'building', buildingId: lifePlace.id } })}
+      onClick={() => runLifeAction({ type: 'player.move-to', destination: { type: 'building', buildingId: lifePlace.id } })} />;
+    const actions = own ? [walk,
+      <ActionButton key="rest" label="Rest" icon="bed" hint="120 min · restores energy" availability={dryRun({ type: 'player.start-activity', activity: 'rest' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'rest' })} />,
+      <ActionButton key="eat" label="Eat" icon="leaf" hint="30 min · fills hunger" availability={dryRun({ type: 'player.start-activity', activity: 'eat' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'eat' })} />]
+      : isLeisure(lifePlace) ? [<ActionButton key="visit" label="Visit" icon="park" hint="60 min · lifts mood" availability={dryRun({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })}
+        onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })} />, walk]
+      : lifePlace.kind === 'home' && vacancy > 0 ? [walk, <ActionButton key="move-in" label="Move in here" icon="home" hint="Take a free room" availability={{ action: 'cancel', available: true, reason: null }}
+        onClick={() => { setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: lifePlace.id }); setLifePlaceId(null); }} />]
+      : [walk];
+    return <PlaceCard name={lifePlace.name} kind={kind} detail={detail} actions={actions} />;
+  })();
+  // Interacting from any mode hands control to Life mode, keeping the resident's profile open.
+  const interact = (activity: 'greet' | 'socialize', citizenId: string) => {
+    if (runLife({ type: 'player.start-activity', activity, citizenId }).applied && mode !== 'life') {
+      setArchitectPanelOpen(false); setBaseMode('life'); setTool('select'); setFollowPlayer(true);
+    }
+  };
+  const citizenLifeActions = player && selectedCitizen ? (() => {
+    const met = player.acquaintances.includes(selectedCitizen.id);
+    const talking = player.activity.citizenId === selectedCitizen.id && (player.activity.kind === 'greet' || player.activity.kind === 'socialize');
+    const byAction = new Map(lifeActions.map((entry) => [entry.action, entry]));
+    return <div className="life-interact" role="region" aria-label="Interact">
+      <div className="section-heading"><span>INTERACT</span><small>{met ? 'You have met' : 'Not met yet'}</small></div>
+      {talking && <p className="life-talking">{player.activity.phase === 'performing' ? `${activityNames[player.activity.kind]} · ${Math.floor(player.activity.elapsedMinutes)} of ${player.activity.durationMinutes} min` : 'Walking over…'}</p>}
+      <div className="life-actions">
+        <ActionButton label="Greet" icon="people" hint="5 min · a quick hello" availability={byAction.get('greet')} onClick={() => interact('greet', selectedCitizen.id)} />
+        <ActionButton label="Chat" icon="sparkle" hint="30 min · lifts social" availability={byAction.get('socialize')} onClick={() => interact('socialize', selectedCitizen.id)} />
+      </div>
+    </div>;
+  })() : null;
 
   const welcomeResidents = () => {
     if (getSnapshot().population) return;
@@ -687,11 +842,12 @@ function App() {
     { id: 'meet', label: 'Meet a resident', hint: 'Click someone walking on the map to see their routine.', done: metResident },
   ];
 
-  const dirty = history.length > 0 || redoHistory.length > 0 || world.clock.tick !== loaded.world.clock.tick || populationEnabled !== (loaded.world.population !== undefined);
-  const view = selectedCitizen ? 'citizen' : selectedBuilding && !movingBuildingId ? 'building' : mode;
-  const sheetVisible = compact && (view === 'citizen' || view === 'building' || architectPanelOpen || sheetOpen);
-  // Collapsing hides only the Build/Live overview; inspectors and the AI panel still open when relevant.
-  const panelHidden = !compact && panelCollapsed && (view === 'build' || view === 'live');
+  const dirty = history.length > 0 || redoHistory.length > 0 || world.clock.tick !== loaded.world.clock.tick || populationEnabled !== (loaded.world.population !== undefined) || lifeEdits > 0;
+  const view = selectedCitizen ? 'citizen' : selectedBuilding && !movingBuildingId && mode !== 'life' ? 'building' : mode;
+  const lifeSheet = view === 'life' && (lifeFlow?.step === 'home' || !!lifePlace);
+  const sheetVisible = compact && (view === 'citizen' || view === 'building' || architectPanelOpen || sheetOpen || lifeSheet);
+  // Collapsing hides only the Build/Live/Life overview; inspectors, the AI panel and home selection still open when relevant.
+  const panelHidden = !compact && panelCollapsed && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet);
   const togglePanel = (collapsed: boolean) => { setPanelCollapsed(collapsed); writeFlag(PANEL_KEY, collapsed); };
   const selectedFootprint = selectedBuilding ? { x: selectedBuilding.x, y: selectedBuilding.y, width: BUILDINGS[selectedBuilding.kind].width, height: BUILDINGS[selectedBuilding.kind].height } : null;
   const proposalBreakdown = currentProposal ? Object.entries(currentProposal.placements
@@ -720,7 +876,7 @@ function App() {
           followCitizenId={followCitizenId}
           onSelectBuilding={selectBuilding}
           onSelectCitizen={populationEnabled ? selectCitizen : undefined}
-          onFollowEnd={() => setFollowCitizenId(null)}
+          onFollowEnd={() => { setFollowCitizenId(null); setFollowPlayer(false); }}
           onPlaceBuilding={placeBuilding}
           onBeginMoveBuilding={beginMoveBuilding}
           onMoveBuilding={moveBuilding}
@@ -731,6 +887,12 @@ function App() {
           safeArea={safeArea}
           onBeginGesture={beginGesture}
           onEndGesture={endGesture}
+          lifeMode={lifeActive}
+          onLifeTarget={onLifeTarget}
+          onSelectPlayer={player ? () => chooseMode('life') : undefined}
+          followPlayer={lifeActive && followPlayer && !!player && !followCitizenId && !lifeFlow}
+          lifeFeedback={lifeFeedback}
+          homeHighlights={homeHighlights}
         />
         {overlayProposal && <div className="preview-ribbon" role="note"><Icon name="sparkle" size={14} /> AI preview · not built yet</div>}
       </section>
@@ -751,6 +913,8 @@ function App() {
             <Icon name="sparkle" size={16} /><span>Plan</span></button>
           <button className={`mode-tab ${mode === 'live' ? 'active' : ''}`} aria-pressed={mode === 'live'} onClick={() => chooseMode('live')} title="Watch residents live their day">
             <Icon name="people" size={16} /><span>Live</span>{unseenFeed > 0 && <b className="tab-badge" aria-label={`${unseenFeed} new city life updates`}>{unseenFeed}</b>}</button>
+          <button className={`mode-tab ${mode === 'life' ? 'active' : ''}`} aria-pressed={mode === 'life'} onClick={() => chooseMode('life')} title={player ? `Continue life as ${player.name}` : 'Create a character and live in the city'}>
+            <Icon name="person" size={16} /><span>Life</span></button>
         </nav>
         <div className="hud-stats">
           <div className="hud-stat cash" title="Funds available for construction"><Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds</small>
@@ -823,10 +987,10 @@ function App() {
       {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check"><Icon name="check" size={12} /></span>{notice}</div>}
 
       {panelHidden && <button className="panel-handle" aria-label="Show side panel" title="Show side panel" onClick={() => togglePanel(false)}>
-        <Icon name="chevron" size={16} className="is-flipped" /><span>{mode === 'live' ? 'Live' : 'Build'}</span></button>}
+        <Icon name="chevron" size={16} className="is-flipped" /><span>{mode === 'live' ? 'Live' : mode === 'life' ? 'Life' : 'Build'}</span></button>}
       <aside className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''} ${panelHidden ? 'is-collapsed' : ''}`}>
-        {!compact && (view === 'build' || view === 'live') && <button className="panel-collapse" aria-label="Collapse side panel" title="Collapse side panel" onClick={() => togglePanel(true)}><Icon name="chevron" size={16} /></button>}
-        {compact && sheetVisible && (view === 'build' || view === 'live') && !architectPanelOpen && <button className="sheet-close" aria-label="Close panel" onClick={() => setSheetOpen(false)}><Icon name="close" size={16} /></button>}
+        {!compact && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet) && <button className="panel-collapse" aria-label="Collapse side panel" title="Collapse side panel" onClick={() => togglePanel(true)}><Icon name="chevron" size={16} /></button>}
+        {compact && sheetVisible && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet) && !architectPanelOpen && <button className="sheet-close" aria-label="Close panel" onClick={() => setSheetOpen(false)}><Icon name="close" size={16} /></button>}
         <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">
           <div className="panel-topline"><span>AI ARCHITECT</span><span className={`architect-chip state-${architectState.status}`}>{architectStatusLabel[architectState.status]}</span></div>
           <div className="architect-heading-row"><span className="architect-sparkle"><Icon name="sparkle" size={18} /></span>
@@ -923,7 +1087,8 @@ function App() {
           onFocus={() => focusCitizen(selectedCitizen.id)}
           onFollow={() => setFollowCitizenId((current) => current === selectedCitizen.id ? null : selectedCitizen.id)}
           onClose={() => { setSelectedCitizenId(null); setFollowCitizenId(null); }}
-          onSelectBuilding={(id) => selectBuilding(id)} />}
+          onSelectBuilding={(id) => { if (lifeActive) { setSelectedCitizenId(null); setLifePlaceId(id); } else selectBuilding(id); }}
+          lifeActions={citizenLifeActions} />}
 
         {view === 'building' && selectedBuilding && <BuildingInspector building={selectedBuilding} roadConnected={roadConnected}
           occupancy={populationEnabled ? getBuildingOccupancy(selectedBuilding.id) : null}
@@ -946,7 +1111,34 @@ function App() {
         {view === 'live' && <LivePanel populationEnabled={populationEnabled} homes={villas} capacity={homeCapacity} citizens={citizens}
           summary={activitySummary} jobless={jobless} feed={feed.entries} paused={world.clock.paused} selectedCitizenId={selectedCitizenId}
           onWelcome={welcomeResidents} onResume={() => { resume(); setSaved(false); }} onSelectCitizen={(id) => { selectCitizen(id); focusCitizen(id); }} />}
+
+        {view === 'life' && lifeFlow?.step === 'home' && <HomePicker options={homeOptions} selectedId={lifeFlow.selectedId} purpose={lifeFlow.purpose}
+          populationEnabled={populationEnabled} welcome={welcomeWithPlayer} onWelcomeChange={setWelcomeWithPlayer} onSelect={selectHome} onConfirm={confirmHome}
+          onBack={() => setLifeFlow(lifeFlow.purpose === 'create' && lifeFlow.draft ? { step: 'identity', draft: lifeFlow.draft, editing: false } : null)}
+          onBuildHome={() => { setLifeFlow(null); chooseMode('build'); setTool('villa'); }}
+          kindOf={(id) => city.buildings.find((entry) => entry.id === id)?.kind} />}
+        {view === 'life' && lifeFlow?.step !== 'home' && !player && <LifeEntry populationEnabled={populationEnabled} onCreate={openCreator} />}
+        {view === 'life' && lifeFlow?.step !== 'home' && player && <LifePanel player={player} world={world} actions={lifeActions} log={playerLog.entries}
+          paused={world.clock.paused} following={followPlayer && !followCitizenId} place={placeCard}
+          nearby={nearby} onSelectCitizen={(id) => { selectCitizen(id); if (compact) setSheetOpen(true); }}
+          onAction={(action) => runLife(action === 'go-home' ? { type: 'player.move-to', destination: { type: 'building', buildingId: player.homeBuildingId ?? '' } }
+            : action === 'visit' ? { type: 'player.start-activity', activity: 'visit' } : { type: 'player.start-activity', activity: action })}
+          onCancel={() => runLife({ type: 'player.cancel' })} onFocus={focusPlayer}
+          onFollow={() => { setFollowCitizenId(null); setFollowPlayer((value) => !value); }}
+          onEdit={() => setLifeFlow({ step: 'identity', draft: { name: player.name, appearance: player.appearance }, editing: true })}
+          onChangeHome={() => setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: null })}
+          onResume={() => { resume(); setSaved(false); }} onClosePlace={() => setLifePlaceId(null)} />}
       </aside>
+      {lifeActive && player && !lifeFlow && <LifeStrip player={player} world={world} following={followPlayer && !followCitizenId}
+        onOpen={() => { setSelectedCitizenId(null); setLifePlaceId(null); if (compact) setSheetOpen(true); else if (panelCollapsed) togglePanel(false); }}
+        onFollow={() => { setFollowCitizenId(null); setFollowPlayer((value) => !value); }} onCancel={() => runLife({ type: 'player.cancel' })} />}
+      {lifeFlow?.step === 'identity' && <CharacterCreator initial={lifeFlow.draft} editing={lifeFlow.editing} onCancel={() => setLifeFlow(null)}
+        onSubmit={(draft) => {
+          if (lifeFlow.editing) { const result = runLife({ type: 'player.customize', name: draft.name, appearance: draft.appearance }, 'Look saved.'); if (result.applied) setLifeFlow(null); return; }
+          setLifeFlow({ step: 'home', draft, purpose: 'create', selectedId: null });
+          setBaseMode('life'); setArchitectPanelOpen(false); setSelectedCitizenId(null);
+          if (panelCollapsed) togglePanel(false);
+        }} />}
     </main>
   );
 }

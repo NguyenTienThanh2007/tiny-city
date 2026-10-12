@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Citizen, CitizenActivity, WorldState } from '@tiny-city/simulation';
 import { activityLabels, describeCitizen, scheduleRows } from '../simulation/citizenView';
 import { CitizenAvatar } from './CitizenAvatar';
@@ -7,7 +8,7 @@ export const activityIcons: Record<CitizenActivity, string> = {
   sleep: 'bed', home: 'home', work: 'briefcase', leisure: 'leaf', idle: 'clock', travel: 'walk',
 };
 
-export function CitizenInspector({ citizen, world, minuteOfDay, following, onFocus, onFollow, onClose, onSelectBuilding }: {
+export function CitizenInspector({ citizen, world, minuteOfDay, following, onFocus, onFollow, onClose, onSelectBuilding, lifeActions }: {
   citizen: Citizen;
   world: WorldState;
   minuteOfDay: number;
@@ -16,6 +17,8 @@ export function CitizenInspector({ citizen, world, minuteOfDay, following, onFoc
   onFollow: () => void;
   onClose: () => void;
   onSelectBuilding: (id: string) => void;
+  /** Phase 4: interaction choices when the player is in Life mode. */
+  lifeActions?: ReactNode;
 }) {
   const details = describeCitizen(citizen, world);
   const rows = scheduleRows(citizen, world, minuteOfDay);
@@ -38,6 +41,7 @@ export function CitizenInspector({ citizen, world, minuteOfDay, following, onFoc
       <button className={`outline-action ${following ? 'is-active' : ''}`} aria-pressed={following} onClick={onFollow}>
         <Icon name="follow" size={15} /> {following ? 'Following' : 'Follow'}</button>
     </div>
+    {lifeActions}
     <dl className="fact-list">
       <div><dt><Icon name="pin" size={14} /> Location</dt><dd>{details.location}</dd></div>
       <div><dt><Icon name="route" size={14} /> Travel</dt><dd>{details.travelStatus}{details.remainingTiles !== null ? ` · ${details.remainingTiles} tiles left` : ''}</dd></div>

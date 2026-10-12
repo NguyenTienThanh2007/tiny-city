@@ -9,6 +9,7 @@ import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
 import { buildingLift, drawBuildingArt, polygon, roofCapHeight, type RoadSides } from './buildingArt';
 import { NpcLayer, npcSpriteScale, type LocalBounds } from './npcLayer';
+import { PlayerLayer, type HomeHighlight, type LifeFeedback } from './playerLayer';
 import { DecorLayer } from './decorLayer';
 import { EffectsLayer } from './effectsLayer';
 import { DAYLIGHT, worldLighting, type WorldLighting } from './lighting';
@@ -23,6 +24,9 @@ export { buildingLift } from './buildingArt';
 export type CameraRequest = { id: number; cell?: Position; zoom?: number; scale?: number };
 export type SafeArea = { left: number; right: number; top: number; bottom: number };
 export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number };
+/** What a Life Mode click points at, in priority order: the player, a resident, a building, then a tile. */
+export type LifeTarget = { type: 'player' } | { type: 'citizen'; id: string } | { type: 'building'; id: string } | { type: 'tile'; cell: Cell };
+export type { HomeHighlight, LifeFeedback };
 
 type Props = {
   city: CityState;
@@ -49,6 +53,14 @@ type Props = {
   safeArea?: SafeArea;
   onBeginGesture?: () => void;
   onEndGesture?: () => void;
+  /** Phase 4: clicks steer the player instead of selecting (only with the select tool). */
+  lifeMode?: boolean;
+  onLifeTarget?: (target: LifeTarget) => void;
+  /** Clicking the player outside Life Mode opens their profile. */
+  onSelectPlayer?: () => void;
+  followPlayer?: boolean;
+  lifeFeedback?: LifeFeedback | null;
+  homeHighlights?: readonly HomeHighlight[] | null;
 };
 
 const SEA = 0x8fc3c0;
@@ -497,6 +509,13 @@ export default function CityViewport(props: Props) {
       redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true, registry, textures);
       redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan);
       const npcs = new NpcLayer(buildings, groundOverlay);
+      const lifeMarkers = new Container();
+      world.addChildAt(lifeMarkers, world.getChildIndex(labels));
+      const player = new PlayerLayer(buildings, groundOverlay, lifeMarkers, (id) => {
+        const building = propsRef.current.city.buildings.find((entry) => entry.id === id);
+        return building ? buildingLift(building, 1) + roofCapHeight(building.kind) : 30;
+      });
+      let lastHighlights: readonly HomeHighlight[] | null | undefined;
       const decor = new DecorLayer(buildings, groundDecor, app.renderer);
       const effects = new EffectsLayer(effectsContainer);
 
@@ -514,6 +533,7 @@ export default function CityViewport(props: Props) {
         groundSprite.tint = next.tint;
         decor.applyLighting(next.tint, next.glow, force);
         npcs.setTint(next.tint);
+        player.setTint(next.tint);
         for (const [id, visual] of registry) {
           visual.item.tint = id === demolishHoverId ? 0xff9c8a : next.tint;
           if (visual.lights) { visual.lights.visible = next.glow > 0.01; visual.lights.alpha = next.glow; }
@@ -637,13 +657,14 @@ export default function CityViewport(props: Props) {
       let hoverPoint: Point | null = null;
       let hoverBuildingId: string | null = null;
       let hoverCitizenId: string | null = null;
+      let hoverPlayer = false;
       let gestureTool = propsRef.current.tool;
       const endGesture = () => {
         pointerAction = null; lastCell = null;
         propsRef.current.onEndGesture?.();
       };
       const leave = () => {
-        endGesture(); hoverPoint = null; hoverBuildingId = null; hoverCitizenId = null;
+        endGesture(); hoverPoint = null; hoverBuildingId = null; hoverCitizenId = null; hoverPlayer = false;
         ghostShape.clear(); ghostArt.clear(); setPreview('');
         host.style.cursor = '';
         nameplateRef.current?.();
@@ -671,7 +692,12 @@ export default function CityViewport(props: Props) {
         nameplateBg.clear();
         let text = '';
         let anchor: Point | null = null;
-        const citizenId = hoverCitizenId ?? current.selectedCitizenId ?? null;
+        const citizenId = hoverPlayer ? null : hoverCitizenId ?? current.selectedCitizenId ?? null;
+        if (hoverPlayer && live.player && player.position) {
+          text = `${live.player.name} · you`;
+          const point = iso(player.position.x, player.position.y);
+          anchor = { x: point.x, y: point.y - 38 * npcSpriteScale(view.scale) };
+        }
         if (citizenId) {
           const citizen = live.citizens.find((entry) => entry.id === citizenId);
           const position = npcs.getRenderedPosition(citizenId);
@@ -682,7 +708,7 @@ export default function CityViewport(props: Props) {
             anchor = { x: point.x, y: point.y - (citizenId === current.selectedCitizenId ? 36 : 25) * npcSpriteScale(view.scale) };
           }
         }
-        const buildingId = !text ? hoverBuildingId ?? current.selectedBuildingId : null;
+        const buildingId = !text ? hoverBuildingId ?? (current.lifeMode ? null : current.selectedBuildingId) : null;
         if (buildingId) {
           const building = current.city.buildings.find((entry) => entry.id === buildingId);
           if (building) {
@@ -734,7 +760,16 @@ export default function CityViewport(props: Props) {
             if (building) current.onBeginMoveBuilding(building.id);
             else current.onSelectBuilding(null);
           }
+        } else if (current.tool === 'select' && current.lifeMode && current.onLifeTarget) {
+          const citizenId = player.pick(localPoint, view.scale) ? null : npcs.pick(localPoint, view.scale);
+          if (player.pick(localPoint, view.scale)) current.onLifeTarget({ type: 'player' });
+          else if (citizenId) current.onLifeTarget({ type: 'citizen', id: citizenId });
+          else {
+            const building = buildingAtPoint(current.city, localPoint);
+            current.onLifeTarget(building ? { type: 'building', id: building.id } : { type: 'tile', cell });
+          }
         } else if (current.tool === 'select') {
+          if (current.onSelectPlayer && player.pick(localPoint, view.scale)) { current.onSelectPlayer(); return; }
           const citizenId = current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
           if (citizenId) current.onSelectCitizen?.(citizenId);
           else current.onSelectBuilding(buildingAtPoint(current.city, localPoint)?.id ?? null);
@@ -837,8 +872,31 @@ export default function CityViewport(props: Props) {
             label = current.tool === 'move' ? 'Choose a building to move.' : 'Choose a building or road to demolish.';
             polygon(ghostShape, tileDiamond(cell.x, cell.y), 0xffe8a2, 0.18, 0xfff4d5);
           }
+        } else if (current.tool === 'select' && current.lifeMode) {
+          const live = current.getWorld?.() ?? current.world;
+          hoverPlayer = player.pick(localPoint, view.scale);
+          hoverCitizenId = hoverPlayer ? null : npcs.pick(localPoint, view.scale);
+          npcs.setHovered(hoverCitizenId);
+          const building = hoverPlayer || hoverCitizenId ? undefined : buildingAtPoint(current.city, localPoint);
+          hoverBuildingId = building?.id ?? null;
+          if (current.homeHighlights) {
+            const home = building && current.homeHighlights.find((entry) => entry.id === building.id);
+            label = home ? `${building!.name} · ${home.available ? 'Choose this home' : 'No free room'}` : 'Choose a highlighted home';
+          } else if (hoverPlayer) label = 'You · open your profile';
+          else if (hoverCitizenId) label = `Meet ${live.citizens.find((entry) => entry.id === hoverCitizenId)?.name ?? 'resident'}`;
+          else if (building) {
+            label = `${building.name} · ${building.kind === 'park' || building.kind === 'pool' || building.kind === 'clubhouse' ? 'Visit or walk here' : 'Walk here'}`;
+            const spec = BUILDINGS[building.kind];
+            ghostShape.poly(footprint(building.x, building.y, spec.width, spec.height).flatMap((point) => [point.x, point.y]))
+              .fill({ color: 0xffffff, alpha: 0.12 }).stroke({ color: 0xffffff, width: 2, alpha: 0.85 });
+          } else if (live.player) {
+            const road = live.plan.roads.some((tile) => tile.x === cell.x && tile.y === cell.y);
+            label = road ? 'Walk here' : 'Can’t walk here · only roads and paths';
+            polygon(ghostShape, tileDiamond(cell.x, cell.y), road ? 0xbfe8c9 : 0xd97962, road ? 0.45 : 0.4, road ? 0x2f8a5b : 0xb84c43, 0.9);
+          }
         } else if (current.tool === 'select') {
-          hoverCitizenId = current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
+          hoverPlayer = !!current.onSelectPlayer && player.pick(localPoint, view.scale);
+          hoverCitizenId = !hoverPlayer && current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
           npcs.setHovered(hoverCitizenId);
           if (!hoverCitizenId) hoverBuildingId = buildingAtPoint(current.city, localPoint)?.id ?? null;
           const hovered = hoverBuildingId && hoverBuildingId !== current.selectedBuildingId ? current.city.buildings.find((entry) => entry.id === hoverBuildingId) : undefined;
@@ -848,7 +906,7 @@ export default function CityViewport(props: Props) {
               .fill({ color: 0xffffff, alpha: 0.12 }).stroke({ color: 0xffffff, width: 2, alpha: 0.85 });
           }
         }
-        host.style.cursor = current.tool === 'select' && (hoverCitizenId || hoverBuildingId) ? 'pointer' : '';
+        host.style.cursor = current.tool === 'select' && (hoverCitizenId || hoverBuildingId || hoverPlayer) ? 'pointer' : '';
         setPreview(label);
         drawNameplate();
       };
@@ -937,10 +995,19 @@ export default function CityViewport(props: Props) {
         const target = live.population ? worldLighting(getGameTime(live.clock).minuteOfDay) : DAYLIGHT;
         applyLighting(target);
         npcs.sync(live, frameStart, view.scale, bounds);
+        player.feedback(current.lifeFeedback);
+        if (current.homeHighlights !== lastHighlights) { lastHighlights = current.homeHighlights; player.setHomeHighlights(current.homeHighlights ?? null); }
+        player.sync(live, frameStart, view.scale);
         effects.update(Math.min(100, app.ticker.deltaMS));
 
         const followId = current.followCitizenId ?? null;
-        if (followId) {
+        const playerFocus = current.followPlayer ? player.focus : null;
+        if (playerFocus) {
+          const goal = iso(playerFocus.x, playerFocus.y);
+          if (!following) { following = true; view.x = 0; view.y = 0; }
+          center = { x: center.x + (goal.x - center.x) * 0.18, y: center.y + (goal.y - center.y) * 0.18 };
+          updateCamera(true);
+        } else if (followId) {
           const citizen = live.citizens.find((entry) => entry.id === followId);
           const rendered = npcs.getRenderedPosition(followId);
           const target = citizen ? (citizen.movement?.status === 'inside' || !rendered ? citizen.position : rendered) : null;
@@ -951,7 +1018,7 @@ export default function CityViewport(props: Props) {
             updateCamera(true);
           }
         } else following = false;
-        if (hoverCitizenId || current.selectedCitizenId) drawNameplate();
+        if (hoverCitizenId || current.selectedCitizenId || hoverPlayer) drawNameplate();
 
         frames += 1;
         frameCost += performance.now() - frameStart;
@@ -967,6 +1034,7 @@ export default function CityViewport(props: Props) {
       cleanup = () => {
         disconnectSimulation();
         npcs.destroy();
+        player.destroy();
         decor.destroy();
         effects.destroy();
         graveyard.flush();
@@ -1022,7 +1090,7 @@ export default function CityViewport(props: Props) {
     nameplateRef.current?.();
   }, [props.city, props.world.plan, props.selectedBuildingId, props.proposal]);
 
-  return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''}`}
+  return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''} ${props.lifeMode ? 'is-life' : ''}`}
     aria-label="Isometric 64 by 64 city map" />
     {preview && <output className="placement-feedback" aria-label="Placement preview">{preview}</output>}
     {renderError && <div className="render-error" role="alert">The city renderer could not start. Reload to retry; your saved city is still on this device.</div>}

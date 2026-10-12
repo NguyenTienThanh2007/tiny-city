@@ -33,19 +33,20 @@ export const PLAYER_LIMITS = Object.freeze({
 
 /**
  * Balance values, per game minute unless stated. Documented in docs/life/phase-4a-contracts.md.
- * A full day (1440 min) of idling drains roughly 100 energy, 100+ hunger and 85 social.
+ * A full game day (1440 min, about 2.4 real minutes at 1×) of idling drains about 65 energy, 79 hunger and 58 social,
+ * so a meal or two, one rest and some company per day keep a character comfortable.
  */
 export const PLAYER_BALANCE = Object.freeze({
   walkingSpeed: 0.45,
   exhaustedSpeedFactor: 0.6,
-  decay: Object.freeze({ energy: 0.07, hunger: 0.12, social: 0.06 }),
-  walkingEnergy: 0.03,
+  decay: Object.freeze({ energy: 0.045, hunger: 0.055, social: 0.04 }),
+  walkingEnergy: 0.02,
   starvingEnergyFactor: 1.5,
   thresholds: Object.freeze({ critical: 15, low: 30, fair: 60 }),
-  initialNeeds: Object.freeze({ energy: 80, hunger: 70, social: 55, mood: 70 }),
+  initialNeeds: Object.freeze({ energy: 85, hunger: 75, social: 60, mood: 75 }),
   mood: Object.freeze({ rate: 0.25, criticalPenalty: 10 }),
   activities: Object.freeze({
-    rest: Object.freeze({ minutes: 120, energy: 0.7, hungerDecayFactor: 0.5, mood: 5 }),
+    rest: Object.freeze({ minutes: 120, energy: 0.6, hungerDecayFactor: 0.5, mood: 5 }),
     eat: Object.freeze({ minutes: 30, hunger: 2.5, mood: 5 }),
     visit: Object.freeze({ minutes: 60, social: 0.15, socialPerVisitor: 0.05, maxVisitorBonus: 0.3, mood: 20 }),
     greet: Object.freeze({ minutes: 5, social: 1.2, mood: 10 }),
