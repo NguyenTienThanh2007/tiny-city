@@ -1,0 +1,52 @@
+{
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "measurements": [
+    {
+      "count": 100,
+      "initializationMs": 8.856,
+      "firstTickMs": 9.822,
+      "ticks": 200,
+      "meanTickMs": 0.169,
+      "p95TickMs": 0.426,
+      "maxTickMs": 2.738,
+      "travellers": 6,
+      "navigation": {
+        "searches": 6,
+        "cacheHits": 94,
+        "visitedNodes": 260
+      }
+    },
+    {
+      "count": 1000,
+      "initializationMs": 21.043,
+      "firstTickMs": 32.342,
+      "ticks": 200,
+      "meanTickMs": 0.964,
+      "p95TickMs": 1.429,
+      "maxTickMs": 3.571,
+      "travellers": 874,
+      "navigation": {
+        "searches": 50,
+        "cacheHits": 950,
+        "visitedNodes": 13124
+      }
+    },
+    {
+      "count": 3000,
+      "initializationMs": 70.008,
+      "firstTickMs": 248.061,
+      "ticks": 200,
+      "meanTickMs": 3.185,
+      "p95TickMs": 5.023,
+      "maxTickMs": 10.623,
+      "travellers": 2874,
+      "navigation": {
+        "searches": 150,
+        "cacheHits": 2850,
+        "visitedNodes": 113552
+      }
+    }
+  ]
+}

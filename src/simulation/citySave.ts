@@ -53,7 +53,7 @@ export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
       try {
         const world = deserializeWorld(JSON.stringify(parsed.simulation));
         const city = projectCity(world, isCity(parsed) ? restoreAppearances(parsed) : undefined);
-        if (world.citizens.length === 0 && city.size === MAP_SIZE && world.plan.height === MAP_SIZE &&
+        if (city.size === MAP_SIZE && world.plan.height === MAP_SIZE &&
             plansMatch(world.plan, toCityPlan(city))) return { city, world };
       } catch { /* fall back to the compatible editor map below */ }
     }
@@ -66,7 +66,7 @@ export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
           const world = deserializeWorld(JSON.stringify(parsed.simulation), {
             startingFunds: city.funds, roads: plan.roads, blockedTiles: plan.blockedTiles,
           });
-          if (world.citizens.length === 0 && world.budget.balance === city.funds && plansMatch(world.plan, plan)) return { city, world };
+          if (world.budget.balance === city.funds && plansMatch(world.plan, plan)) return { city, world };
         } catch { /* preserve a valid map even when its optional simulation snapshot is corrupt */ }
       }
       return { city, world: fallbackWorld, ...(recovery || version === 2 ? {

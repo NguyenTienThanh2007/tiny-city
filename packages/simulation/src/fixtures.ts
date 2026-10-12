@@ -2,6 +2,7 @@ import type { ClockOptions } from './clock.js';
 import { createRandomState, nextRandom } from './random.js';
 import type { CityPlan, Citizen, DailySchedule, WorldState } from './types.js';
 import { createWorld, freeze } from './world.js';
+import { BUILDING_CATALOG } from './catalog.js';
 
 export const EXAMPLE_CITY_PLAN: CityPlan = freeze({
   id: 'phase-0-plan', name: 'Tiny Meadow', width: 24, height: 18,
@@ -66,4 +67,16 @@ export function createDemoWorldFixture(options: {
   const world = createWorld({ id: 'demo-world', plan: EXAMPLE_CITY_PLAN, citizens, seed,
     ...(options.clock === undefined ? {} : { clock: options.clock }) });
   return freeze({ ...world, randomState });
+}
+
+/** Connected Phase 3A integration fixture; no visuals or wall-clock fields. */
+export function createLivingWorldFixture(options: {
+  readonly seed?: number | string; readonly clock?: ClockOptions; readonly maxCitizens?: number;
+} = {}): WorldState {
+  const sites = [['home-villa','villa',12,21],['home-duplex','duplex',16,21],
+    ['home-apartment','apartment',20,21],['park','park',26,21],['office','office',35,21]] as const;
+  return createWorld({id:'living-world',seed:options.seed??'living-city',population:{maxCitizens:options.maxCitizens??1000},
+    clock:options.clock??{paused:true},startingFunds:5000,plan:{id:'living-plan',name:'Living City',width:64,height:64,
+      roads:Array.from({length:41},(_,i)=>({x:i+8,y:20})),blockedTiles:[],
+      buildings:sites.map(([id,type,x,y])=>{const b=BUILDING_CATALOG[type];return {id,name:b.label,type,kind:b.kind,capacity:b.capacity,footprint:b.footprint,position:{x,y}};})}});
 }

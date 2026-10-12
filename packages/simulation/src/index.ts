@@ -2,6 +2,7 @@ export type {
   Building, BuildingKind, BuildingType, Citizen, CitizenActivity, CitizenCommand, CityPlan, CityPlanInput, CityBudget, CitySnapshot, CityCommand, CityCommandResult, CityRejectionReason, PlacementValidation, ClockState,
   CommandRejectionReason, DailySchedule, Position, ScheduleEntry,
   SimulationEvent, SimulationResult, WorldCommand, WorldState,
+  PopulationOptions, PopulationState, CitizenAttributes, CitizenMovement, BuildingOccupancy,
 } from './types.js';
 export type { ClockOptions } from './clock.js';
 export { advanceClock, createClock, getGameTime, MINUTES_PER_DAY, stepClock } from './clock.js';
@@ -17,3 +18,6 @@ export { RoadGraph } from './roads.js';
 export { applyCityCommand, applyCityCommandBatch, validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from './cityCommands.js';
 export { serializeWorld, deserializeWorld } from './serialization.js';
 export type { LegacyWorldOptions } from './serialization.js';
+export { RoadNavigator, NPC_LIMITS, buildingCenter } from './navigation.js';
+export type { NavigationStats, RouteResult } from './navigation.js';
+export { createDailyRoutine } from './population.js';

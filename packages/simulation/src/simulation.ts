@@ -1,9 +1,12 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
-import type { CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, ScheduleEntry, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
+import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, PopulationOptions, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
 import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
 import { applyCityCommand, applyCityCommandBatch, copyCityCommand } from './cityCommands.js';
 import { compareTiles, OccupancyGrid } from './grid.js';
 import { RoadGraph } from './roads.js';
+import { buildingCenter, RoadNavigator } from './navigation.js';
+import { initializePopulation, insideMovement, providesLeisure, reconcilePopulation } from './population.js';
+import { advanceDailyLife, scheduledEntry } from './life.js';
 
 function copyCommand(command: WorldCommand): WorldCommand {
   switch (command.type) {
@@ -20,16 +23,6 @@ function copyCommand(command: WorldCommand): WorldCommand {
   }
 }
 
-function scheduledEntry(citizen: Citizen, minuteOfDay: number): ScheduleEntry {
-  // World validation guarantees an entry at midnight and ascending start times.
-  let active = citizen.schedule.entries[0]!;
-  for (const entry of citizen.schedule.entries) {
-    if (entry.startMinute > minuteOfDay) break;
-    active = entry;
-  }
-  return active;
-}
-
 /** Headless deterministic runner. Event delivery belongs to the caller. */
 export class Simulation {
   private state: WorldState;
@@ -37,6 +30,12 @@ export class Simulation {
   private indexedPlan: CityPlan | null = null;
   private occupancy: OccupancyGrid | null = null;
   private roadGraph: RoadGraph | null = null;
+  private navigator: RoadNavigator | null = null;
+  private navigationPlan: CityPlan | null = null;
+  private citizenIndexState: readonly Citizen[] | null = null;
+  private citizenIndexPlan: CityPlan | null = null;
+  private citizenIndex = new Map<string,Citizen>();
+  private buildingOccupancies = new Map<string,BuildingOccupancy>();
 
   constructor(initialState: WorldState) {
     validateWorld(initialState);
@@ -45,6 +44,34 @@ export class Simulation {
 
   getState(): WorldState {
     return this.state;
+  }
+
+  enablePopulation(options: PopulationOptions = {}): SimulationResult {
+    const change = initializePopulation(this.state, options);
+    if(change.state!==this.state) { validateWorld(change.state); this.state = freeze(cloneWorld(change.state)); }
+    return freeze({ state: this.state, events: change.events, steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+  private ensureCitizenIndexes(): void {
+    if(this.citizenIndexState===this.state.citizens && this.citizenIndexPlan===this.state.plan) return;
+    this.citizenIndex=new Map(this.state.citizens.map(c=>[c.id,c]));
+    const occupancies=new Map(this.state.plan.buildings.map(b=>[b.id,{buildingId:b.id,residentIds:[] as string[],workerIds:[] as string[],visitorIds:[] as string[]}]));
+    for(const c of this.state.citizens) {
+      occupancies.get(c.homeBuildingId)?.residentIds.push(c.id);
+      if(c.workBuildingId!==null)occupancies.get(c.workBuildingId)?.workerIds.push(c.id);
+      if(c.activity==='leisure'&&c.movement?.status==='inside'&&c.movement.currentBuildingId!==null)occupancies.get(c.movement.currentBuildingId)?.visitorIds.push(c.id);
+    }
+    this.buildingOccupancies=new Map([...occupancies].map(([id,o])=>[id,freeze(o)]));
+    this.citizenIndexState=this.state.citizens;this.citizenIndexPlan=this.state.plan;
+  }
+  getCitizen(id: string): Citizen | undefined { this.ensureCitizenIndexes();return this.citizenIndex.get(id); }
+  getPopulationCount(): number { return this.state.citizens.length; }
+  getBuildingOccupancy(buildingId: string): BuildingOccupancy {
+    this.ensureCitizenIndexes();
+    return this.buildingOccupancies.get(buildingId)??freeze({buildingId,residentIds:[],workerIds:[],visitorIds:[]});
+  }
+  getNavigator(): RoadNavigator {
+    if (this.navigationPlan !== this.state.plan) { this.navigator = new RoadNavigator(this.state.plan); this.navigationPlan = this.state.plan; }
+    return this.navigator!;
   }
 
   /** Legacy label-only update. Structural edits must use commands or history restoration. */
@@ -61,15 +88,41 @@ export class Simulation {
   }
 
   getCitySnapshot(): CitySnapshot {
-    return freeze({ plan: this.state.plan, budget: this.state.budget, nextBuildingId: this.state.nextBuildingId });
+    return freeze({ plan: this.state.plan, budget: this.state.budget, nextBuildingId: this.state.nextBuildingId,
+      ...(this.state.population === undefined ? {} : { citizens: this.state.citizens }) });
   }
 
   /** Undo/redo restores city data while time, RNG, and command queues keep progressing. */
   restoreCity(snapshot: CitySnapshot): SimulationResult {
     if (!Number.isSafeInteger(snapshot.nextBuildingId) || snapshot.nextBuildingId <= 0) throw new RangeError('invalid snapshot building ID cursor');
     if (this.state.revision === Number.MAX_SAFE_INTEGER) throw new RangeError('revision limit reached');
-    const next = { ...this.state, plan: snapshot.plan, budget: snapshot.budget,
+    let next = { ...this.state, plan: snapshot.plan, budget: snapshot.budget,
       nextBuildingId: Math.max(this.state.nextBuildingId, snapshot.nextBuildingId), revision: this.state.revision + 1 };
+    if (this.state.population) {
+      // Validate city data before attempting to reconcile references into it.
+      validateWorld({ ...next, citizens: [] });
+      const buildings = new Map(snapshot.plan.buildings.map(b => [b.id,b]));
+      if (snapshot.citizens) {
+        const restored = snapshot.citizens.map(c => {
+          const home = buildings.get(c.homeBuildingId);
+          return home ? { ...c, position: buildingCenter(home), activity: 'home' as const, targetBuildingId: home.id,
+            movement: insideMovement(home.id,next.revision) } : c;
+        });
+        validateWorld({ ...next, citizens: restored });
+        const current = new Map(this.state.citizens.map(c => [c.id,c]));
+        next = { ...next, citizens: restored.map(c => {
+          const live=current.get(c.id);
+          return live?.movement ? { ...c, position: live.position, movement: live.movement,
+            activity: live.activity, targetBuildingId: live.targetBuildingId } : c;
+        }) };
+      }
+      const population = reconcilePopulation(next, this.state);
+      next = population.state;
+      validateWorld(next);
+      this.state = freeze(cloneWorld(next));
+      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events],
+        steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    }
     validateWorld(next);
     this.state = freeze(cloneWorld(next));
     return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }],
@@ -168,27 +221,39 @@ export class Simulation {
       }
       switch (command.type) {
         case 'citizen.relocate':
-          if (!isPositionInPlan(command.position, this.state.plan)) {
+          const cell = this.state.population ? this.getNavigator().grid.get({ x: Math.floor(command.position.x), y: Math.floor(command.position.y) }) : null;
+          if (!isPositionInPlan(command.position, this.state.plan) || this.state.population &&
+            !(cell?.type === 'road' || cell?.type === 'building' && [citizen.homeBuildingId,citizen.workBuildingId,citizen.targetBuildingId].includes(cell.buildingId))) {
             events.push({ type: 'command.rejected', ...details, reason: 'invalid-position' });
             continue;
           }
-          citizens[index] = { ...citizen, position: command.position };
+          citizens[index] = { ...citizen, position: command.position, ...(citizen.movement ? { movement: {
+            ...citizen.movement, status: 'waiting', currentBuildingId: cell?.type === 'building' ? cell.buildingId : null,
+            route: [], nextWaypoint: 0, plannedRevision: -1, heading: { x: 0, y: 0 },
+          } } : {}) };
           break;
         case 'citizen.set-schedule':
           try {
             validateSchedule(command.schedule, this.state.plan);
+            if(this.state.population && command.schedule.entries.some(e =>
+              e.activity==='work' && e.targetBuildingId!==null && e.targetBuildingId!==citizen.workBuildingId ||
+              (e.activity==='sleep'||e.activity==='home') && e.targetBuildingId!==null && e.targetBuildingId!==citizen.homeBuildingId ||
+              e.activity==='leisure' && e.targetBuildingId!==null && !providesLeisure(this.getNavigator().getBuilding(e.targetBuildingId)!))) throw new RangeError('invalid schedule assignment');
           } catch {
             events.push({ type: 'command.rejected', ...details, reason: 'invalid-schedule' });
             continue;
           }
-          citizens[index] = { ...citizen, schedule: command.schedule };
+          citizens[index] = { ...citizen, schedule: command.schedule, ...(this.state.population ? { scheduleMode: 'custom' } : {}) };
           break;
       }
       events.push({ type: 'command.applied', ...details });
       this.state = freeze({ ...this.state, citizens });
     }
     this.commands = [];
-    const citizens = this.state.citizens.map((citizen) => {
+    const citizens = this.state.population ? (() => {
+      const life=advanceDailyLife(this.state,this.getNavigator(),time.minuteOfDay);
+      events.push(...life.events); return life.state.citizens;
+    })() : this.state.citizens.map((citizen) => {
       const entry = scheduledEntry(citizen, time.minuteOfDay);
       if (citizen.activity === entry.activity && citizen.targetBuildingId === entry.targetBuildingId) return citizen;
       events.push({ type: 'citizen.activity-changed', tick, citizenId: citizen.id,

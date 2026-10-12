@@ -8,17 +8,17 @@ All interface properties and arrays are readonly. Worlds created by `createWorld
 
 | Interface | Fields and meaning |
 | --- | --- |
-| `WorldState` | `schemaVersion: 2`, `id`, `plan`, `clock`, `randomState`, `citizens`, `budget`, `revision`, `nextBuildingId` |
+| `WorldState` | `schemaVersion: 2`, `id`, `plan`, `clock`, `randomState`, `citizens`, `budget`, `revision`, `nextBuildingId`, optional managed `population` |
 | `CityPlan` | `id`, `name`, positive integer `width` and `height` in tiles, `buildings`, `roads`, `blockedTiles` |
 | `Building` | `id`, `name`, `kind`, optional catalog `type`, integer top-left `position`, positive integer `footprint.width/height`, nonnegative integer `capacity` |
 | `CityBudget` | Nonnegative safe-integer dollar amounts: `openingBalance`, `balance`, `totalSpent`; balance + spending equals opening balance |
-| `CitySnapshot` | `plan`, `budget`, `nextBuildingId` for validated undo/redo without clock/RNG rollback |
-| `Citizen` | `id`, `name`, `homeBuildingId`, nullable `workBuildingId`, fractional tile `position`, `activity`, nullable `targetBuildingId`, `schedule` |
+| `CitySnapshot` | `plan`, `budget`, `nextBuildingId`, optional managed `citizens` for validated undo/redo without clock/RNG rollback |
+| `Citizen` | `id`, `name`, `homeBuildingId`, nullable `workBuildingId`, fractional tile `position`, `activity`, nullable `targetBuildingId`, `schedule`; optional managed `attributes`, `movement`, `scheduleMode` |
 | `DailySchedule` | Nonempty `entries` array of `ScheduleEntry` |
 | `ScheduleEntry` | `startMinute`, `activity`, nullable `targetBuildingId` |
 | `ClockState` | `tick`, `fixedStepMs`, `minutesPerTick`, `accumulatedMs`, `paused` |
 
-`BuildingKind` is `home | workplace | park`. `CitizenActivity` is `sleep | home | work | leisure | idle`. Nullable references use explicit `null`; required fields are never omitted. Building IDs and citizen IDs are unique within their respective collections. References must resolve to existing buildings. Buildings, roads, and blocked tiles cannot overlap. Maps are limited to one million tiles. `BuildingType` is `villa | duplex | townhouse | apartment | park | clubhouse | pool | mall | office`; catalog-backed buildings must match the catalog role, footprint, and capacity. Authored legacy buildings may omit `type` and retain their explicit footprints. Capacity remains descriptive metadata.
+`BuildingKind` is `home | workplace | park`. `CitizenActivity` is `sleep | home | work | leisure | idle | travel`. Nullable references use explicit `null`; required fields are never omitted. Building IDs and citizen IDs are unique within their respective collections. References must resolve to existing buildings. Buildings, roads, and blocked tiles cannot overlap. Maps are limited to one million tiles. `BuildingType` is `villa | duplex | townhouse | apartment | park | clubhouse | pool | mall | office`; catalog-backed buildings must match the catalog role, footprint, and capacity. Authored legacy buildings may omit `type` and retain their explicit footprints. Capacity is enforced for managed residents, jobs and leisure visitors; it remains descriptive in legacy mode.
 
 Coordinates use x to the right and y downward. The plan spans `[0, width) × [0, height)`. Building positions are footprint origins, while citizen positions are points. The renderer chooses screen projection, scale, anchors, colors, sprites, and textures. No visual metadata is stored in the world.
 
@@ -26,7 +26,9 @@ Schedule entries begin at minute 0, strictly increase, and use integer minutes b
 
 World validation checks dimensions, overlapping occupancy, IDs, references, catalog data, schedules, clocks, RNG, budgets, revisions, and ID cursors. `deserializeWorld` is the validated JSON restoration/migration entrypoint: `new Simulation(deserializeWorld(savedJson))`. Typed local commands are not a network request decoder; future HTTP transport requires separately coordinated shape validation.
 
-`createWorld({ id, plan, citizens?, seed?, clock?, startingFunds? })` validates, copies, and freezes a schema-2 world at tick 0/revision 0/ID cursor 1. Starting funds default to 0. `CityPlanInput` permits initial authored plans to omit roads/blocked tiles, which normalize to empty arrays. Opening layouts are grandfathered for road adjacency and are not retroactively charged. Citizens default to an empty array, the seed defaults to numeric 0, and `clock` accepts the same configuration as `createClock`. Use the fixture factories for ready-made examples. `validateSchedule(schedule, plan)` checks a schedule's ordering and building references; both validators return `void` on success and throw on invalid data. `cloneWorld(world)` copies every contract object and array without freezing the copy.
+`createWorld({ id, plan, citizens?, seed?, clock?, startingFunds?, population? })` validates, copies, and freezes a schema-2 world at tick 0/revision 0/building ID cursor 1. Starting funds default to 0. `CityPlanInput` permits initial authored plans to omit roads/blocked tiles, which normalize to empty arrays. Opening layouts are grandfathered for road adjacency and are not retroactively charged. Citizens default to an empty array, the seed defaults to numeric 0, and `clock` accepts the same configuration as `createClock`. Use the fixture factories for ready-made examples. `validateSchedule(schedule, plan)` checks a schedule's ordering and building references; both validators return `void` on success and throw on invalid data. `cloneWorld(world)` copies every contract object and array without freezing the copy.
+
+Phase 3A adds optional managed population/movement fields without changing schema 2. Capacity is enforced in managed mode, occupied demolition reconciles residents, and city snapshots retain identities for history. Legacy behavior is retained without explicit activation. See [NPC contracts](../npc/phase-3a-contracts.md) and [Developer B integration](../npc/phase-3a-integration.md).
 
 ## Clock
 
@@ -56,6 +58,9 @@ const { state, events, steps, alpha } = simulation.advance(100);
 | `execute(command)` / `executeBatch(commands)` | Apply city commands immediately while running or paused; batches are atomic; `CityCommandResult` adds `applied` |
 | `getCitySnapshot()` / `restoreCity(snapshot)` | Capture/restore city layout and budget while keeping time/RNG/queues, retaining the ID high-water mark, and incrementing revision |
 | `getOccupancyGrid()` / `getRoadGraph()` | Cached derived query indexes invalidated by plan changes |
+| `enablePopulation(options?)` | Explicitly activate managed residents; idempotent once enabled |
+| `getCitizen(id)` / `getPopulationCount()` / `getBuildingOccupancy(id)` | Indexed citizen lookup, total population and resident/worker/visitor IDs |
+| `getNavigator()` | Cached per-plan road navigator and bounded-search statistics |
 | `replacePlan(plan)` | Deprecated label-only compatibility operation; structural changes require city commands or validated history restoration |
 | `enqueue(command)` | Copy a typed command and queue it for the next executed tick |
 | `pendingCommandCount` | Number of queued commands |
@@ -81,11 +86,11 @@ See [Phase 1A coordination](./phase-1a.md) for compatibility and rule choices.
 | Command | Payload/effect |
 | --- | --- |
 | `city.build` | `buildingType`, integer `position`, optional `name`; derive role/footprint/capacity/cost from `BUILDING_CATALOG`, generate `building-N`, spend funds, and increment revision |
-| `city.demolish` | `buildingId`; reject missing or citizen-referenced buildings, release footprint, no fee/refund |
+| `city.demolish` | `buildingId`; reject missing buildings; legacy mode rejects citizen references, managed mode reconciles displaced occupants; release footprint, no fee/refund |
 | `city.move-building` | `buildingId`, integer destination `position`; preserve identity and citizen references, validate the footprint/road rule, no fee |
 | `city.edit-roads` | Required `add`/`remove` tile arrays; validate every cell and unique/disjoint sets; charge only additions |
 
-Road-required buildings need an orthogonally adjacent road along any footprint edge; parks do not, while pools, homes, clubhouses, malls, and offices do. Corner-only contact does not qualify. All footprint cells must be in bounds, buildable, and vacant. Road removals may isolate existing buildings; graph/events report this without traffic or NPC routing. Catalog prices are villa 120, duplex 180, townhouse 160, apartment 480, park 80, clubhouse 220, pool 180, mall 900, office 640, and road tile 8 integer dollars. Budget balance plus totalSpent must equal openingBalance.
+Road-required buildings need an orthogonally adjacent road along any footprint edge; parks do not, while pools, homes, clubhouses, malls, and offices do. Corner-only contact does not qualify. All footprint cells must be in bounds, buildable, and vacant. Road removals may isolate existing buildings; graph/events report this and managed NPC routes retry against the edited topology. Catalog prices are villa 120, duplex 180, townhouse 160, apartment 480, park 80, clubhouse 220, pool 180, mall 900, office 640, and road tile 8 integer dollars. Budget balance plus totalSpent must equal openingBalance.
 
 Each successful city command increments revision; time/citizen ticks do not. Rejections consume no budget, IDs, revision, or RNG. Atomic batches publish only their indexed rejection if any member fails; empty batches are no-ops. Queued city/citizen commands retain FIFO tick execution. Immediate edits do not advance the clock or consume queued commands.
 
@@ -95,7 +100,7 @@ Each successful city command increments revision; time/citizen ticks do not. Rej
 
 ## Events
 
-Every event has a `type` and its simulation `tick`. Within each executed tick, order is: command results in FIFO order, activity changes in citizen array order, crossed days in ascending order, then `clock.ticked`. Array order is retained from the authored world.
+Every event has a `type` and its simulation `tick`. Within each executed tick, order is: command results in FIFO order, citizen movement/arrival/activity results in citizen array order, crossed days in ascending order, then `clock.ticked`. Array order is retained from the authored world. Managed population events follow city command/network events; history restoration also emits identity changes. See the [NPC event payloads](../npc/phase-3a-contracts.md).
 
 | Type | Additional fields |
 | --- | --- |

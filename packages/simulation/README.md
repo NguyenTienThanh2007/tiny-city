@@ -20,4 +20,6 @@ const result = simulation.advance(100);
 
 Requires Node.js 22.12+ for development tooling. Output is ESM targeting ES2022 and includes declarations. Build before consuming the package.
 
-See [public contracts](../../docs/simulation/contracts.md), [Phase 1A coordination](../../docs/simulation/phase-1a.md), [Phase 1B builder](../../docs/simulation/phase-1b.md), and [frontend integration](../../docs/simulation/integration.md). No Gemini, NPC movement/pathfinding, storage backend, or shared-contract copy is included.
+See [public contracts](../../docs/simulation/contracts.md), [Phase 1A coordination](../../docs/simulation/phase-1a.md), [Phase 1B builder](../../docs/simulation/phase-1b.md), and [frontend integration](../../docs/simulation/integration.md).
+
+Managed NPCs are opt-in through `createWorld({…, population: {maxCitizens: 1000}})` or `simulation.enablePopulation()`. Seeded residents fill housing, take available jobs, follow varied schedules and progressively navigate legal roads. City edits, history and serialization reconcile their references. Legacy worlds remain compatible. See the [Phase 3A contract](../../docs/npc/phase-3a-contracts.md) and [integration examples](../../docs/npc/phase-3a-integration.md), including `createLivingWorldFixture()`. Run the root `npm run bench:npc` for measured performance. No Gemini calls, NPC visuals or storage backend are included in this package.
