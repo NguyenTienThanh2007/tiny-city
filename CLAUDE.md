@@ -32,7 +32,7 @@ API (from `apps/api`; requires `npm run build:architect` at root first because t
 ```sh
 uv sync --locked --extra dev
 uv run --locked --extra dev python -m pytest -q -W error
-uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8787
 ```
 
 CI (`.github/workflows/phase-0-ci.yml`) runs: typecheck, test:architect, security, test:simulation, test, build; API pytest; Playwright e2e.
@@ -68,4 +68,4 @@ Contract docs live under `docs/` (`simulation/`, `ai-architect/`, `npc/`). Read 
 - `GEMINI_API_KEY` goes only in the gitignored `apps/api/.env` (copy `.env.example`). Never put it in a `VITE_` variable or browser storage. If there's no key, `/v1/city/plan` returns `PROVIDER_NOT_CONFIGURED`. `TINY_CITY_PROVIDER_MODE=mock` turns on a fixed fixture.
 - Playwright starts its own servers: a production build plus preview on port 4173, and the API on port 8012 in mock mode with an empty key override, so ordinary e2e runs never make paid calls. Don't change that.
 - `TINY_CITY_LIVE_UI=1 npm run test:e2e` runs only `e2e/ai-architect-live.spec.ts` against real Gemini (paid). It's forbidden when `CI` is set. `python -m tiny_city_api.live_smoke` is also paid.
-- `VITE_AI_ARCHITECT_API_URL` overrides the default API base URL `http://127.0.0.1:8000`.
+- `VITE_AI_ARCHITECT_API_URL` overrides the default API base URL `http://127.0.0.1:8787`.

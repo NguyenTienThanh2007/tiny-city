@@ -59,7 +59,7 @@ const threeVillasIntent: ArchitectIntent = {
   region: null, budgetLimit: null, connectRoads: true,
   builds: [{ buildingType: 'villa', quantity: 3, preferredPosition: null }],
   moves: [], demolish: [], roadAdd: [], roadRemove: [], preserveBuildingIds: [],
-  unsupportedRequests: [], ambiguities: [],
+  unsupportedRequests: [], ambiguities: [], demolishTargets: [], moveTargets: [], preserveRoads: false, preserveTypes: [],
 };
 
 function installPlanningFetch(
@@ -586,7 +586,7 @@ describe('smart HUD and planner connectivity', () => {
     click('Generate AI plan');
     expect(await screen.findByRole('region', { name: 'Planner recovery' })).toHaveTextContent('Can’t reach the planning server');
     expect(screen.getByRole('region', { name: 'Planner recovery' })).toHaveTextContent('Your prompt is still in the composer');
-    expect(screen.getByRole('region', { name: 'Planner recovery' })).toHaveTextContent('uv run uvicorn');
+    expect(screen.getByRole('region', { name: 'Planner recovery' })).toHaveTextContent('npm run dev:api');
     expect(await screen.findByText('Planner unreachable')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Describe a city change' })).toHaveValue('Add a park by the sea');
     expect(screen.queryByRole('button', { name: 'Approve & build' })).not.toBeInTheDocument();

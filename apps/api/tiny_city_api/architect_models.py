@@ -34,6 +34,19 @@ class MoveRequest(WireModel):
     buildingId: str = Field(min_length=1, max_length=128)
     position: Point
 
+class TargetSelector(WireModel):
+    """Which existing buildings a command means; resolved deterministically by the TypeScript planner."""
+    buildingType: BuildingType | None = None
+    ids: list[Identifier] = Field(default_factory=list, max_length=32)
+    quantity: int = Field(default=1, ge=1, le=32)
+    all: bool = False
+    relative: Literal['left','right','back','front'] | None = None
+
+class MoveTarget(WireModel):
+    target: TargetSelector
+    near: Literal['existing','park','road','center'] = 'existing'
+    position: Point | None = None
+
 class ArchitectIntent(WireModel):
     summary: str = Field(min_length=1, max_length=512)
     language: Literal['en','vi']
@@ -50,6 +63,10 @@ class ArchitectIntent(WireModel):
     preserveBuildingIds: list[Identifier] = Field(default_factory=list, max_length=128)
     unsupportedRequests: list[Description] = Field(default_factory=list, max_length=32)
     ambiguities: list[Description] = Field(default_factory=list, max_length=32)
+    demolishTargets: list[TargetSelector] = Field(default_factory=list, max_length=16)
+    moveTargets: list[MoveTarget] = Field(default_factory=list, max_length=16)
+    preserveRoads: bool = False
+    preserveTypes: list[BuildingType] = Field(default_factory=list, max_length=9)
 
 class PlanningConstraints(WireModel):
     allowPartial: bool = False
@@ -128,6 +145,36 @@ class RoadCommand(WireModel):
 
 CityCommand = Annotated[BuildCommand | MoveCommand | DemolishCommand | RoadCommand, Field(discriminator='type')]
 
+class TargetCandidate(WireModel):
+    buildingId: str
+    name: str
+    buildingType: BuildingType | None
+    position: Point
+
+class PlanClarification(WireModel):
+    kind: Literal['demolish','move']
+    index: int
+    quantity: int
+    message: str
+    candidates: list[TargetCandidate]
+
+class PlanAuthorization(WireModel):
+    demolish: list[str]
+    move: list[str]
+    protectedIds: list[str]
+    destructiveRequired: bool
+    message: str
+
+class PlanImpact(WireModel):
+    buildingsAdded: int
+    buildingsRemoved: int
+    buildingsMoved: int
+    roomsAdded: int
+    roomsRemoved: int
+    residentsRemoved: int
+    residentsRehoused: int
+    playerHomeRemoved: bool
+
 class PlanProposal(WireModel):
     contractVersion: Literal[1]
     planId: str
@@ -149,6 +196,9 @@ class PlanProposal(WireModel):
     validation: PlanValidation
     warnings: list[Warning]
     commands: list[CityCommand]
+    clarifications: list[PlanClarification]
+    authorization: PlanAuthorization | None
+    impact: PlanImpact
 
 class PlanningResponse(WireModel):
     requestId: str
@@ -165,11 +215,16 @@ class ErrorResponse(WireModel):
 
 
 class ProviderStatus(BaseModel):
-    mode: Literal['gemini', 'mock', 'custom']
+    mode: Literal['gemini', 'mock', 'local', 'custom']
     configured: bool
+    # Non-secret model name (Gemini only), so a misconfigured model is visible without revealing credentials.
+    model: str | None = None
 
 
 class PlannerStatusResponse(BaseModel):
     status: Literal['ok'] = 'ok'
+    # Identity lets clients tell this API apart from another service answering on the same port.
+    service: Literal['tiny-city-api'] = 'tiny-city-api'
+    contractVersion: Literal[1] = 1
     provider: ProviderStatus
     planner: Literal['ready', 'not-built']

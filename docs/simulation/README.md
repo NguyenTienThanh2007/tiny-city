@@ -22,7 +22,7 @@ For the backend:
 cd apps/api
 uv sync --locked --extra dev
 uv run --locked --extra dev python -m pytest -q
-uv run --locked uvicorn tiny_city_api.main:app --reload --host 127.0.0.1 --port 8000
+uv run --locked uvicorn tiny_city_api.main:app --reload --host 127.0.0.1 --port 8787
 ```
 
 The root npm and API uv lockfiles pin the integrated dependency graphs. The simulation package's earlier standalone lockfile remains available for isolated package development. Generated JavaScript, dependencies, virtual environments, and test caches are ignored locally.
