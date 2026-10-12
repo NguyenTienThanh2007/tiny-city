@@ -731,6 +731,8 @@ export interface HousingSummary {
   readonly homes: number;
   readonly rooms: number;
   readonly residents: number;
+  /** Rooms taken: residents plus the housed player. */
+  readonly occupied: number;
   readonly freeRooms: number;
   readonly playerRoomHeld: boolean;
 }
@@ -741,7 +743,7 @@ export function housingSummary(world: WorldState): HousingSummary {
   const residents = world.citizens.filter((c) => ids.has(c.homeBuildingId)).length;
   const rooms = homes.reduce((sum, h) => sum + h.capacity, 0);
   const playerRoom = world.player?.homeBuildingId && ids.has(world.player.homeBuildingId) ? 1 : 0;
-  return { homes: homes.length, rooms, residents, freeRooms: Math.max(0, rooms - residents - playerRoom),
+  return { homes: homes.length, rooms, residents, occupied: residents + playerRoom, freeRooms: Math.max(0, rooms - residents - playerRoom),
     playerRoomHeld: world.player !== undefined && world.player.homeBuildingId === null && world.population !== undefined };
 }
 

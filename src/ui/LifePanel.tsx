@@ -5,6 +5,7 @@ import { activityLabels } from '../simulation/citizenView';
 import { CitizenAvatar } from './CitizenAvatar';
 import { describePlayer, NEED_LABELS, needWord, rejectionText, type PlayerLogEntry } from '../simulation/playerView';
 import { DEFAULT_APPEARANCE } from '../game/playerLook';
+import type { WelcomeProjection } from '../simulation/housingView';
 import type { BuildingKind } from '../types';
 import { BuildingThumb } from './BuildingThumb';
 import { Icon } from './Icon';
@@ -72,7 +73,7 @@ export function LifeEntry({ populationEnabled, onCreate }: { populationEnabled: 
   </section>;
 }
 
-export function HomePicker({ options, selectedId, purpose, populationEnabled, welcome, onWelcomeChange, onSelect, onConfirm, onBack, onBuildHome, kindOf,
+export function HomePicker({ options, selectedId, purpose, populationEnabled, welcome, projection, onWelcomeChange, onSelect, onConfirm, onBack, onBuildHome, kindOf,
   housing, fresh, playerName }: {
   options: readonly HomeOption[];
   housing: HousingSummary;
@@ -82,6 +83,8 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
   purpose: 'create' | 'move';
   populationEnabled: boolean;
   welcome: boolean;
+  /** What moving in will actually produce when residents are welcomed at the same time (engine dry run). */
+  projection: WelcomeProjection | null;
   onWelcomeChange: (value: boolean) => void;
   onSelect: (id: string) => void;
   onConfirm: () => void;
@@ -101,9 +104,9 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
     {available.length === 0 && <div className="housing-recovery" role="region" aria-label="No free home">
       <div className="housing-recovery-head"><Icon name="home" size={18} />
         <strong>{options.length === 0 ? 'There are no homes yet' : 'Every home is full right now'}</strong></div>
-      {options.length > 0 && <div className="housing-meter" aria-label={`${housing.residents} of ${housing.rooms} rooms taken`}>
-        <span><b>{housing.residents}</b> of {housing.rooms} rooms taken in {housing.homes} home{housing.homes === 1 ? '' : 's'}</span>
-        <span className="meter"><i style={{ width: `${housing.rooms ? Math.min(100, housing.residents / housing.rooms * 100) : 0}%` }} /></span>
+      {options.length > 0 && <div className="housing-meter" aria-label={`${housing.occupied} of ${housing.rooms} rooms taken`}>
+        <span><b>{housing.occupied}</b> of {housing.rooms} rooms taken in {housing.homes} home{housing.homes === 1 ? '' : 's'}</span>
+        <span className="meter"><i style={{ width: `${housing.rooms ? Math.min(100, housing.occupied / housing.rooms * 100) : 0}%` }} /></span>
       </div>}
       <p>Residents are never moved out to make room for you. Build a villa, townhouse or apartment beside a road
         {playerName ? <> and one room is kept free for <b>{playerName}</b></> : null} — new residents will not take it.</p>
@@ -120,7 +123,7 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
           <button type="button" className={`home-option ${o.available ? 'is-available' : 'is-full'} ${selectedId === o.buildingId ? 'is-selected' : ''} ${fresh.has(o.buildingId) ? 'is-fresh' : ''}`}
             aria-pressed={selectedId === o.buildingId} disabled={!o.available} onClick={() => onSelect(o.buildingId)}>
             {kind && <BuildingThumb kind={kind} />}
-            <span className="home-copy"><strong>{o.name}{fresh.has(o.buildingId) && <em className="new-chip">New</em>}</strong><small>{o.residents} of {o.capacity} rooms taken</small></span>
+            <span className="home-copy"><strong>{o.name}{fresh.has(o.buildingId) && <em className="new-chip">New</em>}</strong><small>{o.occupied} of {o.capacity} rooms taken{o.current ? ' (incl. you)' : ''}</small></span>
             <span className={`home-chip ${o.available ? 'ok' : ''}`}>{state}</span>
           </button>
         </li>;
@@ -128,7 +131,11 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
     </ul>
     {selected && <div className="home-confirm" role="region" aria-label="Confirm home">
       <strong>Move into {selected.name}?</strong>
-      <p>{selected.residents} of {selected.capacity} rooms are taken; you will take one. {selected.roadConnected ? 'It touches a road, so you can walk anywhere connected.' : 'It does not touch a road yet, so you will not be able to walk out until one is built.'}</p>
+      <p>{selected.occupied} of {selected.capacity} rooms are taken; you will take one.
+        {purpose === 'create' && !populationEnabled ? welcome && projection
+          ? <> No residents have moved in yet. Welcoming them fills the other rooms: {projection.roommates === 0 ? 'nobody will share this home' : `${projection.roommates} resident${projection.roommates === 1 ? '' : 's'} will share this home`}, and {projection.residents} will live in the city.</>
+          : <> No residents have moved in yet, and none will until you welcome them.</> : null}
+        {' '}{selected.roadConnected ? 'It touches a road, so you can walk anywhere connected.' : 'It does not touch a road yet, so you will not be able to walk out until one is built.'}</p>
       {purpose === 'create' && !populationEnabled && <label className="check-line"><input type="checkbox" checked={welcome} onChange={(e) => onWelcomeChange(e.target.checked)} /> Also welcome residents so you have neighbours</label>}
       <div className="home-confirm-actions">
         <button className="approve-plan" onClick={onConfirm}>{purpose === 'create' ? 'Move in & start' : 'Move here'}</button>

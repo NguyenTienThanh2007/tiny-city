@@ -9,6 +9,7 @@ import CityViewport from './game/CityViewport';
 import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea, TargetHighlight } from './game/CityViewport';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
 import { ActionButton, HomePicker, LifeEntry, LifePanel, LifeStrip, PlaceCard } from './ui/LifePanel';
+import { homeOccupancy, projectWelcome } from './simulation/housingView';
 import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, rejectionText, type PlayerLogState } from './simulation/playerView';
 import { DEFAULT_APPEARANCE } from './game/playerLook';
 import { Icon } from './ui/Icon';
@@ -808,13 +809,15 @@ function App() {
     const result = applyLifeCommand(world, command, getNavigator());
     return { action: 'cancel', available: result.reason === null, reason: result.reason };
   };
+  // Vacancies change only with the plan, the residents' home assignments or the player's home. The key follows every
+  // assignment (not just the head count), so a resident rehoused by a city edit never leaves a stale "free room".
+  const assignmentKey = useMemo(() => world.citizens.map((c) => c.homeBuildingId).join('|'), [world.citizens]);
   const homeOptions = useMemo(() => lifeFlow?.step === 'home' || playerWaiting ? playerHomeOptions(world, getNavigator()) : [],
-    // Vacancies change only with the plan, residents or the player's home.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lifeFlow?.step, playerWaiting, world.plan, world.citizens.length, world.player?.homeBuildingId, getNavigator]);
+    [lifeFlow?.step, playerWaiting, world.plan, assignmentKey, world.player?.homeBuildingId, getNavigator]);
   const housing = useMemo(() => housingSummary(world),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [world.plan, world.citizens.length, world.player?.homeBuildingId, world.population]);
+    [world.plan, assignmentKey, world.player?.homeBuildingId, world.population]);
   // Homes that existed when the player first found every room taken; anything built since is highlighted as new.
   const homeBaselineRef = useRef<Set<string> | null>(null);
   if (playerWaiting && homeBaselineRef.current === null && homeOptions.length > 0 && homeOptions.every((option) => !option.available)) {
@@ -838,6 +841,10 @@ function App() {
     freeRoomsRef.current = housing.freeRooms;
   }, [housing.freeRooms, playerWaiting, player, homeOptions, showNotice]);
   const homeSelectedId = lifeFlow?.step === 'home' ? lifeFlow.selectedId : null;
+  const welcomeProjection = useMemo(() => lifeFlow?.step === 'home' && lifeFlow.purpose === 'create' && homeSelectedId && welcomeWithPlayer && !populationEnabled
+    ? projectWelcome(getSnapshot(), homeSelectedId) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lifeFlow?.step, homeSelectedId, welcomeWithPlayer, populationEnabled, world.plan, world.player?.movement.status]);
   const homeHighlights: HomeHighlight[] | null = useMemo(() => lifeFlow?.step === 'home' ? homeOptions.flatMap((option) => {
     const building = world.plan.buildings.find((entry) => entry.id === option.buildingId);
     return building ? [{ id: building.id, x: building.position.x, y: building.position.y, width: building.footprint.width, height: building.footprint.height,
@@ -893,9 +900,9 @@ function App() {
     const kind = city.buildings.find((entry) => entry.id === lifePlace.id)?.kind ?? 'villa';
     const occupancy = getBuildingOccupancy(lifePlace.id);
     const own = lifePlace.id === player.homeBuildingId;
-    const vacancy = lifePlace.kind === 'home' ? lifePlace.capacity - world.citizens.filter((c) => c.homeBuildingId === lifePlace.id).length - (own ? 1 : 0) : 0;
-    const detail = own ? `Your home · ${occupancy.residentIds.length + 1} of ${lifePlace.capacity} rooms taken`
-      : lifePlace.kind === 'home' ? `${BUILDINGS[kind].label} · ${vacancy > 0 ? `${vacancy} free room${vacancy === 1 ? '' : 's'}` : 'no free rooms'}`
+    const rooms = homeOccupancy(lifePlace.capacity, occupancy, player, lifePlace.id);
+    const detail = own ? `Your home · ${rooms.occupied} of ${lifePlace.capacity} rooms taken`
+      : lifePlace.kind === 'home' ? `${BUILDINGS[kind].label} · ${rooms.freeRooms > 0 ? `${rooms.freeRooms} free room${rooms.freeRooms === 1 ? '' : 's'}` : 'no free rooms'}`
       : isLeisure(lifePlace) ? `${BUILDINGS[kind].label} · ${occupancy.visitorIds.length} of ${lifePlace.capacity} visitors now`
       : `${BUILDINGS[kind].label} · ${occupancy.workerIds.length} working here · not open to visit`;
     const walk = <ActionButton key="walk" label="Walk here" icon="walk" hint={own ? 'Go inside' : 'Stop at the entrance'}
@@ -906,7 +913,7 @@ function App() {
       <ActionButton key="eat" label="Eat" icon="leaf" hint="30 min · fills hunger" availability={dryRun({ type: 'player.start-activity', activity: 'eat' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'eat' })} />]
       : isLeisure(lifePlace) ? [<ActionButton key="visit" label="Visit" icon="park" hint="60 min · lifts mood" availability={dryRun({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })}
         onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })} />, walk]
-      : lifePlace.kind === 'home' && vacancy > 0 ? [walk, <ActionButton key="move-in" label="Move in here" icon="home" hint="Take a free room" availability={{ action: 'cancel', available: true, reason: null }}
+      : lifePlace.kind === 'home' && rooms.freeRooms > 0 ? [walk, <ActionButton key="move-in" label="Move in here" icon="home" hint="Take a free room" availability={{ action: 'cancel', available: true, reason: null }}
         onClick={() => { setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: lifePlace.id }); setLifePlaceId(null); }} />]
       : [walk];
     return <PlaceCard name={lifePlace.name} kind={kind} detail={detail} actions={actions} />;
@@ -1256,7 +1263,8 @@ function App() {
 
         {view === 'building' && selectedBuilding && <BuildingInspector building={selectedBuilding} roadConnected={roadConnected}
           occupancy={populationEnabled ? getBuildingOccupancy(selectedBuilding.id) : null}
-          citizens={citizenMap} populationEnabled={populationEnabled}
+          citizens={citizenMap} populationEnabled={populationEnabled} player={player ?? null}
+          onSelectPlayer={() => { setSelectedBuildingId(null); setBaseMode('life'); if (compact) setSheetOpen(true); }}
           onClose={() => { setSelectedBuildingId(null); setMovingBuildingId(null); setTool('select'); }}
           onDetails={() => {
             const building = world.plan.buildings.find((entry) => entry.id === selectedBuilding.id);
@@ -1277,7 +1285,7 @@ function App() {
           onWelcome={welcomeResidents} onResume={() => { resume(); setSaved(false); }} onSelectCitizen={(id) => { selectCitizen(id); focusCitizen(id); }} />}
 
         {view === 'life' && lifeFlow?.step === 'home' && <HomePicker options={homeOptions} selectedId={lifeFlow.selectedId} purpose={lifeFlow.purpose}
-          populationEnabled={populationEnabled} welcome={welcomeWithPlayer} onWelcomeChange={setWelcomeWithPlayer} onSelect={selectHome} onConfirm={confirmHome}
+          populationEnabled={populationEnabled} welcome={welcomeWithPlayer} projection={welcomeProjection} onWelcomeChange={setWelcomeWithPlayer} onSelect={selectHome} onConfirm={confirmHome}
           housing={housing} fresh={freshHomes} playerName={player?.name ?? null}
           onBack={() => setLifeFlow(playerWaiting && player ? { step: 'identity', draft: { name: player.name, appearance: player.appearance }, editing: true } : null)}
           onBuildHome={() => {
