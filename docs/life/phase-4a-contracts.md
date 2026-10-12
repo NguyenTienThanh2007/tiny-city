@@ -92,9 +92,9 @@ is exported as `applyLifeCommand(world, command, navigator)`.
 
 | Command | Effect | Rejections |
 | --- | --- | --- |
-| `player.create {name, appearance, homeBuildingId}` | Spawns inside the home, idle, with initial needs | `player-exists`, `invalid-name`, `invalid-appearance`, `home-not-found`, `not-a-home`, `home-full` |
+| `player.create {name, appearance, homeBuildingId?}` | With a home: spawns inside it, idle, with initial needs. Without one: creates the character **unplaced** (kept and saved while the player finds or builds housing) | `player-exists`, `invalid-name`, `invalid-appearance`, `home-not-found`, `not-a-home`, `home-full` |
 | `player.customize {name, appearance}` | Renames or restyles the character | `player-not-found`, `invalid-name`, `invalid-appearance` |
-| `player.move-in {homeBuildingId}` | Moving day: an explicit relocation inside the new home that cancels the current activity | `player-not-found`, `home-not-found`, `not-a-home`, `already-home`, `home-full` |
+| `player.move-in {homeBuildingId}` | Moving day: an explicit relocation inside the new home that cancels the current activity. For an unplaced character this is their spawn | `player-not-found`, `home-not-found`, `not-a-home`, `already-home`, `home-full` |
 | `player.move-to {destination}` | `tile` (a road tile) or `building`. Enters only the player's own home; otherwise stops on the building's curb. A building tile is treated as that building. | `invalid-destination` (grass, water, out of bounds), `building-not-found`, `unreachable`, `stranded`, `invalid-command` |
 | `player.start-activity {activity, buildingId?, citizenId?}` | `rest`/`eat` travel home first. `visit` picks the given venue or the nearest reachable one with space. `greet`/`socialize` approach a resident. | `no-home`, `not-leisure`, `no-venue`, `venue-full`, `building-not-found`, `citizen-not-found`, `citizen-unavailable`, `too-tired`, `unreachable`, `stranded` |
 | `player.cancel` | Ends the current activity as `cancelled` and stops in place | `nothing-to-cancel` |
@@ -105,6 +105,25 @@ rejected, the current activity continues untouched.
 `playerHomeOptions(world)` lists every home with real `residents`, `capacity`, `available`, `roadConnected` and
 `current`. `playerActionAvailability(world, navigator, citizenId?)` dry-runs each action through the same reducer, so
 the HUD shows the engine's own reasons.
+
+## Unplaced characters and the held room (housing fix)
+
+- `PlayerMovement.status` may be `unplaced`: the character exists but has not moved in. It has no home, activity or
+  route; its position is a placeholder that is never rendered or used for routing.
+- While unplaced:
+  - `move-to`, `start-activity` and `cancel` reject with `not-placed`;
+  - needs do not change, because life starts at the first move-in.
+- **Held room.** While a player exists with `homeBuildingId === null` (unplaced, or after losing their home),
+  `reconcilePopulation` stops creating *new* residents when only one free room remains in the city.
+  - Existing residents are always housed first, so none is displaced, evicted or re-homed because of the hold.
+  - Capacities are never changed.
+  - Building a home in a full city therefore leaves exactly one room for the player: a new villa gets one resident,
+    a new apartment 23.
+- `housingSummary(world)` returns `homes`, `rooms`, `residents`, `freeRooms` and `playerRoomHeld` for the home picker.
+- **Root cause of the reported "every home is Full" bug** (reproduced in the engine and in the browser):
+  - welcoming residents uses a population cap of 1000, far above housing, so every room fills;
+  - every city command re-runs population reconciliation, which filled each newly built home at once;
+  - the character draft lived only in React state, so leaving to build lost it.
 
 ## Residency rules
 

@@ -102,8 +102,13 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
     }
   }
   const ids = new Set(world.citizens.map(c => c.id));
+  // A player without a home (not yet moved in, or home lost) has one room held back from *new* residents, so building
+  // housing always leaves a place to move into. Existing residents above were housed first and are never displaced.
+  let free = homes.reduce((sum, home) => sum + Math.max(0, housing(home) - (homeCounts.get(home.id) ?? 0)), 0);
+  const held = world.player !== undefined && world.player.homeBuildingId === null ? 1 : 0;
   for (const home of homes) {
-    while ((homeCounts.get(home.id) ?? 0) < housing(home) && citizens.length < world.population.maxCitizens) {
+    while ((homeCounts.get(home.id) ?? 0) < housing(home) && citizens.length < world.population.maxCitizens && free > held) {
+      free -= 1;
       while (ids.has(`npc-${cursor}`) && cursor < Number.MAX_SAFE_INTEGER) cursor += 1;
       if (cursor >= Number.MAX_SAFE_INTEGER) throw new RangeError('citizen ID limit reached');
       const id = `npc-${cursor++}`; ids.add(id); reserve(homeCounts, home.id);

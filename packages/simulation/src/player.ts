@@ -159,6 +159,13 @@ function socialTopic(citizen: Citizen, firstMeeting: boolean): PlayerSocialTopic
   return 'neighbourhood';
 }
 
+const unplaced = (revision: number): PlayerMovement => ({
+  status: 'unplaced', heading: STILL, currentBuildingId: null, destinationBuildingId: null, route: [], nextWaypoint: 0, plannedRevision: revision,
+});
+/** Placeholder position for a character who has not moved in yet; never rendered or used for routing. */
+const UNPLACED_POSITION: Position = { x: 0.5, y: 0.5 };
+export const isPlayerPlaced = (player: PlayerCharacter): boolean => player.movement.status !== 'unplaced';
+
 const standing = (currentBuildingId: string | null, revision: number): PlayerMovement => ({
   status: 'standing', heading: STILL, currentBuildingId, destinationBuildingId: null, route: [], nextWaypoint: 0, plannedRevision: revision,
 });
@@ -287,13 +294,16 @@ export function applyLifeCommand(world: WorldState, command: LifeCommand, nav: R
       const name = normalizePlayerName(command.name);
       if (!name) return reject('invalid-name');
       if (!isPlayerAppearance(command.appearance)) return reject('invalid-appearance');
-      const home = nav.getBuilding(command.homeBuildingId);
-      if (!home) return reject('home-not-found');
-      if (home.kind !== 'home') return reject('not-a-home');
-      if (!playerHomeOptions(world, nav).find((o) => o.buildingId === home.id)?.available) return reject('home-full');
-      const created: PlayerCharacter = { version: 1, id: PLAYER_ID, name, appearance: { ...command.appearance }, homeBuildingId: home.id,
-        position: buildingCenter(home), movement: insideMovement(home.id, revision), activity: IDLE, needs: { ...PLAYER_BALANCE.initialNeeds },
-        acquaintances: [], createdTick: tick, lastOutcome: null };
+      // Without a home the character is created unplaced: kept (and saved) while the player finds or builds housing.
+      const home = command.homeBuildingId === undefined ? undefined : nav.getBuilding(command.homeBuildingId);
+      if (command.homeBuildingId !== undefined) {
+        if (!home) return reject('home-not-found');
+        if (home.kind !== 'home') return reject('not-a-home');
+        if (!playerHomeOptions(world, nav).find((o) => o.buildingId === home.id)?.available) return reject('home-full');
+      }
+      const created: PlayerCharacter = { version: 1, id: PLAYER_ID, name, appearance: { ...command.appearance }, homeBuildingId: home?.id ?? null,
+        position: home ? buildingCenter(home) : UNPLACED_POSITION, movement: home ? insideMovement(home.id, revision) : unplaced(revision),
+        activity: IDLE, needs: { ...PLAYER_BALANCE.initialNeeds }, acquaintances: [], createdTick: tick, lastOutcome: null };
       events.push({ type: 'player.created', tick, player: created });
       return { state: withPlayer(world, created), events, reason: null };
     }
@@ -320,6 +330,7 @@ export function applyLifeCommand(world: WorldState, command: LifeCommand, nav: R
     }
     case 'player.cancel': {
       if (!player) return reject('player-not-found');
+      if (!isPlayerPlaced(player)) return reject('not-placed');
       if (player.activity.kind === 'idle' && player.movement.status !== 'travelling') return reject('nothing-to-cancel');
       let next = finish(world, player, 'cancelled', null, events);
       next = { ...next, movement: stopMovement(player, nav, revision) };
@@ -327,6 +338,7 @@ export function applyLifeCommand(world: WorldState, command: LifeCommand, nav: R
     }
     case 'player.move-to': {
       if (!player) return reject('player-not-found');
+      if (!isPlayerPlaced(player)) return reject('not-placed');
       const destination = command.destination;
       let target: { building?: Building; enter?: boolean; goals?: readonly Position[] };
       let activity: PlayerActivity;
@@ -357,6 +369,7 @@ export function applyLifeCommand(world: WorldState, command: LifeCommand, nav: R
     }
     case 'player.start-activity': {
       if (!player) return reject('player-not-found');
+      if (!isPlayerPlaced(player)) return reject('not-placed');
       if (!['rest', 'eat', 'visit', 'greet', 'socialize'].includes(command.activity)) return reject('invalid-command');
       const resolved = resolveAction(world, player, nav, command.activity, command.buildingId, command.citizenId);
       if (typeof resolved === 'string') return reject(resolved);
@@ -418,7 +431,8 @@ function updateNeeds(player: PlayerCharacter, world: WorldState, minutes: number
 /** One fixed tick for the player: re-route, walk, perform, and update needs. Bounded to one route search. */
 export function advancePlayer(world: WorldState, nav: RoadNavigator): Change {
   let player = world.player;
-  if (!player) return { state: world, events: [] };
+  // Life starts at the first move-in: an unplaced character neither moves nor has changing needs.
+  if (!player || !isPlayerPlaced(player)) return { state: world, events: [] };
   const events: SimulationEvent[] = [], tick = world.clock.tick, revision = world.revision, minutes = world.clock.minutesPerTick;
   const citizen = player.activity.citizenId ? world.citizens.find((c) => c.id === player!.activity.citizenId) : undefined;
   if (player.activity.citizenId && !citizen) player = { ...finish(world, player, 'failed', 'citizen-left', events), movement: stopMovement(player, nav, revision) };
@@ -538,6 +552,7 @@ export function reconcilePlayer(world: WorldState, previous: WorldState | undefi
     player = { ...player, homeBuildingId: null };
   }
   if (player.acquaintances.some((id) => !citizens.has(id))) player = { ...player, acquaintances: player.acquaintances.filter((id) => citizens.has(id)) };
+  if (!isPlayerPlaced(player)) return { state: withPlayer(world, player), events };
   const planChanged = previous !== undefined && previous.plan !== world.plan;
   const relocate = (reason: 'building-removed' | 'building-moved' | 'road-removed') => {
     const road = nav.nearestRoad(player!.position, PLAYER_LIMITS.relocationRadius);
@@ -607,7 +622,12 @@ export function validatePlayer(world: WorldState, assert: (condition: boolean, m
   assert(a.kind === 'idle' || a.kind === 'move' ? a.durationMinutes === 0 : a.durationMinutes === PLAYER_BALANCE.activities[a.kind].minutes, 'player activity duration does not match its definition');
   assert((a.kind !== 'greet' && a.kind !== 'socialize') || a.citizenId !== null, 'social activity needs a resident');
   const m = p.movement;
-  assert(['inside', 'travelling', 'standing'].includes(m.status), 'invalid player movement');
+  assert(['inside', 'travelling', 'standing', 'unplaced'].includes(m.status), 'invalid player movement');
+  if (m.status === 'unplaced') {
+    assert(p.homeBuildingId === null && a.kind === 'idle' && m.currentBuildingId === null && m.destinationBuildingId === null &&
+      m.route.length === 0 && m.heading.x === 0 && m.heading.y === 0, 'an unplaced player has no home, activity or route');
+    return;
+  }
   assert(m.currentBuildingId === null || byId.has(m.currentBuildingId), 'player movement references an unknown building');
   assert(m.destinationBuildingId === null || byId.has(m.destinationBuildingId), 'player movement references an unknown destination');
   assert([m.heading.x, m.heading.y].every((v) => v === 0 || v === 1 || v === -1) && Math.abs(m.heading.x) + Math.abs(m.heading.y) <= 1, 'invalid player heading');
@@ -676,6 +696,9 @@ export interface PlayerActionAvailability {
 export function playerActionAvailability(world: WorldState, nav: RoadNavigator, citizenId?: string): readonly PlayerActionAvailability[] {
   const player = world.player;
   if (!player) return [];
+  if (!isPlayerPlaced(player)) {
+    return (['go-home', 'rest', 'eat', 'visit', 'cancel'] as const).map((action) => ({ action, available: false, reason: 'not-placed' as const }));
+  }
   const check = (action: PlayerActionKind | 'go-home', command: LifeCommand): PlayerActionAvailability => {
     const result = applyLifeCommand(world, command, nav);
     return { action, available: result.reason === null, reason: result.reason };
@@ -696,3 +719,23 @@ export function playerActionAvailability(world: WorldState, nav: RoadNavigator, 
   list.push({ action: 'cancel', available: busy, reason: busy ? null : 'nothing-to-cancel' });
   return list;
 }
+
+/** City-wide housing for the home picker: real rooms, residents and whether a room is held for the player. */
+export interface HousingSummary {
+  readonly homes: number;
+  readonly rooms: number;
+  readonly residents: number;
+  readonly freeRooms: number;
+  readonly playerRoomHeld: boolean;
+}
+
+export function housingSummary(world: WorldState): HousingSummary {
+  const homes = world.plan.buildings.filter((b) => b.kind === 'home');
+  const ids = new Set(homes.map((h) => h.id));
+  const residents = world.citizens.filter((c) => ids.has(c.homeBuildingId)).length;
+  const rooms = homes.reduce((sum, h) => sum + h.capacity, 0);
+  const playerRoom = world.player?.homeBuildingId && ids.has(world.player.homeBuildingId) ? 1 : 0;
+  return { homes: homes.length, rooms, residents, freeRooms: Math.max(0, rooms - residents - playerRoom),
+    playerRoomHeld: world.player !== undefined && world.player.homeBuildingId === null && world.population !== undefined };
+}
+
