@@ -6,7 +6,7 @@ From the repository root, run `npm ci` and `npm run build:architect`; then from 
 
 Configuration is backend-only: `.env.example` documents defaults and Settings loads `.env` without overriding shell environment variables. Put your key in `GEMINI_API_KEY` in this ignored file. Existing files/keys must be preserved. Without a key `/v1/city/plan` reports `PROVIDER_NOT_CONFIGURED`; `/v1/city/plan/validate` works offline. `TINY_CITY_PROVIDER_MODE=mock` explicitly enables a fixed demo fixture.
 
-Endpoints: `/health`, `/v1/city/catalog`, `/v1/city/plan`, `/v1/city/plan/validate`, `/docs`, `/openapi.json`. There is no apply endpoint: approval and atomic execution belong to the shared client helper and existing engine.
+Endpoints: `/health`, `/v1/city/status` (provider mode, whether a key is configured, planner built — never calls the provider or reveals credentials), `/v1/city/catalog`, `/v1/city/plan`, `/v1/city/plan/validate`, `/docs`, `/openapi.json`. There is no apply endpoint: approval and atomic execution belong to the shared client helper and existing engine.
 
 Tests: `uv run --locked --extra dev python -m pytest -q -W error`. SDK responses are mocked; API tests still run the real TypeScript planner. A separate potentially paid live check is `uv run python -m tiny_city_api.live_smoke`.
 

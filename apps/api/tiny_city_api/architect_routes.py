@@ -3,7 +3,9 @@ import time
 from collections import deque
 from fastapi import APIRouter, Request
 from .architect_errors import ArchitectError
-from .architect_models import ErrorResponse, PlanningRequest, ValidationRequest, PlanningResponse
+from .architect_models import ErrorResponse, PlanningRequest, PlannerStatusResponse, ProviderStatus, ValidationRequest, PlanningResponse
+from .planner_bridge import WORKER
+from .providers import GeminiProvider, MockProvider
 
 router = APIRouter(prefix='/v1/city', tags=['AI city architect'])
 ERRORS = {code: {'model': ErrorResponse} for code in (409,413,422,429,502,503,504)}
@@ -24,6 +26,19 @@ class RequestGate:
             raise ArchitectError('PROVIDER_RATE_LIMIT', 'The local planning request limit was reached.', 429, True)
         self.starts.append(now)
         self.inflight += 1
+
+@router.get('/status', response_model=PlannerStatusResponse)
+async def planner_status(request: Request) -> PlannerStatusResponse:
+    """Cheap readiness report for the client: never calls the AI provider or reveals credentials."""
+    provider = request.app.state.provider
+    settings = request.app.state.settings
+    if isinstance(provider, MockProvider):
+        mode, configured = 'mock', True
+    elif isinstance(provider, GeminiProvider):
+        mode, configured = 'gemini', bool(settings.gemini_api_key.get_secret_value().strip())
+    else:
+        mode, configured = 'custom', True
+    return PlannerStatusResponse(provider=ProviderStatus(mode=mode, configured=configured), planner='ready' if WORKER.is_file() else 'not-built')
 
 async def disconnect_monitor(request: Request):
     while not await request.is_disconnected():

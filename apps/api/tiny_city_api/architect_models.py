@@ -162,3 +162,14 @@ class ErrorDetail(WireModel):
 class ErrorResponse(WireModel):
     requestId: str
     error: ErrorDetail
+
+
+class ProviderStatus(BaseModel):
+    mode: Literal['gemini', 'mock', 'custom']
+    configured: bool
+
+
+class PlannerStatusResponse(BaseModel):
+    status: Literal['ok'] = 'ok'
+    provider: ProviderStatus
+    planner: Literal['ready', 'not-built']
