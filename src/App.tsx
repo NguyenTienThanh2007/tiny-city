@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent } from 'react';
 import { CONSTRUCTION_COSTS, getGameTime, OccupancyGrid, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
+import type { SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { PlanProposal, PlanningConstraints, PlanningHost } from '@tiny-city/ai-architect';
 import CityViewport from './game/CityViewport';
-import type { CameraRequest } from './game/CityViewport';
+import type { CameraRequest, SafeArea } from './game/CityViewport';
+import { skyTint } from './game/npcMotion';
+import { Icon } from './ui/Icon';
+import { MiniMap } from './ui/MiniMap';
+import { SimulationDock } from './ui/SimulationDock';
+import { CitizenInspector } from './ui/CitizenInspector';
+import { BuildingInspector } from './ui/BuildingInspector';
+import { BuildPanel, type OnboardingStep } from './ui/BuildPanel';
+import { LivePanel } from './ui/LivePanel';
+import { BuildingThumb } from './ui/BuildingThumb';
+import { residentsWithoutJobs, summarizeActivities } from './simulation/citizenView';
+import { emptyLifeFeed, reduceLifeFeed, type LifeFeedState } from './simulation/lifeFeed';
 import { ArchitectClientError, createPlanningRequest, requestCityPlan } from './aiArchitect/client';
 import { rejectionFeedback } from './simulation/feedback';
 import { loadCitySave, saveCity } from './simulation/citySave';
@@ -14,6 +26,43 @@ import { projectCity } from './simulation/cityAdapter';
 import { BUILDINGS, type BuildingKind, type CityState, type Cell, type Tool } from './types';
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
+type BaseMode = 'build' | 'live';
+const GUIDE_KEY = 'tiny-city-guide-hidden';
+const promptSuggestions = [
+  'Build three villas around a small park',
+  'Add an office tower so residents have jobs',
+  'Xây 2 biệt thự gần công viên',
+  'Create a pool and clubhouse corner for evenings',
+];
+
+function readGuideHidden(): boolean {
+  try { return localStorage.getItem(GUIDE_KEY) === '1'; } catch { return false; }
+}
+function writeGuideHidden(hidden: boolean) {
+  try { if (hidden) localStorage.setItem(GUIDE_KEY, '1'); else localStorage.removeItem(GUIDE_KEY); } catch { /* Guide visibility is a convenience only. */ }
+}
+
+/** Screen regions covered by floating HUD panels; the camera centers content in what remains visible. */
+function useSafeArea(): { safeArea: SafeArea; compact: boolean } {
+  const read = () => {
+    const width = typeof window === 'undefined' ? 1280 : window.innerWidth;
+    if (width < 760) return { compact: true, safeArea: { left: 64, right: 0, top: 112, bottom: 150 } };
+    if (width < 1100) return { compact: false, safeArea: { left: 88, right: 330, top: 72, bottom: 104 } };
+    return { compact: false, safeArea: { left: 92, right: 384, top: 72, bottom: 104 } };
+  };
+  const [value, setValue] = useState(read);
+  useEffect(() => {
+    const onResize = () => setValue((current) => {
+      const next = read();
+      return current.compact === next.compact && current.safeArea.left === next.safeArea.left &&
+        current.safeArea.right === next.safeArea.right && current.safeArea.top === next.safeArea.top &&
+        current.safeArea.bottom === next.safeArea.bottom ? current : next;
+    });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return value;
+}
 type CameraFootprintPoint = { x: number; y: number };
 type ArchitectStatus = 'idle' | 'requesting' | 'validating' | 'preview-ready' | 'applying' | 'applied' | 'rejected' | 'cancelled' | 'error' | 'stale';
 type ArchitectState = {
@@ -50,74 +99,21 @@ const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
   { id: 'bulldoze', label: 'Bulldoze', shortcut: 'X' },
 ];
 
-function Icon({ name, size = 18 }: { name: string; size?: number }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  const paths: Record<string, ReactNode> = {
-    select: <><path d="m5 3 13 10-6 1.2L9 20 5 3Z" /><path d="m12 14 4 5" /></>,
-    road: <><path d="m7 3-3 18M17 3l3 18" /><path d="M12 4v3m0 4v3m0 4v3" /></>,
-    move: <><path d="M12 3v18M3 12h18" /><path d="m9 6 3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3" /></>,
-    villa: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-7h6v7" /></>,
-    duplex: <><path d="m2 10 10-7 10 7" /><path d="M4 9v11h16V9M8 20v-7h3v7m2-7h3v7" /></>,
-    townhouse: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M8 12h2m4 0h2m-8 3h2m4 0h2" /></>,
-    apartment: <><path d="M5 21V4h14v17M3 21h18" /><path d="M8 7h2m4 0h2M8 11h2m4 0h2M8 15h2m4 0h2m-4 6v-4" /></>,
-    park: <><path d="M12 21v-8" /><path d="M8 14a4 4 0 1 1 7.6-1.7A3.2 3.2 0 1 1 16 18H8a2 2 0 0 1 0-4Z" /></>,
-    clubhouse: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /><path d="M9 9h.01M15 9h.01" /></>,
-    pool: <><path d="M3 15c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2" /><path d="M3 19c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 2-2M7 5v6m5-8v8m5-6v6" /></>,
-    mall: <><path d="M3 9h18v12H3zM2 9l2-5h16l2 5" /><path d="M8 21v-7h8v7M7 7h.01M12 7h.01M17 7h.01" /></>,
-    office: <><path d="M5 21V4h14v17M3 21h18" /><path d="M8 7h2m4 0h2M8 11h2m4 0h2M8 15h2m4 0h2" /></>,
-    bulldoze: <><path d="M3 16h18M6 16l2-7h7l3 7" /><path d="M8 9V5h7l3 4" /><circle cx="8" cy="18" r="1" /><circle cx="17" cy="18" r="1" /></>,
-    save: <><path d="M5 3h12l4 4v14H3V3h2Z" /><path d="M7 3v6h10V3M7 21v-8h10v8" /></>,
-    undo: <><path d="M9 14 4 9l5-5" /><path d="M4 9h9a6 6 0 0 1 0 12h-2" /></>,
-    redo: <><path d="m15 14 5-5-5-5" /><path d="M20 9h-9a6 6 0 0 0 0 12h2" /></>,
-    sparkle: <><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z" /></>,
-    home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
-    roadStat: <><path d="m7 3-3 18M17 3l3 18" /><path d="M12 4v3m0 4v3m0 4v3" /></>,
-    people: <><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 6" /></>,
-    coin: <><circle cx="12" cy="12" r="9" /><path d="M15 8.5a3 3 0 0 0-3-1.5c-1.7 0-3 .9-3 2.2 0 3.4 6 1.2 6 4.6 0 1.3-1.3 2.2-3 2.2a3.8 3.8 0 0 1-3.3-1.6M12 5v14" /></>,
-    arrow: <><path d="M5 12h14m-6-6 6 6-6 6" /></>,
-    close: <><path d="m6 6 12 12M18 6 6 18" /></>,
-  };
-  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...common}>{paths[name] ?? paths.sparkle}</svg>;
-}
-
-function MiniMap({ city, cameraFootprint, onNavigate }: { city: CityState; cameraFootprint: CameraFootprintPoint[] | null; onNavigate: (cell: Cell) => void }) {
-  const buildingMarks = city.buildings.map((building) => {
-    const spec = BUILDINGS[building.kind];
-    const role = spec.role;
-    const color = role === 'home' ? '#e6ad73' : role === 'park' ? '#d8edaa' : '#9bbfc1';
-    const x = ((building.x + spec.width / 2) / city.size) * 100;
-    const y = ((building.y + spec.height / 2) / city.size) * 100;
-    return <circle key={building.id} data-testid={`minimap-building-${building.id}`} cx={x} cy={y} r="1.45" fill={color} />;
-  });
-  return <div className="minimap" role="button" tabIndex={0} aria-label="Navigate neighborhood overview"
-    title="Click to center the camera on a map location"
-    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onNavigate({ x: city.size / 2, y: city.size / 2 }); } }}
-    onClick={(event) => {
-      const bounds = event.currentTarget.getBoundingClientRect();
-      onNavigate({ x: Math.max(0, Math.min(city.size, (event.clientX - bounds.left) / bounds.width * city.size)),
-        y: Math.max(0, Math.min(city.size, (event.clientY - bounds.top) / bounds.height * city.size)) });
-    }}><div className="minimap-grid" />
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Neighborhood overview">
-      <g fill="#d9e2c8">{city.roads.map(({ x, y }, index) => <circle key={`${x}-${y}-${index}`} data-testid={index === 0 ? 'minimap-road-first' : undefined} cx={((x + 0.5) / city.size) * 100} cy={((y + 0.5) / city.size) * 100} r="0.72" />)}</g>
-      <g>{buildingMarks}</g>
-      {cameraFootprint && <polygon
-        data-testid="minimap-camera"
-        points={cameraFootprint.map(({ x, y }) => `${(x / city.size) * 100},${(y / city.size) * 100}`).join(' ')}
-        fill="#f6e5af"
-        fillOpacity="0.13"
-        stroke="#f6e5af"
-        strokeWidth="1.15"
-        vectorEffect="non-scaling-stroke"
-      />}
-    </svg>
-    <span>VILLA GARDENS</span>
-  </div>;
-}
-
 function App() {
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
-  const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, step, getSnapshot } = useCitySimulation(loaded.city, loaded.world);
+  const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
+    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy } = useCitySimulation(loaded.city, loaded.world);
+  const [baseMode, setBaseMode] = useState<BaseMode>('build');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedCitizenId, setSelectedCitizenId] = useState<string | null>(null);
+  const [followCitizenId, setFollowCitizenId] = useState<string | null>(null);
+  const [feed, setFeed] = useState<LifeFeedState>(emptyLifeFeed);
+  const feedRef = useRef<LifeFeedState>(emptyLifeFeed);
+  const [unseenFeed, setUnseenFeed] = useState(0);
+  const [guideHidden, setGuideHidden] = useState(readGuideHidden);
+  const [metResident, setMetResident] = useState(false);
+  const { safeArea, compact } = useSafeArea();
   const cityRef = useRef(city);
   cityRef.current = city;
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -354,11 +350,12 @@ function App() {
         ...Object.fromEntries(buildingKinds.map((kind, index) => [String(index + 1), kind])) };
       const next = shortcuts[key];
       if (next) { setTool(next); if (next !== 'move') setMovingBuildingId(null); }
-      if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); setMovingBuildingId(null); }
+      if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); setMovingBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); }
+      if (event.key === ' ' && target?.tagName !== 'BUTTON') { event.preventDefault(); togglePause(); setSaved(false); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [redo, undo]);
+  }, [redo, undo, togglePause]);
 
   const save = () => {
     try {
@@ -370,15 +367,11 @@ function App() {
     }
   };
 
-  const roads = city.roads.length;
   const villas = city.buildings.filter((building) => BUILDINGS[building.kind].role === 'home').length;
-  const parks = city.buildings.filter((building) => building.kind === 'park').length;
   const selectedBuilding = city.buildings.find((building) => building.id === selectedBuildingId) ?? null;
-  const selectedSpec = selectedBuilding ? BUILDINGS[selectedBuilding.kind] : null;
   const roadGraph = useMemo(() => new RoadGraph(world.plan.roads), [world.plan.roads]);
   const selectedWorldBuilding = world.plan.buildings.find((building) => building.id === selectedBuildingId);
   const roadConnected = selectedWorldBuilding ? roadGraph.getAdjacentComponents(selectedWorldBuilding).length > 0 : false;
-  const selectedTool = tools.find((item) => item.id === tool);
   const gameTime = getGameTime(world.clock);
   const gameDay = String(gameTime.day + 1).padStart(2, '0');
   const gameClock = `${String(Math.floor(gameTime.minuteOfDay / 60)).padStart(2, '0')}:${String(gameTime.minuteOfDay % 60).padStart(2, '0')}`;
@@ -417,6 +410,8 @@ function App() {
     if (!prompt || ['requesting', 'validating', 'applying'].includes(architectState.status)) return;
     setArchitectPanelOpen(true);
     setSelectedBuildingId(null);
+    setSelectedCitizenId(null);
+    setFollowCitizenId(null);
     setMovingBuildingId(null);
     setTool('select');
     endGesture();
@@ -532,7 +527,6 @@ function App() {
     if (!review || architectState.status !== 'preview-ready') return;
     review.reject();
     activeReviewRef.current = null;
-    setArchitectPanelOpen(false);
     setDestructiveConfirmation(false);
     setArchitectState({ status: 'rejected', proposal: architectState.proposal, requestId: architectState.requestId,
       message: 'Proposal rejected. Your city is unchanged.' });
@@ -583,246 +577,331 @@ function App() {
     else void applyProposal(false);
   };
 
-  const keyboardHelp = `${selectedTool?.label ?? 'Select'} tool active`;
+  const populationEnabled = world.population !== undefined;
+  const citizens = world.citizens;
+  const citizenMap = useMemo(() => new Map(citizens.map((citizen) => [citizen.id, citizen])), [citizens]);
+  const selectedCitizen = selectedCitizenId ? citizenMap.get(selectedCitizenId) ?? null : null;
+  const activitySummary = useMemo(() => summarizeActivities(citizens), [citizens]);
+  const jobless = useMemo(() => residentsWithoutJobs(citizens), [citizens]);
+  const homeCapacity = city.buildings.reduce((sum, building) => sum + (BUILDINGS[building.kind].role === 'home' ? BUILDINGS[building.kind].capacity : 0), 0);
+  const workplaces = city.buildings.filter((building) => building.kind === 'office' || building.kind === 'mall').length;
+  const mode = architectPanelOpen ? 'plan' : baseMode;
+  const baseModeRef = useRef(baseMode);
+  baseModeRef.current = baseMode;
+
+  // Residents can leave (housing lost); drop a stale selection rather than showing invented data.
+  useEffect(() => {
+    if (selectedCitizenId && !citizenMap.has(selectedCitizenId)) { setSelectedCitizenId(null); setFollowCitizenId(null); }
+  }, [citizenMap, selectedCitizenId]);
+
+  useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
+    const next = reduceLifeFeed(feedRef.current, events, state);
+    if (next === feedRef.current) return;
+    const added = next.nextId - feedRef.current.nextId;
+    feedRef.current = next;
+    setFeed(next);
+    if (added > 0 && baseModeRef.current !== 'live') setUnseenFeed((count) => Math.min(9, count + added));
+  }), [subscribe]);
+
+  const selectBuilding = useCallback((id: string | null) => {
+    setSelectedBuildingId(id);
+    if (id !== null) { setSelectedCitizenId(null); setFollowCitizenId(null); }
+  }, []);
+  const selectCitizen = useCallback((id: string | null) => {
+    setSelectedCitizenId(id);
+    if (id !== null) { setSelectedBuildingId(null); setMovingBuildingId(null); setMetResident(true); }
+    setFollowCitizenId((current) => current === id ? current : null);
+  }, []);
+  const focusCitizen = (id: string) => {
+    const citizen = getSnapshot().citizens.find((entry) => entry.id === id);
+    if (citizen) setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, cell: citizen.position, scale: 1.15 }));
+  };
+  const zoomCamera = (zoom: number) => setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, zoom }));
+
+  const chooseMode = (next: 'build' | 'plan' | 'live') => {
+    setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null);
+    if (next === 'plan') {
+      setArchitectPanelOpen((open) => compact ? !open : true);
+      setSheetOpen(false);
+      return;
+    }
+    setArchitectPanelOpen(false);
+    if (compact) setSheetOpen((open) => baseMode === next && mode === next ? !open : true);
+    setBaseMode(next);
+    if (next === 'live') { setTool('select'); setUnseenFeed(0); }
+  };
+
+  const welcomeResidents = () => {
+    if (getSnapshot().population) return;
+    enablePopulation({ maxCitizens: 1000 });
+    setSaved(false);
+    const count = getSnapshot().citizens.length;
+    if (count > 0) resume();
+    setBaseMode('live'); setArchitectPanelOpen(false); setTool('select'); setUnseenFeed(0);
+    if (compact) setSheetOpen(true);
+    showNotice(count > 0 ? `${count} residents moved in. Time is running; click someone walking to meet them.`
+      : 'Residents will move in as soon as you build homes beside a road.');
+  };
+
+  const guideSteps: OnboardingStep[] = [
+    { id: 'road', label: 'Pave a road', hint: 'Choose Road (R) and drag across open grass.', done: city.roads.length > 0 },
+    { id: 'home', label: 'Build a home beside the road', hint: 'Homes must touch a road along one edge.', done: villas > 0 },
+    { id: 'work', label: 'Add a workplace', hint: 'An office tower or mall gives residents a commute.', done: workplaces > 0 },
+    { id: 'residents', label: 'Welcome residents', hint: 'They move into homes and follow daily routines.', done: populationEnabled },
+    { id: 'ai', label: 'Ask the AI Architect', hint: 'Describe a change below. Nothing is built until you approve.', done: promptHistory.length > 0 },
+    { id: 'meet', label: 'Meet a resident', hint: 'Click someone walking on the map to see their routine.', done: metResident },
+  ];
+
+  const tint = skyTint(gameTime.minuteOfDay);
+  const dirty = history.length > 0 || redoHistory.length > 0 || world.clock.tick !== loaded.world.clock.tick || populationEnabled !== (loaded.world.population !== undefined);
+  const view = selectedCitizen ? 'citizen' : selectedBuilding && !movingBuildingId ? 'building' : mode;
+  const sheetVisible = compact && (view === 'citizen' || view === 'building' || architectPanelOpen || sheetOpen);
+  const proposalBreakdown = currentProposal ? Object.entries(currentProposal.placements
+    .filter((placement) => placement.operation === 'build')
+    .reduce<Record<string, number>>((counts, placement) => ({ ...counts, [placement.buildingType]: (counts[placement.buildingType] ?? 0) + 1 }), {}))
+    .map(([type, count]) => ({ type: type as BuildingKind, count, cost: count * BUILDINGS[type as BuildingKind].cost })) : [];
+  const toolHint = tool === 'select' ? (populationEnabled ? 'Click a resident or building to inspect it' : 'Click a building to inspect it')
+    : tool === 'road' ? 'Click or drag to pave road tiles · $8 each'
+    : tool === 'move' ? (movingBuildingId ? 'Choose an open destination for the building' : 'Click a building to move it')
+    : tool === 'bulldoze' ? 'Click a building or road to demolish it'
+    : `Click an open lot to place a ${BUILDINGS[tool].label.toLowerCase()}`;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell mode-${mode} ${compact ? 'is-compact' : ''}`}>
+      <section className="map-stage">
+        <CityViewport
+          city={city}
+          world={world}
+          getWorld={getSnapshot}
+          proposal={overlayProposal}
+          onSimulationFrame={advanceSimulation}
+          tool={tool}
+          selectedBuildingId={selectedBuildingId}
+          movingBuildingId={movingBuildingId}
+          selectedCitizenId={selectedCitizenId}
+          followCitizenId={followCitizenId}
+          onSelectBuilding={selectBuilding}
+          onSelectCitizen={populationEnabled ? selectCitizen : undefined}
+          onFollowEnd={() => setFollowCitizenId(null)}
+          onPlaceBuilding={placeBuilding}
+          onBeginMoveBuilding={beginMoveBuilding}
+          onMoveBuilding={moveBuilding}
+          onAddRoad={addRoad}
+          onBulldoze={bulldoze}
+          onCameraFootprintChange={setCameraFootprint}
+          cameraRequest={cameraRequest}
+          safeArea={safeArea}
+          onBeginGesture={beginGesture}
+          onEndGesture={endGesture}
+        />
+        <div className="daylight" aria-hidden="true" style={{ backgroundColor: tint.color, opacity: populationEnabled ? tint.opacity : 0 }} />
+        {overlayProposal && <div className="preview-ribbon" role="note"><Icon name="sparkle" size={14} /> AI preview · not built yet</div>}
+      </section>
+
       <header className="topbar">
         <div className="brand-lockup">
-          <div className="brand-mark"><span /><span /><span /><span /></div>
-          <div><div className="brand-name">TINY CITY</div><div className="brand-tagline">IMAGINE · BUILD · LIVE</div></div>
+          <div className="brand-mark" aria-hidden="true"><span /><span /><span /><span /></div>
+          <div className="brand-copy">
+            <div className="brand-name">Tiny City</div>
+            <div className="city-line"><span>Villa Gardens</span><span className={`save-state ${saved ? 'is-saved' : dirty ? 'is-dirty' : ''}`}>{saved ? 'Saved on this device' : dirty ? 'Unsaved changes' : 'Local city'}</span></div>
+          </div>
         </div>
-        <div className="project-name"><span className="status-dot" /><span>Villa Gardens</span><span className="project-state">LOCAL CITY</span></div>
-        <div className="mode-switch" role="group" aria-label="Game mode">
-          <button className="mode-tab active" aria-pressed="true"><span className="mode-tab-index">01</span> Architect</button>
-          <button className="mode-tab" aria-pressed="false" onClick={() => showNotice('Life Mode is planned for the next milestone.')}>02&nbsp; Life</button>
-          <button className="mode-tab" aria-pressed="false" onClick={() => showNotice('God Mode is planned for the next milestone.')}>03&nbsp; God</button>
+        <nav className="mode-switch" aria-label="Game mode">
+          <button className={`mode-tab ${mode === 'build' ? 'active' : ''}`} aria-pressed={mode === 'build'} onClick={() => chooseMode('build')} title="Build roads and buildings">
+            <Icon name="layers" size={16} /><span>Build</span></button>
+          <button className={`mode-tab ${mode === 'plan' ? 'active' : ''}`} aria-pressed={mode === 'plan'} onClick={() => chooseMode('plan')} title="Plan with the AI Architect">
+            <Icon name="sparkle" size={16} /><span>Plan</span></button>
+          <button className={`mode-tab ${mode === 'live' ? 'active' : ''}`} aria-pressed={mode === 'live'} onClick={() => chooseMode('live')} title="Watch residents live their day">
+            <Icon name="people" size={16} /><span>Live</span>{unseenFeed > 0 && <b className="tab-badge" aria-label={`${unseenFeed} new city life updates`}>{unseenFeed}</b>}</button>
+        </nav>
+        <div className="hud-stats">
+          <div className="hud-stat cash" title="Funds available for construction"><Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds</small></div>
+          <div className="hud-stat" title={populationEnabled ? 'Residents living in the city' : 'Residents have not moved in yet'}><Icon name="people" size={15} /><strong>{populationEnabled ? citizens.length : '—'}</strong><small>Residents</small></div>
+          <div className="hud-stat" title="Home buildings"><Icon name="home" size={15} /><strong>{villas}</strong><small>Homes</small></div>
         </div>
         <div className="top-actions">
           <button className="icon-button" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!history.length}><Icon name="undo" /></button>
           <button className="icon-button" aria-label="Redo" title="Redo (⌘⇧Z)" onClick={redo} disabled={!redoHistory.length}><Icon name="redo" /></button>
-          <span className="action-divider" />
           <button className={`save-button ${saved ? 'is-saved' : ''}`} onClick={save}><Icon name="save" size={16} />{saved ? 'Saved' : 'Save'}</button>
-          <button className="avatar-button" aria-label="Profile" title="Profile" onClick={() => showNotice('Your city is saved locally on this device.')}>H</button>
         </div>
       </header>
 
-      <section className="workspace">
-        <nav className="tool-rail" aria-label="Build tools">
-          <div className="rail-label">TOOLS</div>
-          {tools.map((item) => (
-              <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => {
-                setArchitectPanelOpen(false);
-                if (item.id !== 'move') setMovingBuildingId(null);
-                setTool(item.id);
-              }} title={`${item.label} · ${item.shortcut}`}>
-              <span className={`tool-icon tool-${item.id}`}><Icon name={item.id} size={19} /></span>
-              <span className="tool-label">{item.label}</span>
-              {item.cost !== undefined && <span className="tool-cost">${item.cost}</span>}
-            </button>
-          ))}
-          <div className="rail-foot"><span className="rail-line" /><span>64 × 64</span><span>GRID</span></div>
-        </nav>
+      <nav className="tool-rail" aria-label="Build tools">
+        {tools.map((item, index) => <div key={item.id} className="tool-slot">
+          {(index === 3 || index === tools.length - 1) && <span className="rail-divider" aria-hidden="true" />}
+          <button className={`tool-button tool-${item.id} ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => {
+            if (item.id !== 'move') setMovingBuildingId(null);
+            setTool(item.id);
+          }} title={`${item.label} · ${item.shortcut}`}>
+            <span className="tool-icon"><Icon name={item.id} size={19} /></span>
+            <span className="tool-label">{item.label}</span>
+            {item.cost !== undefined && <span className="tool-cost">${item.cost}</span>}
+            <kbd aria-hidden="true">{item.shortcut}</kbd>
+          </button>
+        </div>)}
+      </nav>
 
-        <section className="map-stage">
-          <CityViewport
-            city={city}
-            world={world}
-            proposal={overlayProposal}
-            onSimulationFrame={advanceSimulation}
-            tool={tool}
-            selectedBuildingId={selectedBuildingId}
-            movingBuildingId={movingBuildingId}
-            onSelectBuilding={setSelectedBuildingId}
-            onPlaceBuilding={placeBuilding}
-            onBeginMoveBuilding={beginMoveBuilding}
-            onMoveBuilding={moveBuilding}
-            onAddRoad={addRoad}
-            onBulldoze={bulldoze}
-            onCameraFootprintChange={setCameraFootprint}
-            cameraRequest={cameraRequest}
-            onBeginGesture={beginGesture}
-            onEndGesture={endGesture}
-          />
-          <div className="stage-heading">
-            <div className="eyebrow">YOUR NEIGHBORHOOD <span>·</span> COASTAL DISTRICT</div>
-            <h1>Villa Gardens <span className="weather-pill">☀&nbsp; 27°</span></h1>
-            <p>A quiet coastal neighborhood, ready for your next idea.</p>
+      <SimulationDock day={gameDay} clock={gameClock} minuteOfDay={gameTime.minuteOfDay} paused={world.clock.paused} speed={speed} lastEvent={lastEvent}
+        onTogglePause={() => { togglePause(); setSaved(false); }} onStep={() => { step(); setSaved(false); }} onSpeed={setSpeed} />
+
+      <div className="map-tools">
+        <div className="zoom-controls" role="group" aria-label="Camera">
+          <button className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomCamera(1.25)}><Icon name="plus" size={16} /></button>
+          <button className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomCamera(0.8)}><Icon name="minus" size={16} /></button>
+          <button className="icon-button camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => { setFollowCitizenId(null); navigateCamera(); }}><Icon name="center" size={16} /></button>
+        </div>
+        <MiniMap city={city} citizens={citizens} cameraFootprint={cameraFootprint} selectedCitizenId={selectedCitizenId} onNavigate={(cell) => { setFollowCitizenId(null); navigateCamera(cell); }} />
+      </div>
+
+      <div className="tool-hint" aria-hidden="true"><span className="control-dot" />{toolHint}<span className="control-separator">·</span>Scroll to zoom<span className="control-separator">·</span>Shift + drag to pan</div>
+
+      <form className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
+        <button type="button" className="architect-panel-toggle" aria-controls="architect-panel"
+          aria-expanded={architectPanelOpen} aria-label={architectPanelOpen ? 'Hide AI Architect panel' : 'Show AI Architect panel'}
+          onClick={() => { const opening = !architectPanelOpen; setArchitectPanelOpen(opening); if (opening) { setSelectedBuildingId(null); setSelectedCitizenId(null); setSheetOpen(false); } }}>
+          <Icon name="sparkle" size={17} /><span>AI options</span></button>
+        <div className="planner-copy"><strong>AI Architect</strong><span id="architect-prompt-help">Preview first, then approve</span></div>
+        <textarea value={command} onChange={(event) => setCommand(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }} aria-label="Describe a city change" aria-describedby="architect-prompt-help"
+          placeholder="Describe a change, e.g. Xây 3 biệt thự gần công viên…"
+          rows={1} disabled={architectBusy} />
+        {planningRequestActive
+          ? <button key="cancel-request" className="planner-submit cancel-planning" type="button" onClick={(event) => {
+            event.preventDefault();
+            cancelArchitectRequest();
+          }}
+            aria-label="Cancel planning request" title="Cancel request"><Icon name="close" size={17} /></button>
+          : <button key="generate-request" className="planner-submit" type="submit" aria-label={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate AI plan'}
+            title={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate plan'}
+            disabled={!command.trim() || architectState.status === 'applying'}><Icon name="arrow" size={18} /></button>}
+      </form>
+      {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check"><Icon name="check" size={12} /></span>{notice}</div>}
+
+      <aside className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''}`}>
+        {compact && sheetVisible && (view === 'build' || view === 'live') && !architectPanelOpen && <button className="sheet-close" aria-label="Close panel" onClick={() => setSheetOpen(false)}><Icon name="close" size={16} /></button>}
+        <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">
+          <div className="panel-topline"><span>AI ARCHITECT</span><span className={`architect-chip state-${architectState.status}`}>{architectStatusLabel[architectState.status]}</span></div>
+          <div className="architect-heading-row"><span className="architect-sparkle"><Icon name="sparkle" size={18} /></span>
+            <div><h2 id="architect-heading">AI Architect</h2><p>Your idea, safely planned</p></div>
           </div>
-          <div className="city-stats">
-            <div className="city-stat"><span className="stat-icon homes"><Icon name="home" size={15} /></span><span><strong>{villas}</strong><small>HOMES</small></span></div>
-            <div className="city-stat"><span className="stat-icon roads"><Icon name="roadStat" size={15} /></span><span><strong>{roads}</strong><small>ROAD TILES</small></span></div>
-            <div className="city-stat"><span className="stat-icon park"><Icon name="park" size={15} /></span><span><strong>{parks}</strong><small>PARKS</small></span></div>
-            <div className="city-stat cash"><span className="stat-icon cash"><Icon name="coin" size={15} /></span><span><strong>${city.funds.toLocaleString()}</strong><small>FUNDS</small></span></div>
+          <p className="architect-intro">Describe a change in the prompt bar. Plans appear as a blueprint on the map; the city only changes after you approve a valid plan.</p>
+          {!currentProposal && !architectBusy && <div className="prompt-suggestions" aria-label="Example prompts">
+            {promptSuggestions.map((suggestion) => <button key={suggestion} type="button" className="suggestion-chip" onClick={() => setCommand(suggestion)}>{suggestion}</button>)}
+          </div>}
+          <div className={`architect-state state-${architectState.status}`} role="status" aria-live="polite">
+            <span className="architect-state-dot" />
+            <span>{architectState.message ?? architectStatusLabel[architectState.status]}</span>
+            {architectState.requestId && <small>Request {architectState.requestId}</small>}
+            {(architectState.status === 'error' || architectState.status === 'stale') && <small className="recovery">{architectState.status === 'stale'
+              ? 'Your manual edit is kept. Send the prompt again to plan against the current city.'
+              : 'Nothing was changed. Check the planning server, then press the arrow to retry.'}</small>}
           </div>
-          <div className="map-controls"><span className="control-dot" /> {keyboardHelp}<span className="control-separator">·</span> Scroll to zoom <span className="control-separator">·</span> Shift + drag to pan</div>
-          <div className="map-coordinate">WORLD GRID <b>64 × 64</b></div>
-          <button className="camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => navigateCamera()}>Center city</button>
-          <MiniMap city={city} cameraFootprint={cameraFootprint} onNavigate={navigateCamera} />
-          <form className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
-            <button type="button" className="architect-panel-toggle" aria-controls="architect-panel"
-              aria-expanded={architectPanelOpen} aria-label={architectPanelOpen ? 'Hide AI Architect panel' : 'Show AI Architect panel'}
-              onClick={() => setArchitectPanelOpen((open) => !open)}>AI options</button>
-            <div className="planner-sparkle"><Icon name="sparkle" size={19} /></div>
-            <div className="planner-copy"><strong>AI Architect</strong><span id="architect-prompt-help">Plan first · approve before building</span></div>
-            <textarea value={command} onChange={(event) => setCommand(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }} aria-label="Describe a city change" aria-describedby="architect-prompt-help"
-              placeholder="Ask in English or Vietnamese, e.g. Xây 3 biệt thự gần công viên…"
-              rows={1} disabled={architectBusy} />
-            {planningRequestActive
-              ? <button key="cancel-request" className="planner-submit cancel-planning" type="button" onClick={(event) => {
-                event.preventDefault();
-                cancelArchitectRequest();
-              }}
-                aria-label="Cancel planning request" title="Cancel request">×</button>
-              : <button key="generate-request" className="planner-submit" type="submit" aria-label={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate AI plan'}
-                title={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate plan'}
-                disabled={!command.trim() || architectState.status === 'applying'}><Icon name="arrow" size={18} /></button>}
-          </form>
-          {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check">✓</span>{notice}</div>}
+
+          {currentProposal && <div className={`proposal-card ${architectState.status === 'stale' ? 'is-stale' : ''}`}>
+            <div className="proposal-card-heading"><strong>{currentProposal.summary}</strong>
+              <span className={currentProposal.validation.fulfilled ? 'full' : 'partial'}>{currentProposal.validation.fulfilled ? 'FULL' : 'PARTIAL'}</span></div>
+            <p>{currentProposal.explanation}</p>
+            <div className="proposal-metrics">
+              <div><small>EST. COST</small><strong>${currentProposal.estimatedCost.toLocaleString()}</strong></div>
+              <div><small>AFTER PLAN</small><strong>${currentProposal.projectedBudget.toLocaleString()}</strong></div>
+            </div>
+            {(proposalBreakdown.length > 0 || currentProposal.roads.add.length > 0) && <ul className="cost-breakdown" aria-label="Cost breakdown">
+              {proposalBreakdown.map((line) => <li key={line.type}><BuildingThumb kind={line.type} /><span>{line.count} × {BUILDINGS[line.type].label}</span><b>${line.cost.toLocaleString()}</b></li>)}
+              {currentProposal.roads.add.length > 0 && <li><span className="road-swatch" /><span>{currentProposal.roads.add.length} × Road tile</span><b>${(currentProposal.roads.add.length * CONSTRUCTION_COSTS.road).toLocaleString()}</b></li>}
+            </ul>}
+            <div className="proposal-counts">
+              <span>{currentProposal.placements.filter((placement) => placement.operation === 'build').length} builds</span>
+              <span>{currentProposal.placements.filter((placement) => placement.operation === 'move').length} moves</span>
+              <span>+{currentProposal.roads.add.length} / −{currentProposal.roads.remove.length} roads</span>
+              <span>{currentProposal.validation.operationCount} operations</span>
+            </div>
+            {currentProposal.placements.length > 0 && <ul className="proposal-placements" aria-label="Proposed building locations">
+              {currentProposal.placements.map((placement) => <li key={`${placement.operation}-${placement.buildingId}`}>
+                <span>{placement.operation === 'move' ? 'Move' : 'Build'} {toolLabels[placement.buildingType]}</span>
+                <small>{placement.position.x}, {placement.position.y} · {placement.footprint.width} × {placement.footprint.height}</small>
+              </li>)}
+            </ul>}
+            {!currentProposal.validation.fulfilled && <p className="proposal-partial">Some requested changes could not be fulfilled. Review the warnings before approval.</p>}
+            {currentProposal.warnings.length > 0 && <ul className="proposal-warnings" aria-label="Plan warnings">
+              {currentProposal.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Icon name="warning" size={13} />{warning.message}</li>)}
+            </ul>}
+
+            {architectState.status === 'preview-ready' && <div className="proposal-actions">
+              <button className="approve-plan" onClick={approveProposal}>
+                {proposalHasDestructiveEdits ? 'Review destructive edits' : currentProposal.validation.fulfilled ? 'Approve & build' : 'Approve partial plan'}
+              </button>
+              <button className="reject-plan" onClick={rejectProposal}>Reject</button>
+            </div>}
+            {architectState.status === 'applying' && <div className="proposal-applying" aria-live="polite">Applying one validated simulation batch…</div>}
+          </div>}
+
+          {destructiveConfirmation && currentProposal && <div className="destructive-confirmation" role="alertdialog" aria-labelledby="destructive-heading" aria-describedby="destructive-description">
+            <strong id="destructive-heading">Confirm destructive changes</strong>
+            <p id="destructive-description">These exact items will be removed only if the simulation accepts the full batch:</p>
+            <ul>{destructiveDescriptions.map((description, index) => <li key={`${description}-${index}`}>{description}</li>)}</ul>
+            <div><button className="approve-plan destructive-approve" onClick={() => void applyProposal(true)}>Confirm & apply</button>
+              <button className="reject-plan" onClick={() => setDestructiveConfirmation(false)}>Go back</button></div>
+          </div>}
+
+          <fieldset className="architect-options" disabled={architectOptionsLocked}>
+            <legend>Planning options</legend>
+            <label><input type="checkbox" checked={allowPartial} onChange={(event) => setAllowPartial(event.target.checked)} />
+              Allow partial fulfillment</label>
+            <label><input type="checkbox" checked={protectExisting} onChange={(event) => setProtectExisting(event.target.checked)} />
+              Protect existing buildings</label>
+            <label><input type="checkbox" checked={allowDestructive} onChange={(event) => setAllowDestructive(event.target.checked)} />
+              Allow demolition / road removal proposals</label>
+            {allowDestructive && <small>Each destructive proposal still needs a separate confirmation before it can be applied.</small>}
+            {architectState.status === 'preview-ready' && <small>Options are locked for this preview. Reject it to change settings and request another plan.</small>}
+            <small>Safety allowlists support up to {MAX_PLANNING_ALLOWLIST} existing buildings or road tiles per request.</small>
+          </fieldset>
+
+          {promptHistory.length > 0 && <details className="prompt-history">
+            <summary>Recent requests <span>{promptHistory.length}</span></summary>
+            <ol>{promptHistory.map((entry) => <li key={entry.id}>
+              <button type="button" className="history-prompt" onClick={() => setCommand(entry.prompt)} title="Load this prompt to edit and send as a new request">{entry.prompt}</button>
+              <span>{entry.status}{entry.errorCode ? ` · ${entry.errorCode}` : ''}</span>
+              {entry.summary && <small>{entry.summary}</small>}
+              {entry.requestId && <small>Request ID: {entry.requestId}</small>}
+            </li>)}</ol>
+          </details>}
         </section>
 
-        <aside className={`inspector ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''}`}>
-          <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">
-            <div className="architect-heading-row"><span className="architect-sparkle"><Icon name="sparkle" size={15} /></span>
-              <div><h2 id="architect-heading">AI Architect</h2><p>YOUR IDEA, SAFELY PLANNED</p></div>
-            </div>
-            <p className="architect-intro">Preview changes on the map. The city only changes after you approve a valid plan.</p>
-            <fieldset className="architect-options" disabled={architectOptionsLocked}>
-              <legend>Planning options</legend>
-              <label><input type="checkbox" checked={allowPartial} onChange={(event) => setAllowPartial(event.target.checked)} />
-                Allow partial fulfillment</label>
-              <label><input type="checkbox" checked={protectExisting} onChange={(event) => setProtectExisting(event.target.checked)} />
-                Protect existing buildings</label>
-              <label><input type="checkbox" checked={allowDestructive} onChange={(event) => setAllowDestructive(event.target.checked)} />
-                Allow demolition / road removal proposals</label>
-              {allowDestructive && <small>Each destructive proposal still needs a separate confirmation before it can be applied.</small>}
-              {architectState.status === 'preview-ready' && <small>Options are locked for this preview. Reject it to change settings and request another plan.</small>}
-              <small>Safety allowlists support up to {MAX_PLANNING_ALLOWLIST} existing buildings or road tiles per request.</small>
-            </fieldset>
+        {view === 'citizen' && selectedCitizen && <CitizenInspector citizen={selectedCitizen} world={world} minuteOfDay={gameTime.minuteOfDay}
+          following={followCitizenId === selectedCitizen.id}
+          onFocus={() => focusCitizen(selectedCitizen.id)}
+          onFollow={() => setFollowCitizenId((current) => current === selectedCitizen.id ? null : selectedCitizen.id)}
+          onClose={() => { setSelectedCitizenId(null); setFollowCitizenId(null); }}
+          onSelectBuilding={(id) => selectBuilding(id)} />}
 
-            <div className={`architect-state state-${architectState.status}`} role="status" aria-live="polite">
-              <span className="architect-state-dot" />
-              <span>{architectState.message ?? architectStatusLabel[architectState.status]}</span>
-              {architectState.requestId && <small>Request {architectState.requestId}</small>}
-            </div>
+        {view === 'building' && selectedBuilding && <BuildingInspector building={selectedBuilding} roadConnected={roadConnected}
+          underConstruction={constructionClock < selectedBuilding.createdAt + 5200}
+          occupancy={populationEnabled ? getBuildingOccupancy(selectedBuilding.id) : null}
+          citizens={citizenMap} populationEnabled={populationEnabled}
+          onClose={() => { setSelectedBuildingId(null); setMovingBuildingId(null); setTool('select'); }}
+          onDetails={() => {
+            const building = world.plan.buildings.find((entry) => entry.id === selectedBuilding.id);
+            if (building) showNotice(`${building.name} · ${building.kind} · capacity ${building.capacity}`);
+          }}
+          onMove={() => beginMoveBuilding(selectedBuilding.id)}
+          onBulldoze={() => bulldoze({ x: selectedBuilding.x, y: selectedBuilding.y })}
+          onSelectCitizen={selectCitizen} />}
 
-            {currentProposal && <div className="proposal-card">
-              <div className="proposal-card-heading"><strong>{currentProposal.summary}</strong>
-                <span>{currentProposal.validation.fulfilled ? 'FULL' : 'PARTIAL'}</span></div>
-              <p>{currentProposal.explanation}</p>
-              <div className="proposal-metrics">
-                <div><small>EST. COST</small><strong>${currentProposal.estimatedCost.toLocaleString()}</strong></div>
-                <div><small>AFTER PLAN</small><strong>${currentProposal.projectedBudget.toLocaleString()}</strong></div>
-              </div>
-              <div className="proposal-counts">
-                <span>{currentProposal.placements.filter((placement) => placement.operation === 'build').length} builds</span>
-                <span>{currentProposal.placements.filter((placement) => placement.operation === 'move').length} moves</span>
-                <span>+{currentProposal.roads.add.length} / −{currentProposal.roads.remove.length} roads</span>
-                <span>{currentProposal.validation.operationCount} operations</span>
-              </div>
-              {currentProposal.placements.length > 0 && <ul className="proposal-placements" aria-label="Proposed building locations">
-                {currentProposal.placements.map((placement) => <li key={`${placement.operation}-${placement.buildingId}`}>
-                  <span>{placement.operation === 'move' ? 'Move' : 'Build'} {toolLabels[placement.buildingType]}</span>
-                  <small>{placement.position.x}, {placement.position.y} · {placement.footprint.width} × {placement.footprint.height}</small>
-                </li>)}
-              </ul>}
-              {!currentProposal.validation.fulfilled && <p className="proposal-partial">Some requested changes could not be fulfilled. Review the warnings before approval.</p>}
-              {currentProposal.warnings.length > 0 && <ul className="proposal-warnings" aria-label="Plan warnings">
-                {currentProposal.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}>{warning.message}</li>)}
-              </ul>}
+        {view === 'build' && <BuildPanel tool={tool} funds={city.funds} steps={guideSteps} guideVisible={!guideHidden}
+          onHideGuide={() => { setGuideHidden(true); writeGuideHidden(true); }}
+          onShowGuide={() => { setGuideHidden(false); writeGuideHidden(false); }}
+          onChoose={(kind) => { setMovingBuildingId(null); setTool(kind); if (compact) setSheetOpen(false); }}
+          onWelcome={welcomeResidents} populationEnabled={populationEnabled} />}
 
-              {architectState.status === 'preview-ready' && <div className="proposal-actions">
-                <button className="approve-plan" onClick={approveProposal}>
-                  {proposalHasDestructiveEdits ? 'Review destructive edits' : currentProposal.validation.fulfilled ? 'Approve & build' : 'Approve partial plan'}
-                </button>
-                <button className="reject-plan" onClick={rejectProposal}>Reject</button>
-              </div>}
-              {architectState.status === 'applying' && <div className="proposal-applying" aria-live="polite">Applying one validated simulation batch…</div>}
-            </div>}
-
-            {destructiveConfirmation && currentProposal && <div className="destructive-confirmation" role="alertdialog" aria-labelledby="destructive-heading" aria-describedby="destructive-description">
-              <strong id="destructive-heading">Confirm destructive changes</strong>
-              <p id="destructive-description">These exact items will be removed only if the simulation accepts the full batch:</p>
-              <ul>{destructiveDescriptions.map((description, index) => <li key={`${description}-${index}`}>{description}</li>)}</ul>
-              <div><button className="approve-plan destructive-approve" onClick={() => void applyProposal(true)}>Confirm & apply</button>
-                <button className="reject-plan" onClick={() => setDestructiveConfirmation(false)}>Go back</button></div>
-            </div>}
-
-            {promptHistory.length > 0 && <details className="prompt-history">
-              <summary>Recent requests <span>{promptHistory.length}</span></summary>
-              <ol>{promptHistory.map((entry) => <li key={entry.id}>
-                <button type="button" className="history-prompt" onClick={() => setCommand(entry.prompt)} title="Load this prompt to edit and send as a new request">{entry.prompt}</button>
-                <span>{entry.status}{entry.errorCode ? ` · ${entry.errorCode}` : ''}</span>
-                {entry.summary && <small>{entry.summary}</small>}
-                {entry.requestId && <small>Request ID: {entry.requestId}</small>}
-              </li>)}</ol>
-            </details>}
-          </section>
-          <div className="inspector-topline"><span>NEIGHBORHOOD</span><button className="more-button" aria-label="Neighborhood information" title="Neighborhood information" onClick={() => showNotice('Villa Gardens is a locally saved coastal district.')}>•••</button></div>
-          {selectedBuilding && <button className="inspector-close" aria-label="Close building inspector" onClick={() => { setSelectedBuildingId(null); setMovingBuildingId(null); setTool('select'); }}>×</button>}
-          <h2>{selectedBuilding ? selectedBuilding.name : 'Build something lovely.'}</h2>
-          <p className="inspector-subtitle">{selectedBuilding ? 'BUILDING INSPECTOR' : 'YOUR CITY, YOUR STORY'}</p>
-          <div className={`inspector-scene ${selectedBuilding ? `is-${selectedBuilding.kind}` : ''}`}>
-            <div className="scene-sun" /><div className="scene-cloud cloud-one" /><div className="scene-cloud cloud-two" />
-            <div className="scene-ground" />
-            {selectedBuilding && !['park', 'pool'].includes(selectedBuilding.kind) && <div className={`scene-house is-${selectedBuilding.kind}`}><span className="house-roof" /><span className="house-wall" /><span className="house-window one" /><span className="house-window two" /><span className="house-door" /></div>}
-            <div className="scene-tree tree-one"><i /><b /></div><div className="scene-tree tree-two"><i /><b /></div>
-            {selectedBuilding?.kind === 'park' && <div className="scene-path" />}
-            {selectedBuilding?.kind === 'pool' && <div className="scene-pool" />}
-            <div className="scene-caption"><span>{selectedBuilding?.name ?? 'VILLA GARDENS'}</span><b>{selectedBuilding ? `${selectedBuilding.x} · ${selectedBuilding.y}` : `${villas} HOMES`}</b></div>
-          </div>
-          {selectedBuilding && selectedSpec ? (
-            <div className="building-details">
-              <div className="detail-line"><span>Type</span><strong>{selectedSpec.label}</strong></div>
-              <div className="detail-line"><span>Footprint</span><strong>{selectedSpec.width} × {selectedSpec.height} tiles</strong></div>
-              <div className="detail-line"><span>Capacity</span><strong>{selectedSpec.capacity} places</strong></div>
-              <div className="detail-line"><span>Map location</span><strong>{selectedBuilding.x}, {selectedBuilding.y}</strong></div>
-              <div className="detail-line"><span>Build cost</span><strong>${selectedSpec.cost.toLocaleString()}</strong></div>
-              <div className="detail-line"><span>Road access</span><strong>{selectedSpec.requiresRoad ? 'Required' : 'Optional'}</strong></div>
-              <div className="detail-line"><span>Road connection</span><strong>{roadConnected ? 'Connected' : selectedSpec.requiresRoad ? 'Disconnected' : 'Optional'}</strong></div>
-              <div className="detail-line"><span>Condition</span><strong className="condition"><i /> {constructionClock < selectedBuilding.createdAt + 5200 ? 'Under construction' : 'Ready'}</strong></div>
-              <div className="inspector-buttons">
-                <button className="outline-action details-action" aria-label="Building details" onClick={() => {
-                  const building = world.plan.buildings.find((entry) => entry.id === selectedBuilding.id);
-                  if (building) showNotice(`${building.name} · ${building.kind} · capacity ${building.capacity}`);
-                }}>Details</button>
-                <button className="outline-action" onClick={() => beginMoveBuilding(selectedBuilding.id)}><Icon name="move" size={15} /> Move</button>
-                <button className="small-destruct" aria-label="Bulldoze selected building" title="Demolish building" onClick={() => bulldoze({ x: selectedBuilding.x, y: selectedBuilding.y })}><Icon name="bulldoze" size={16} /></button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="goal-card"><div className="goal-icon"><Icon name="sparkle" size={17} /></div><div><strong>One street at a time</strong><p>Connect homes to roads, then make room for parks and places to gather.</p></div></div>
-              <div className="quick-heading"><span>BUILD CATALOG</span><span>SELECT TO PLACE</span></div>
-              <div className="quick-build-list">
-                {buildingKinds.map((kind) => {
-                  const spec = BUILDINGS[kind];
-                  return <button key={kind} onClick={() => { setMovingBuildingId(null); setTool(kind); }}>
-                    <span className={`quick-thumb ${kind}-thumb`}><i /></span>
-                    <span><strong>{spec.label}</strong><small>{spec.width} × {spec.height} tiles</small></span>
-                    <b>${spec.cost.toLocaleString()}</b>
-                  </button>;
-                })}
-              </div>
-            </>
-          )}
-          <div className="simulation-controls" role="group" aria-label="Simulation controls">
-            <output aria-label="Simulation clock">DAY {gameDay} · {gameClock}</output>
-            <div>
-              <button className="outline-action" onClick={() => { togglePause(); setSaved(false); }}>{world.clock.paused ? 'Resume' : 'Pause'}</button>
-              <button className="outline-action" disabled={!world.clock.paused} onClick={() => { step(); setSaved(false); }}>Step</button>
-            </div>
-            <output className="simulation-event" aria-label="Latest simulation event">{lastEvent ? `${lastEvent.type} · tick ${lastEvent.tick}` : 'No simulation events yet'}</output>
-          </div>
-          <div className="inspector-footer"><span className="online-dot" /> CITY SIMULATION <strong>{world.clock.paused ? 'PAUSED' : 'RUNNING'}</strong><span className="footer-sep" /> DAY {gameDay}</div>
-        </aside>
-      </section>
+        {view === 'live' && <LivePanel populationEnabled={populationEnabled} homes={villas} capacity={homeCapacity} citizens={citizens}
+          summary={activitySummary} jobless={jobless} feed={feed.entries} paused={world.clock.paused} selectedCitizenId={selectedCitizenId}
+          onWelcome={welcomeResidents} onResume={() => { resume(); setSaved(false); }} onSelectCitizen={(id) => { selectCitizen(id); focusCitizen(id); }} />}
+      </aside>
     </main>
   );
 }
