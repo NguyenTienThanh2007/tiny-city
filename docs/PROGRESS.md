@@ -59,3 +59,20 @@ API 58 passed · e2e 26/26 (mock Gemini).
 
 Results: unit 110, simulation 212, architect 31, API 61, e2e 29, typecheck/build/security pass.
 Next: after review, merge PR into `main`; consider adding `/v1/city/status` to `docs/ai-architect/phase-2a.openapi.json`.
+
+## Phase 4 Complete Life Mode (branch `feature/p4-complete-life-mode`, from `origin/main` @ `83a11c8`)
+
+Phase 3 (#7, #8) and Visual World 2.0 (#9) are merged in `main`. No open PRs at start.
+
+1. [x] M1 Architecture and player state contracts (`docs/life/phase-4a-contracts.md`, `WorldState.player`)
+2. [x] M2 Player identity, needs and simulation logic (`packages/simulation/src/player.ts`)
+3. [x] M3 Home ownership (one housing slot, move-in, demolition/move recovery) and navigation (`routeToRoad`)
+4. [x] M4 Resident interactions (greet/socialize, approach, leave detection) and activities (rest/eat/visit)
+5. [ ] M5 Character Creator and Life Mode entry
+6. [ ] M6 Player rendering, camera and controls
+7. [ ] M7 Life HUD, contextual actions and inspector
+8. [ ] M8 Save/load, undo integration and edge cases (frontend)
+9. [ ] M9 Visual QA, performance and browser verification
+10. [ ] M10 Documentation, commits, push and PR
+
+Simulation: 261 tests (49 new in `tests/player.test.ts`).

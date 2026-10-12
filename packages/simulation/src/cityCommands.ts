@@ -3,6 +3,7 @@ import { BUILDING_CATALOG, CONSTRUCTION_COSTS, isBuildingType } from './catalog.
 import { footprintPerimeter, footprintTiles, isGridPosition, OccupancyGrid, tileKey } from './grid.js';
 import { RoadGraph } from './roads.js';
 import { reconcilePopulation } from './population.js';
+import { reconcilePlayer } from './player.js';
 import type { Building, BuildingType, CityCommand, CityCommandResult, CityRejectionReason, PlacementValidation, Position, SimulationEvent, WorldState } from './types.js';
 import { cloneWorld, freeze, validateWorld } from './world.js';
 
@@ -183,6 +184,9 @@ export function applyCityCommand(world: WorldState, command: CityCommand): CityC
   }
   next = population.state;
   events.push(...population.events);
+  const life = reconcilePlayer(next, world);
+  next = life.state;
+  events.push(...life.events);
   validateWorld(next);
   return result(next, events, true);
 }

@@ -85,6 +85,46 @@ export class RoadNavigator {
     append(arrival); append({ x: inside.x, y: arrival.y }); append(inside);
     return { route: Object.freeze(points.map(p => Object.freeze(p))), reason: null };
   }
+  /**
+   * Phase 4 player routing to road tiles (a clicked street, or a building's curb when it cannot be entered).
+   * Same BFS, limits and orthogonal entrance legs as resident routes; resident routing is unchanged.
+   */
+  routeToRoad(position: Position, currentBuildingId: string | null, goals: readonly Position[]): RouteResult {
+    const source = this.getBuilding(currentBuildingId);
+    const sourceInside = source && containsPosition(source, position) ? source : undefined;
+    const tile = { x: Math.floor(position.x), y: Math.floor(position.y) };
+    const starts = sourceInside ? this.getAccessPoints(sourceInside.id) :
+      this.graph.getComponentId(tile) === null ? [] : [tile];
+    const roadGoals = [...goals].filter(p => this.graph.getComponentId(p) !== null).sort(compareTiles);
+    if (!starts.length || !roadGoals.length) return { route: null, reason: 'unreachable' };
+    const key = `${sourceInside ? `b:${sourceInside.id}` : `r:${tileKey(tile)}`}→t:${roadGoals.map(tileKey).join(';')}`;
+    let cached = this.cache.get(key);
+    if (cached) this.cacheHits += 1;
+    else {
+      cached = this.search(starts, roadGoals);
+      if (this.cache.size >= NPC_LIMITS.cachedRoutes) this.cache.delete(this.cache.keys().next().value!);
+      this.cache.set(key, cached);
+    }
+    if (!cached.path) return { route: null, reason: cached.reason ?? 'unreachable' };
+    const points: Position[] = [{ ...position }];
+    const append = (p: Position) => { const last = points.at(-1)!; if (last.x !== p.x || last.y !== p.y) points.push(p); };
+    const first = cached.path[0]!;
+    const entrance = sourceInside ? door(sourceInside, first) : center(first);
+    append({ x: entrance.x, y: position.y }); append(entrance);
+    for (const p of cached.path) append(center(p));
+    return { route: Object.freeze(points.map(p => Object.freeze(p))), reason: null };
+  }
+  /** Nearest road tile to a position within a square radius, ties broken by tile order. */
+  nearestRoad(position: Position, radius: number): Position | null {
+    const cx = Math.floor(position.x), cy = Math.floor(position.y);
+    let best: { tile: Position; distance: number } | null = null;
+    for (let y = cy - radius; y <= cy + radius; y += 1) for (let x = cx - radius; x <= cx + radius; x += 1) {
+      if (this.graph.getComponentId({ x, y }) === null) continue;
+      const distance = Math.abs(x + 0.5 - position.x) + Math.abs(y + 0.5 - position.y);
+      if (!best || distance < best.distance - 1e-9) best = { tile: { x, y }, distance };
+    }
+    return best?.tile ?? null;
+  }
   private search(starts: readonly Position[], goals: readonly Position[]) {
     this.searches += 1;
     const components = new Set(starts.map(p => this.graph.getComponentId(p)));
