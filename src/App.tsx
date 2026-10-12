@@ -158,6 +158,8 @@ function App() {
   const [allowDestructive, setAllowDestructive] = useState(false);
   const [destructiveConfirmation, setDestructiveConfirmation] = useState(false);
   const [notice, setNotice] = useState(loaded.notice ?? '');
+  const [noticeTone, setNoticeTone] = useState<'info' | 'warn'>('info');
+  const panelRef = useRef<HTMLElement>(null);
   const [saved, setSaved] = useState(false);
   const [cameraFootprint, setCameraFootprint] = useState<CameraFootprintPoint[] | null>(null);
   const [cameraRequest, setCameraRequest] = useState<CameraRequest>();
@@ -184,8 +186,9 @@ function App() {
     if (getSnapshot().clock.tick !== tick) setSaved(false);
   }, [advance, getSnapshot]);
 
-  const showNotice = useCallback((message: string) => {
+  const showNotice = useCallback((message: string, tone: 'info' | 'warn' = 'info') => {
     setNotice(message);
+    setNoticeTone(tone);
     if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = window.setTimeout(() => {
       setNotice('');
@@ -691,7 +694,7 @@ function App() {
   const lifeActive = mode === 'life';
   const runLife = useCallback((command: LifeCommand, success?: string) => {
     const result = executeLife(command);
-    if (!result.applied) { if (result.reason) showNotice(rejectionText[result.reason]); return result; }
+    if (!result.applied) { if (result.reason) showNotice(rejectionText[result.reason], 'warn'); return result; }
     setSaved(false);
     setLifeEdits((count) => count + 1);
     if (success) showNotice(success);
@@ -705,9 +708,9 @@ function App() {
   useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
     const next = reducePlayerLog(playerLogRef.current, events, state);
     if (next !== playerLogRef.current) { playerLogRef.current = next; setPlayerLog(next); }
-    if (events.some((event) => event.type === 'player.home-lost')) { showNotice('Your home was removed. Choose a new home in Life mode.'); return; }
+    if (events.some((event) => event.type === 'player.home-lost')) { showNotice('Your home was removed. Choose a new home in Life mode.', 'warn'); return; }
     const failed = events.find((event) => event.type === 'player.activity-ended' && event.outcome.result === 'failed');
-    if (failed?.type === 'player.activity-ended' && failed.outcome.reason) showNotice(`${activityNames[failed.outcome.kind]} stopped: ${failureText[failed.outcome.reason]}.`);
+    if (failed?.type === 'player.activity-ended' && failed.outcome.reason) showNotice(`${activityNames[failed.outcome.kind]} stopped: ${failureText[failed.outcome.reason]}.`, 'warn');
   }), [subscribe, showNotice]);
   const lifeActions: readonly PlayerActionAvailability[] = useMemo(() => player && (lifeActive || selectedCitizenId) && !lifeFlow
     ? playerActionAvailability(world, getNavigator(), selectedCitizenId ?? undefined) : [], [player, lifeActive, lifeFlow, world, getNavigator, selectedCitizenId]);
@@ -765,7 +768,7 @@ function App() {
       if (target.type !== 'building') return;
       const option = homeOptions.find((entry) => entry.buildingId === target.id);
       if (option?.available) selectHome(target.id);
-      else showNotice(option ? rejectionText[option.current ? 'already-home' : 'home-full'] : 'Choose one of the highlighted homes.');
+      else showNotice(option ? rejectionText[option.current ? 'already-home' : 'home-full'] : 'Choose one of the highlighted homes.', 'warn');
       return;
     }
     if (!player) { if (target.type === 'citizen' && populationEnabled) selectCitizen(target.id); return; }
@@ -776,6 +779,9 @@ function App() {
     setLifeFeedback((current) => ({ id: (current?.id ?? 0) + 1, cell: target.cell, ok: result.applied }));
     if (result.applied) { setLifePlaceId(null); setSelectedCitizenId(null); }
   };
+  // A different panel view always starts at its top (the phone sheet reuses one scroll container).
+  const panelVisible = !compact || sheetOpen || !!selectedCitizenId || !!selectedBuildingId || architectPanelOpen || lifeFlow?.step === 'home' || !!lifePlaceId;
+  useEffect(() => { panelRef.current?.scrollTo?.({ top: 0 }); }, [mode, selectedCitizenId, selectedBuildingId, lifePlaceId, lifeFlow?.step, panelVisible]);
   const lifePlace = lifeActive && player && lifePlaceId ? world.plan.buildings.find((entry) => entry.id === lifePlaceId) ?? null : null;
   const placeCard = (() => {
     if (!lifePlace || !player) return null;
@@ -984,11 +990,11 @@ function App() {
             title={architectState.status === 'applying' ? 'Applying approved plan' : 'Generate plan'}
             disabled={!command.trim() || architectState.status === 'applying'}><Icon name="arrow" size={18} /></button>}
       </form>
-      {notice && <div className="toast" role="status" aria-label="City notice" aria-live="polite"><span className="toast-check"><Icon name="check" size={12} /></span>{notice}</div>}
+      {notice && <div className={`toast tone-${noticeTone}`} role="status" aria-label="City notice" aria-live="polite"><span className="toast-check"><Icon name={noticeTone === 'warn' ? 'warning' : 'check'} size={12} /></span>{notice}</div>}
 
       {panelHidden && <button className="panel-handle" aria-label="Show side panel" title="Show side panel" onClick={() => togglePanel(false)}>
         <Icon name="chevron" size={16} className="is-flipped" /><span>{mode === 'live' ? 'Live' : mode === 'life' ? 'Life' : 'Build'}</span></button>}
-      <aside className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''} ${panelHidden ? 'is-collapsed' : ''}`}>
+      <aside ref={panelRef} className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''} ${panelHidden ? 'is-collapsed' : ''}`}>
         {!compact && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet) && <button className="panel-collapse" aria-label="Collapse side panel" title="Collapse side panel" onClick={() => togglePanel(true)}><Icon name="chevron" size={16} /></button>}
         {compact && sheetVisible && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet) && !architectPanelOpen && <button className="sheet-close" aria-label="Close panel" onClick={() => setSheetOpen(false)}><Icon name="close" size={16} /></button>}
         <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">

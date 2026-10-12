@@ -176,6 +176,10 @@ export function LifePanel({ player, world, actions, log, paused, following, plac
         {(['go-home', 'rest', 'eat', 'visit'] as const).map((id) => <ActionButton key={id} {...ACTION_META[id]} availability={byAction.get(id)} onClick={() => onAction(id)} />)}
       </div>
     </>}
+    {!place && <div className="citizen-actions">
+      <button className="outline-action" onClick={onFocus}><Icon name="target" size={15} /> Focus</button>
+      <button className={`outline-action ${following ? 'is-active' : ''}`} aria-pressed={following} onClick={onFollow}><Icon name="follow" size={15} /> {following ? 'Following' : 'Follow'}</button>
+    </div>}
     {!place && <div className="walkers nearby">
       <div className="section-heading"><span>NEARBY RESIDENTS</span><small>{nearby.length ? 'Click to meet' : 'Nobody close by'}</small></div>
       {nearby.length > 0 ? <ul aria-label="Nearby residents">{nearby.map(({ citizen, where }) => <li key={citizen.id}>
@@ -186,10 +190,6 @@ export function LifePanel({ player, world, actions, log, paused, following, plac
         : <p className="muted small">Residents walk the streets around 07:00 and 17:00, and relax in parks in the evening.</p>}
     </div>}
     {place && <button className="text-button back-to-needs" onClick={onClosePlace}><Icon name="chevron" size={13} className="is-flipped" /> Back to needs &amp; actions</button>}
-    <div className="citizen-actions">
-      <button className="outline-action" onClick={onFocus}><Icon name="target" size={15} /> Focus</button>
-      <button className={`outline-action ${following ? 'is-active' : ''}`} aria-pressed={following} onClick={onFollow}><Icon name="follow" size={15} /> {following ? 'Following' : 'Follow'}</button>
-    </div>
     <div className="life-feed player-log">
       <div className="section-heading"><span>DIARY</span><small>{player.acquaintances.length} neighbour{player.acquaintances.length === 1 ? '' : 's'} met</small></div>
       {log.length === 0 ? <p className="muted small">Your day starts here. Walk somewhere or say hello to a resident.</p>

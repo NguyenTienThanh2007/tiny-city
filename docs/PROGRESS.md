@@ -68,11 +68,13 @@ Phase 3 (#7, #8) and Visual World 2.0 (#9) are merged in `main`. No open PRs at 
 2. [x] M2 Player identity, needs and simulation logic (`packages/simulation/src/player.ts`)
 3. [x] M3 Home ownership (one housing slot, move-in, demolition/move recovery) and navigation (`routeToRoad`)
 4. [x] M4 Resident interactions (greet/socialize, approach, leave detection) and activities (rest/eat/visit)
-5. [ ] M5 Character Creator and Life Mode entry
-6. [ ] M6 Player rendering, camera and controls
-7. [ ] M7 Life HUD, contextual actions and inspector
-8. [ ] M8 Save/load, undo integration and edge cases (frontend)
-9. [ ] M9 Visual QA, performance and browser verification
-10. [ ] M10 Documentation, commits, push and PR
+5. [x] M5 Character Creator and Life Mode entry (fourth `Life` tab; Live unchanged)
+6. [x] M6 Player rendering (`src/game/playerLayer.ts`, shared `playerLook.ts`), follow camera, click-to-move
+7. [x] M7 Life HUD (side panel + compact strip), contextual place cards, Interact section in the resident profile
+8. [x] M8 Save/load (`Continue life`), undo semantics, demolished home, full housing, corrupt-save recovery
+9. [x] M9 Visual QA (`docs/life/screenshots`, reviewed), performance (`docs/life/benchmark-results.json`), e2e
+10. [ ] M10 Final docs, full regression run, push and PR
 
-Simulation: 261 tests (49 new in `tests/player.test.ts`).
+Notes for resuming: the browser pane in this desktop app is often hidden, which (by design) freezes the clock;
+use Playwright (`e2e/life-mode.spec.ts`, `scripts/capture_life.mjs`) for timed checks. Software-render benchmarks
+must run on an otherwise idle machine.

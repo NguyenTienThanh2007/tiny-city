@@ -1,0 +1,146 @@
+{
+  "script": "node scripts/npc_render_benchmark.mjs http://127.0.0.1:5173/ [--software] [--player]",
+  "measuredOn": "2026-10-12, feature/p4-complete-life-mode, Apple M2, Vite dev build, 1440x900, idle machine for software runs",
+  "method": "Same city generator and method as docs/npc/render-benchmark-results.json. --player moves a character in before residents and keeps them walking a long route (dashed path redrawn every frame) while sampling.",
+  "gpu": {
+    "withoutPlayer": [
+      {
+        "target": 30,
+        "residents": 30,
+        "visibleMax": 20,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.04
+      },
+      {
+        "target": 100,
+        "residents": 100,
+        "visibleMax": 43,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.07
+      },
+      {
+        "target": 300,
+        "residents": 300,
+        "visibleMax": 214,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.2
+      },
+      {
+        "target": 1000,
+        "residents": 1000,
+        "visibleMax": 719,
+        "fpsMedian": 59,
+        "fpsMin": 56,
+        "sceneUpdateMsMedian": 0.61
+      }
+    ],
+    "withPlayer": [
+      {
+        "target": 30,
+        "residents": 29,
+        "visibleMax": 18,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.08
+      },
+      {
+        "target": 100,
+        "residents": 99,
+        "visibleMax": 23,
+        "fpsMedian": 61,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.11
+      },
+      {
+        "target": 300,
+        "residents": 299,
+        "visibleMax": 205,
+        "fpsMedian": 60,
+        "fpsMin": 59,
+        "sceneUpdateMsMedian": 0.23
+      },
+      {
+        "target": 1000,
+        "residents": 999,
+        "visibleMax": 721,
+        "fpsMedian": 58,
+        "fpsMin": 53,
+        "sceneUpdateMsMedian": 0.85
+      }
+    ]
+  },
+  "software": {
+    "withoutPlayer": [
+      {
+        "target": 30,
+        "residents": 30,
+        "visibleMax": 19,
+        "fpsMedian": 33,
+        "fpsMin": 16,
+        "sceneUpdateMsMedian": 0.08
+      },
+      {
+        "target": 100,
+        "residents": 100,
+        "visibleMax": 21,
+        "fpsMedian": 31,
+        "fpsMin": 17,
+        "sceneUpdateMsMedian": 0.12
+      },
+      {
+        "target": 300,
+        "residents": 300,
+        "visibleMax": 201,
+        "fpsMedian": 19,
+        "fpsMin": 9,
+        "sceneUpdateMsMedian": 0.36
+      },
+      {
+        "target": 1000,
+        "residents": 1000,
+        "visibleMax": 716,
+        "fpsMedian": 7,
+        "fpsMin": 6,
+        "sceneUpdateMsMedian": 1.1
+      }
+    ],
+    "withPlayer": [
+      {
+        "target": 30,
+        "residents": 29,
+        "visibleMax": 11,
+        "fpsMedian": 29,
+        "fpsMin": 17,
+        "sceneUpdateMsMedian": 0.13
+      },
+      {
+        "target": 100,
+        "residents": 99,
+        "visibleMax": 13,
+        "fpsMedian": 28,
+        "fpsMin": 14,
+        "sceneUpdateMsMedian": 0.18
+      },
+      {
+        "target": 300,
+        "residents": 299,
+        "visibleMax": 134,
+        "fpsMedian": 22,
+        "fpsMin": 11,
+        "sceneUpdateMsMedian": 0.32
+      },
+      {
+        "target": 1000,
+        "residents": 999,
+        "visibleMax": 610,
+        "fpsMedian": 8,
+        "fpsMin": 6,
+        "sceneUpdateMsMedian": 1.03
+      }
+    ]
+  },
+  "note": "A first software run overlapped CPU-heavy test suites (30 residents measured 19 fps) and was discarded; heapMB is not reported because usedJSHeapSize without forced GC varied 73-273 MB between identical runs."
+}

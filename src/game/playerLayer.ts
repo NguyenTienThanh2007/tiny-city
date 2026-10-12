@@ -6,6 +6,7 @@ import { citizenDepth, screenFacing } from './npcMotion';
 import { FIGURE_ORDER, FIGURE_ORDER_AWAY, playerFigure, type PlayerFigure, type Shape } from './playerLook';
 
 const WALK_CYCLES_PER_TILE = 2.2;
+const PLAYER_SCALE = 1.12;
 /** Open-air venues show the player standing inside; closed buildings show a location pin instead. */
 const OPEN_AIR = new Set(['park', 'pool']);
 const MARKER = 0xc8714f;
@@ -212,7 +213,8 @@ export class PlayerLayer {
     const showFigure = !inside || OPEN_AIR.has(inside.type ?? '');
     this.visibleOnMap = showFigure;
     this.root.visible = showFigure;
-    const scale = npcSpriteScale(viewScale);
+    // Slightly larger than residents so "you" stands out in a crowd.
+    const scale = npcSpriteScale(viewScale) * PLAYER_SCALE;
     if (showFigure) {
       const travelled = this.lastBase ? Math.abs(base.x - this.lastBase.x) + Math.abs(base.y - this.lastBase.y) : 0;
       this.lastBase = base;
@@ -311,7 +313,7 @@ export class PlayerLayer {
   /** True when a world-local point is on the player figure. */
   pick(point: Position, viewScale: number): boolean {
     if (!this.root.visible) return false;
-    const scale = npcSpriteScale(viewScale);
+    const scale = npcSpriteScale(viewScale) * PLAYER_SCALE;
     const dx = point.x - this.root.position.x;
     const dy = point.y - (this.root.position.y - 11 * scale);
     return Math.hypot(dx, dy * 0.8) <= 10 * scale + 5 / Math.max(viewScale, 0.05);

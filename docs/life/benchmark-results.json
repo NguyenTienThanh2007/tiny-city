@@ -1,0 +1,69 @@
+{
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "measurements": [
+    {
+      "count": 100,
+      "player": false,
+      "ticks": 400,
+      "meanTickMs": 0.082,
+      "p95TickMs": 0.169,
+      "maxTickMs": 0.447,
+      "playerLegs": 0,
+      "serializedKB": 55
+    },
+    {
+      "count": 100,
+      "player": true,
+      "ticks": 400,
+      "meanTickMs": 0.084,
+      "p95TickMs": 0.184,
+      "maxTickMs": 0.55,
+      "playerLegs": 6,
+      "serializedKB": 56
+    },
+    {
+      "count": 1000,
+      "player": false,
+      "ticks": 400,
+      "meanTickMs": 0.904,
+      "p95TickMs": 1.578,
+      "maxTickMs": 4.873,
+      "playerLegs": 0,
+      "serializedKB": 3762
+    },
+    {
+      "count": 1000,
+      "player": true,
+      "ticks": 400,
+      "meanTickMs": 0.896,
+      "p95TickMs": 1.181,
+      "maxTickMs": 14.742,
+      "playerLegs": 1,
+      "serializedKB": 3774
+    },
+    {
+      "count": 3000,
+      "player": false,
+      "ticks": 400,
+      "meanTickMs": 2.791,
+      "p95TickMs": 4.222,
+      "maxTickMs": 10.37,
+      "playerLegs": 0,
+      "serializedKB": 32663
+    },
+    {
+      "count": 3000,
+      "player": true,
+      "ticks": 400,
+      "meanTickMs": 2.777,
+      "p95TickMs": 4.124,
+      "maxTickMs": 10.128,
+      "playerLegs": 1,
+      "serializedKB": 32695
+    }
+  ],
+  "script": "node scripts/life_benchmark.mjs",
+  "measuredOn": "2026-10-12, feature/p4-complete-life-mode, Apple M2"
+}

@@ -140,17 +140,17 @@ All values are in `PLAYER_BALANCE` for tuning.
 
 | Rule | Value |
 | --- | --- |
-| Base decay | energy −0.07, hunger −0.12, social −0.06 |
-| Walking | energy −0.03 extra |
+| Base decay | energy −0.045, hunger −0.055, social −0.04 (an idle game day costs about 65 / 79 / 58) |
+| Walking | energy −0.02 extra |
 | Starving (hunger < 15) | energy decay ×1.5 |
 | Exhausted (energy < 15) | walking ×0.6; `visit`, `greet`, `socialize` reject with `too-tired` |
 | Mood | moves at 0.25/min toward avg(energy, hunger, social) + activity bonus − 10 per critical need |
 | Levels | `critical` < 15 ≤ `low` < 30 ≤ `fair` < 60 ≤ `good`; each crossing emits `player.need-changed` |
-| Initial | energy 80, hunger 70, social 55, mood 70 |
+| Initial | energy 85, hunger 75, social 60, mood 75 |
 
 | Activity | Where | Duration | Effect while performing |
 | --- | --- | --- | --- |
-| `rest` | Inside own home | 120 min | energy +0.7, hunger decay halved, mood bonus +5 |
+| `rest` | Inside own home | 120 min | energy +0.6, hunger decay halved, mood bonus +5 |
 | `eat` | Inside own home | 30 min | hunger +2.5, mood bonus +5 |
 | `visit` | Inside a park, pool or clubhouse with space | 60 min | social +0.15 (+0.05 per resident visitor, max +0.3), mood bonus +20 |
 | `greet` | Within 2.5 tiles of a resident, or in the same venue | 5 min | social +1.2, mood bonus +10 |
