@@ -110,12 +110,17 @@ describe('daily life and progressive movement',()=>{
     const sim=new Simulation(npcFixture({disconnected:true}));workNow(sim);sim.step();
     sim.execute({type:'city.edit-roads',add:[{x:15,y:5}],remove:[]});sim.step();expect(sim.getCitizen('npc-1')?.activity).toBe('travel');valid(sim.getState());
   });
-  it('waits without teleporting when a road is deleted under its feet, then resumes',()=>{
+  it('steps to the adjacent road without teleporting when a road is deleted under its feet, then resumes',()=>{
     const sim=new Simulation(npcFixture());workNow(sim);sim.step(15);
     const p=sim.getCitizen('npc-1')!.position,tile={x:Math.floor(p.x),y:Math.floor(p.y)};
     expect(sim.getOccupancyGrid().get(tile)?.type).toBe('road');
-    sim.execute({type:'city.edit-roads',add:[],remove:[tile]});sim.step();expect(sim.getCitizen('npc-1')?.position).toEqual(p);valid(sim.getState());
-    sim.execute({type:'city.edit-roads',add:[tile],remove:[]});sim.step();expect(sim.getCitizen('npc-1')?.position).not.toEqual(p);valid(sim.getState());
+    // Phase 4.5: waiting on grass could never route again unless the exact tile came back, so the resident steps to the
+    // nearest road (as the player does) instead: at most one tile, and still on the street.
+    sim.execute({type:'city.edit-roads',add:[],remove:[tile]});sim.step();
+    const q=sim.getCitizen('npc-1')!.position;
+    expect(Math.abs(q.x-p.x)+Math.abs(q.y-p.y)).toBeLessThanOrEqual(1.5);
+    expect(sim.getOccupancyGrid().get({x:Math.floor(q.x),y:Math.floor(q.y)})?.type).toBe('road');valid(sim.getState());
+    sim.execute({type:'city.edit-roads',add:[tile],remove:[]});sim.step(5);expect(sim.getCitizen('npc-1')?.position).not.toEqual(q);valid(sim.getState());
   });
   it('stops an active route when a road ahead is deleted',()=>{
     const sim=new Simulation(npcFixture());workNow(sim);sim.step(10);const p=sim.getCitizen('npc-1')!.position;
