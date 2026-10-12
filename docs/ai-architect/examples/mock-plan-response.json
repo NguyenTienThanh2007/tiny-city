@@ -2,14 +2,18 @@
   "requestId": "offline-example",
   "proposal": {
     "contractVersion": 1,
-    "planId": "plan-10e0b41aa62b2c1686072632affbd07c0c7cb94772ff80c9529d73ed9751ea64",
-    "digest": "10e0b41aa62b2c1686072632affbd07c0c7cb94772ff80c9529d73ed9751ea64",
+    "planId": "plan-71f0e1edf135900333f2a2add795e57b49a073c613264b32504df02b2b164f37",
+    "digest": "71f0e1edf135900333f2a2add795e57b49a073c613264b32504df02b2b164f37",
     "sourceWorldId": "villa-gardens-world",
     "sourceRevision": 0,
     "sourceFingerprint": "eb08251710142bd3d0217d62b5cb3ac9ce1e202ad9eb1002efc979f26119ee76",
     "seed": 7,
     "status": "VALIDATED",
     "intent": {
+      "demolishTargets": [],
+      "moveTargets": [],
+      "preserveRoads": false,
+      "preserveTypes": [],
       "summary": "Build two villas and a park",
       "language": "en",
       "style": "compact",
@@ -79,8 +83,8 @@
         "buildingId": "building-3",
         "buildingType": "park",
         "position": {
-          "x": 21,
-          "y": 23
+          "x": 24,
+          "y": 21
         },
         "footprint": {
           "width": 4,
@@ -90,16 +94,7 @@
       }
     ],
     "roads": {
-      "add": [
-        {
-          "x": 24,
-          "y": 22
-        },
-        {
-          "x": 24,
-          "y": 21
-        }
-      ],
+      "add": [],
       "remove": []
     },
     "projectedPlan": {
@@ -251,14 +246,6 @@
         {
           "x": 40,
           "y": 20
-        },
-        {
-          "x": 24,
-          "y": 22
-        },
-        {
-          "x": 24,
-          "y": 21
         }
       ],
       "blockedTiles": [
@@ -412,8 +399,8 @@
           "kind": "park",
           "name": "Park 01",
           "position": {
-            "x": 21,
-            "y": 23
+            "x": 24,
+            "y": 21
           },
           "footprint": {
             "width": 4,
@@ -423,12 +410,12 @@
         }
       ]
     },
-    "estimatedCost": 336,
-    "projectedBudget": 4664,
+    "estimatedCost": 320,
+    "projectedBudget": 4680,
     "validation": {
       "valid": true,
       "fulfilled": true,
-      "operationCount": 5
+      "operationCount": 3
     },
     "warnings": [],
     "commands": [
@@ -449,27 +436,25 @@
         }
       },
       {
-        "type": "city.edit-roads",
-        "add": [
-          {
-            "x": 24,
-            "y": 22
-          },
-          {
-            "x": 24,
-            "y": 21
-          }
-        ],
-        "remove": []
-      },
-      {
         "type": "city.build",
         "buildingType": "park",
         "position": {
-          "x": 21,
-          "y": 23
+          "x": 24,
+          "y": 21
         }
       }
-    ]
+    ],
+    "clarifications": [],
+    "authorization": null,
+    "impact": {
+      "buildingsAdded": 3,
+      "buildingsRemoved": 0,
+      "buildingsMoved": 0,
+      "roomsAdded": 4,
+      "roomsRemoved": 0,
+      "residentsRemoved": 0,
+      "residentsRehoused": 0,
+      "playerHomeRemoved": false
+    }
   }
 }

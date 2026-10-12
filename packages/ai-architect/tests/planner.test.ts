@@ -6,7 +6,7 @@ import { createProposal, PlanReview, cityFingerprint, decodeIntent } from '../sr
 import type { ArchitectIntent, PlanningConstraints, PlanningResponse } from '../src/index.js';
 
 const intent=(patch:Partial<ArchitectIntent>={}):ArchitectIntent=>({summary:'Build district',language:'en',style:'compact',near:'existing',region:null,budgetLimit:null,
-  connectRoads:true,builds:[{buildingType:'villa',quantity:2,preferredPosition:null}],moves:[],demolish:[],roadAdd:[],roadRemove:[],preserveBuildingIds:[],unsupportedRequests:[],ambiguities:[],...patch});
+  connectRoads:true,builds:[{buildingType:'villa',quantity:2,preferredPosition:null}],moves:[],demolish:[],roadAdd:[],roadRemove:[],preserveBuildingIds:[],unsupportedRequests:[],ambiguities:[],demolishTargets:[],moveTargets:[],preserveRoads:false,preserveTypes:[],...patch});
 const world=(funds=5000,roads=true)=>createWorld({id:'test',seed:123,startingFunds:funds,clock:{paused:true},
   plan:{id:'test-plan',name:'Test',width:24,height:24,buildings:[],roads:roads?Array.from({length:16},(_,i)=>({x:4+i,y:12})):[],blockedTiles:[{x:23,y:23}]}});
 
