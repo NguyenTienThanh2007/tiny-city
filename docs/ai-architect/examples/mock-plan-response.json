@@ -2,8 +2,8 @@
   "requestId": "offline-example",
   "proposal": {
     "contractVersion": 1,
-    "planId": "plan-71f0e1edf135900333f2a2add795e57b49a073c613264b32504df02b2b164f37",
-    "digest": "71f0e1edf135900333f2a2add795e57b49a073c613264b32504df02b2b164f37",
+    "planId": "plan-9b3c8dbd592c98d79f6fea202b218b2251126eff95a783ee9926a51be8c6db81",
+    "digest": "9b3c8dbd592c98d79f6fea202b218b2251126eff95a783ee9926a51be8c6db81",
     "sourceWorldId": "villa-gardens-world",
     "sourceRevision": 0,
     "sourceFingerprint": "eb08251710142bd3d0217d62b5cb3ac9ce1e202ad9eb1002efc979f26119ee76",
@@ -51,7 +51,7 @@
       "maxOperations": 128
     },
     "summary": "Build two villas and a park",
-    "explanation": "Deterministic compact district; legal lots and shortest free road links are validated by the Phase 1 simulation.",
+    "explanation": "3 new buildings on legal compact lots, preferring lots that already touch a road. Every step is validated by the city simulation.",
     "placements": [
       {
         "buildingId": "building-1",

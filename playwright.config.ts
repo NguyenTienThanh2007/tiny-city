@@ -47,5 +47,16 @@ export default defineConfig({
     gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },
     stdout: 'pipe',
     stderr: 'pipe',
+  }, {
+    // AI Architect 2.0 specs: deterministic offline Vietnamese/English rules (no AI provider, no key, no paid calls).
+    command: 'uv run --locked --extra dev uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8015',
+    cwd: fileURLToPath(new URL('./apps/api/', import.meta.url)),
+    url: 'http://127.0.0.1:8015/health',
+    reuseExistingServer: false,
+    timeout: 60_000,
+    env: { TINY_CITY_PROVIDER_MODE: 'local', GEMINI_API_KEY: '', TINY_CITY_CORS_ORIGINS: 'http://127.0.0.1:4173', TINY_CITY_REQUESTS_PER_MINUTE: '120' },
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },
+    stdout: 'pipe',
+    stderr: 'pipe',
   }],
 });

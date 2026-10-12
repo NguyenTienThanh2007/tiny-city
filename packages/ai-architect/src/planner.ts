@@ -295,6 +295,20 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
     }
   }
   const edits=commands.filter(c=>c.type==='city.edit-roads');
+  // Describe what the plan actually does (not a fixed template), so a demolition never reads like a new district.
+  const explain=()=>{
+    if(fatal) return clarifications.length ? 'Several buildings match; choose which ones before a plan can be prepared.'
+      : authorization ? authorization.message : 'The request could not be planned safely; see the warnings.';
+    const parts:string[]=[];
+    const built=commands.filter(c=>c.type==='city.build').length, removed=commands.filter(c=>c.type==='city.demolish').length, moved=commands.filter(c=>c.type==='city.move-building').length;
+    if(built) parts.push(`${built} new building${built===1?'':'s'} on legal ${intent.style} lots, preferring lots that already touch a road`);
+    if(moved) parts.push(`${moved} building${moved===1?'':'s'} moved to the nearest legal lot`);
+    if(removed) parts.push(`exactly ${removed} resolved building${removed===1?'':'s'} removed`);
+    const roadTiles=edits.reduce((n,c)=>n+c.add.length,0);
+    if(roadTiles) parts.push(`${roadTiles} road tile${roadTiles===1?'':'s'} added to keep everything connected`);
+    const text=parts.join('; ') || 'no change';
+    return `${text[0]!.toUpperCase()}${text.slice(1)}. Every step is validated by the city simulation.`;
+  };
   const after=full.state, beforeIds=new Set(world.plan.buildings.map(b=>b.id)), afterIds=new Set(after.plan.buildings.map(b=>b.id));
   const rooms=(plan:typeof world.plan)=>plan.buildings.filter(b=>b.kind==='home').reduce((n,b)=>n+b.capacity,0);
   const removedHomes=world.plan.buildings.filter(b=>!afterIds.has(b.id)&&b.kind==='home').reduce((n,b)=>n+b.capacity,0);
@@ -310,7 +324,7 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
   };
   const proposal:PlanProposal={contractVersion:1,planId:'',digest:'',sourceWorldId:world.id,sourceRevision:world.revision,
     sourceFingerprint:await cityFingerprint(world),seed,status:fatal?'REJECTED':'VALIDATED',intent,constraints,
-    summary:intent.summary,explanation:`Deterministic ${intent.style} district; legal lots and shortest free road links are validated by the Phase 1 simulation.`,
+    summary:intent.summary,explanation:explain(),
     placements,roads:{add:edits.flatMap(c=>c.add),remove:edits.flatMap(c=>c.remove)},
     projectedPlan:full.state.plan,estimatedCost:world.budget.balance-draft.budget.balance,projectedBudget:draft.budget.balance,
     validation:{valid:!fatal,fulfilled,operationCount:operationCount(commands)},warnings,commands,

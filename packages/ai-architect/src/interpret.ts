@@ -75,6 +75,9 @@ function quantityBefore(text: string, index: number): number | 'all' | null {
   return null;
 }
 const point = (match: RegExpMatchArray): Position => ({ x: Number(match[1]), y: Number(match[2]) });
+const NAMES_VI: Record<BuildingType, string> = { villa: 'biệt thự', duplex: 'nhà song lập', townhouse: 'nhà phố', apartment: 'chung cư', park: 'công viên', clubhouse: 'câu lạc bộ', pool: 'hồ bơi', mall: 'trung tâm thương mại', office: 'văn phòng' };
+const NAMES_EN: Record<BuildingType, [string, string]> = { villa: ['villa', 'villas'], duplex: ['duplex', 'duplexes'], townhouse: ['townhouse', 'townhouses'], apartment: ['apartment building', 'apartment buildings'],
+  park: ['park', 'parks'], clubhouse: ['clubhouse', 'clubhouses'], pool: ['pool', 'pools'], mall: ['mall', 'malls'], office: ['office tower', 'office towers'] };
 
 export interface InterpretContext { readonly buildings?: readonly { readonly id: string; readonly name: string }[] }
 
@@ -85,6 +88,7 @@ export function interpretLocally(prompt: string, context: InterpretContext = {})
     connectRoads: true, builds: [], moves: [], demolish: [], roadAdd: [], roadRemove: [], preserveBuildingIds: [], unsupportedRequests: [], ambiguities: [],
     demolishTargets: [], moveTargets: [], preserveRoads: false, preserveTypes: [] };
   const names = [...(context.buildings ?? [])].sort((a, b) => b.name.length - a.name.length);
+  const label = (type: BuildingType, count: number | 'all' | null) => vi ? NAMES_VI[type] : NAMES_EN[type][count === 1 || count === null ? 0 : 1];
   const clauses = text.split(/[;.]|,(?!\s*\d)|\b(?:but|then|and then|after that)\b|\b(?:nhưng|rồi|sau đó)\b/u).map((c) => c.trim()).filter(Boolean);
   let verb: Verb | null = null;
   const summary: string[] = [];
@@ -138,15 +142,16 @@ export function interpretLocally(prompt: string, context: InterpretContext = {})
         const quantity = m.quantity ?? 1;
         intent.builds.push({ buildingType: m.type, quantity: Math.min(32, quantity), preferredPosition: null });
         if (quantity > 32) intent.unsupportedRequests.push(vi ? 'Mỗi kế hoạch xây tối đa 32 công trình.' : 'A plan can build at most 32 buildings.');
-        summary.push(`${vi ? 'xây' : 'build'} ${quantity} ${m.type}`);
+        summary.push(`${vi ? 'xây' : 'build'} ${quantity} ${label(m.type, quantity)}`);
       }
     } else if (verb === 'demolish') {
       if (named.length) { intent.demolishTargets.push(selector(null, null, false, named)); summary.push(`${vi ? 'phá' : 'demolish'} ${named.join(', ')}`); }
-      for (const m of mentions) { intent.demolishTargets.push(selector(m.type, m.quantity, m.plural)); summary.push(`${vi ? 'phá' : 'demolish'} ${m.quantity === 'all' ? (vi ? 'tất cả' : 'all') : m.quantity ?? 1} ${m.type}${relative ? ` (${relative})` : ''}`); }
+      const side: Record<TargetRelative, [string, string]> = { left: ['bên trái', 'on the left'], right: ['bên phải', 'on the right'], back: ['phía trên', 'at the back'], front: ['phía dưới', 'at the front'] };
+      for (const m of mentions) { intent.demolishTargets.push(selector(m.type, m.quantity, m.plural)); summary.push(`${vi ? 'phá' : 'demolish'} ${m.quantity === 'all' ? (vi ? 'tất cả' : 'all') : m.quantity ?? 1} ${label(m.type, m.quantity === 'all' ? 2 : m.quantity)}${relative ? ` ${side[relative][vi ? 0 : 1]}` : ''}`); }
     } else if (verb === 'move') {
       const destination: MoveTarget['near'] = near ?? 'existing';
       const targets = named.length ? [selector(null, null, false, named)] : mentions.slice(0, 1).map((m) => selector(m.type, m.quantity, m.plural));
-      for (const target of targets) { intent.moveTargets.push({ target, near: destination, position: null }); summary.push(`${vi ? 'di chuyển' : 'move'} ${target.ids.join(', ') || target.buildingType}`); }
+      for (const target of targets) { intent.moveTargets.push({ target, near: destination, position: null }); summary.push(`${vi ? 'di chuyển' : 'move'} ${target.ids.join(', ') || (target.buildingType ? label(target.buildingType, 1) : '')}${destination === 'road' ? (vi ? ' đến lô trống gần đường' : ' to an empty lot by a road') : ''}`); }
     } else if (verb === 'preserve') {
       intent.preserveBuildingIds.push(...named);
       for (const m of mentions) if (!intent.preserveTypes.includes(m.type)) intent.preserveTypes.push(m.type);

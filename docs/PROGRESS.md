@@ -86,6 +86,9 @@ must run on an otherwise idle machine.
 - [x] Life Mode housing: reproduced (engine + browser), unplaced characters, held room for a homeless player,
   recovery UX (explanation, Build a home, Back to home selection chip, New homes), tests, docs
   (`docs/acceptance/ai-architect-2-and-life-housing.md`).
-- [ ] AI Architect 2.0: requirements not provided in this session; nothing implemented yet.
+- [x] AI Architect 2.0: root cause (port 8000 held by "F01 API"), contract errors, wrong-service diagnosis,
+  port 8787 + `npm run dev:api`, disconnect-monitor hang fix; target selectors, clarification, authorization,
+  impact, offline VI/EN interpreter (`local` mode), road-aware clustered placement; Plan-panel UX; docs
+  (`docs/ai-architect/ai-architect-2.md`), screenshots (`docs/ai-architect/screenshots`).
 
-Results: typecheck pass · unit 123 · simulation 270 · architect 31 · security 0 · build pass · API 61 · e2e 35.
+Results: typecheck pass · unit 127 · simulation 270 · architect 52 · security 0 · build pass · API 66 · e2e 39.
