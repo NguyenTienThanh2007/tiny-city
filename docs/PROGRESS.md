@@ -92,3 +92,16 @@ must run on an otherwise idle machine.
   (`docs/ai-architect/ai-architect-2.md`), screenshots (`docs/ai-architect/screenshots`).
 
 Results: typecheck pass · unit 127 · simulation 270 · architect 52 · security 0 · build pass · API 66 · e2e 39.
+
+## Phase 4.5 simulation & gameplay stabilization (branch `feature/p4-5-simulation-audit`, from `origin/main` @ `efcfcf9`)
+
+The remote branch existed with no commits beyond `main`; reused. Acceptance: `docs/acceptance/phase-4-5-simulation-audit.md`.
+
+- [x] Invariant fuzz suite (`packages/simulation/tests/invariants.test.ts`; `AUDIT_SEEDS`/`AUDIT_STEPS` widen it)
+- [x] B1 occupancy: player counted once everywhere; picker projects what moving in does (`src/simulation/housingView.ts`)
+- [x] B2 entrance-leg crash on city edits; B3 stranded walkers step to the nearest road; B4 leisure spread across venues
+- [x] B5 move-home copy; B6 vacancy memos follow assignments
+- [x] Browser acceptance `e2e/phase-4-5.spec.ts`, screenshots `docs/acceptance/screenshots/phase-4-5`, benchmark
+  `scripts/p45_benchmark.mjs` (results in `docs/acceptance/phase-4-5-benchmark-results.json`)
+
+Design gaps for Living Society (Phase 7): synchronized routines (±20 min), no weekends, sample city has no jobs.
