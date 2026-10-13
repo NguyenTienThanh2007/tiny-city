@@ -1049,7 +1049,7 @@ export default function CityViewport(props: Props) {
           // The ghost carries the ID and design the build will get, so preview and result are the same model.
           const ghostId = predictBuildingId(current.world);
           const ghostDesign = resolveChoice(kind, current.designChoices?.[kind], ghostId);
-          label = `${spec.label} · ${designLabel(ghostDesign)} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
+          label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]} · ${designLabel(ghostDesign)}`;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xbfe8c9 : 0xd97962,
             validation.valid ? 0.42 : 0.58, validation.valid ? 0x2f8a5b : 0xb84c43, 0.95);
           if (validation.valid || validation.reason === 'road-required') roadAccessHint(cell.x, cell.y, spec.width, spec.height, validation.valid);

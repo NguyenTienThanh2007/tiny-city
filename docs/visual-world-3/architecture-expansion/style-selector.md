@@ -24,8 +24,8 @@ the map → click to build → the inspector names the model.
 
 The simulation assigns building IDs deterministically (`building-N`), so `predictBuildingId(world)`
 (`src/game/architecture.ts`) gives the ghost the same ID and `resolveChoice(kind, choice, id)` the same design that
-construction will record. The preview label names the model ("Villa · Glass Pavilion Villa · 2 × 2 · Ready to
-build · $120"), and the ghost is the baked sprite of that model, facing the road it will face.
+construction will record. The preview label names the model ("Villa · 2 × 2 · Ready to build · $120 · Glass
+Pavilion Villa"), and the ghost is the baked sprite of that model, facing the road it will face.
 
 Validity, road-access hints, collision and depth are the existing placement rules. Funds are charged only when
 the simulation applies the build.

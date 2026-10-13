@@ -67,7 +67,7 @@ test('Architectural Style Selector: chosen model is previewed, built exactly, an
   await expect(page.getByRole('region', { name: 'Architecture' })).toContainText('SELECTED MODEL');
   await centerCity(page);
   await hoverTile(page, 12, 21);
-  await expect(page.getByLabel('Placement preview')).toContainText('Villa · Glass Pavilion Villa · 2 × 2 · Ready to build · $120');
+  await expect(page.getByLabel('Placement preview')).toContainText('Villa · 2 × 2 · Ready to build · $120 · Glass Pavilion Villa');
   const point = await hoverTile(page, 12, 21);
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('#building-name')).toBeVisible();
@@ -102,7 +102,7 @@ test('a collection mix previews the exact model each new building gets; the clas
   for (const x of [12, 16]) {
     await hoverTile(page, x, 21);
     const label = (await page.getByLabel('Placement preview').textContent())!;
-    const previewed = /Semi-detached home · ([^·]+) · 3 × 2/.exec(label)![1]!.trim();
+    const previewed = /Semi-detached home · 3 × 2 · Ready to build · \$180 · (.+)$/.exec(label.trim())![1]!.trim();
     const point = await hoverTile(page, x, 21);
     await page.mouse.click(point.x, point.y);
     await expect(page.getByLabel('Architecture', { exact: true })).toHaveText(`Luxury Minimalist · ${previewed}`);
