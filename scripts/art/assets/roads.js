@@ -1,7 +1,7 @@
 // Road tiles for every connection mask (N = 1, E = 2, S = 4, W = 8; N is grid y − 1 = −Z, E is +X).
 // Asphalt reaches the tile edge on connected sides; open sides get a raised paved sidewalk with a stone curb.
 // Geometry overlaps the tile by EPS so neighbouring tiles join without hairline seams.
-import { PALETTE as P, mat, box } from '../lib/kit.js';
+import { PALETTE as P, mat, box, cylinder } from '../lib/kit.js';
 
 const EPS = 0.02;
 const INSET = 0.2;
@@ -11,9 +11,9 @@ export const ROAD_BITS = { N: 1, E: 2, S: 4, W: 8 };
 
 function buildRoad(group, mask) {
   const n = mask & 1, e = mask & 2, s = mask & 4, w = mask & 8;
-  const asphalt = mat(P.asphalt, { rough: 0.95 });
-  const paving = mat(P.paving, { rough: 0.95 });
-  const curb = mat(0xd9d0be, { rough: 0.8 });
+  const asphalt = mat(0x5f6b73, { rough: 0.95, tex: 'asphalt' });
+  const paving = mat(0xe6dccb, { rough: 0.95, tex: 'paving', texScale: 0.55 });
+  const curb = mat(0xcfc9bd, { rough: 0.8, tex: 'stone', texScale: 0.3 });
   const seam = mat(0xcfc5b1, { rough: 1 });
   const lo = -EPS, hi = 1 + EPS;
   // Asphalt everywhere first (slightly below the sidewalk top).
@@ -21,11 +21,7 @@ function buildRoad(group, mask) {
   // Sidewalk pieces: four corners always, plus a strip on each open side.
   const walk = (x0, z0, x1, z1) => {
     box(group, x0, 0, z0, x1 - x0, CURB_H, z1 - z0, paving);
-    // Paving joints.
-    for (let t = 0.25; t < 1; t += 0.25) {
-      if (x1 - x0 > 0.3) box(group, x0 + (x1 - x0) * t, CURB_H, z0, 0.006, 0.001, z1 - z0, seam);
-      if (z1 - z0 > 0.3) box(group, x0, CURB_H, z0 + (z1 - z0) * t, x1 - x0, 0.001, 0.006, seam);
-    }
+    void seam;
   };
   const a = INSET, b = 1 - INSET;
   walk(lo, lo, a, a); walk(b, lo, hi, a); walk(lo, b, a, hi); walk(b, b, hi, hi);
@@ -68,7 +64,18 @@ function buildRoad(group, mask) {
   return group;
 }
 
+/** Pedestrian plaza: a road tile whose eight neighbours are all road, drawn as decorative cobbled paving. */
+function buildPlaza(group) {
+  const lo = -EPS, hi = 1 + EPS;
+  box(group, lo, -0.02, lo, hi - lo, 0.03, hi - lo, mat(0xe2d3bb, { rough: 0.95, tex: 'cobble', texScale: 0.8 }));
+  // A paving rosette in the centre of each tile keeps large plazas from looking flat.
+  cylinder(group, 0.5, 0.01, 0.5, 0.22, 0.22, 0.004, mat(0xc9a882, { rough: 0.9, tex: 'paving', texScale: 0.35 }), 24);
+  cylinder(group, 0.5, 0.012, 0.5, 0.12, 0.12, 0.004, mat(0xe9dcc4, { rough: 0.9 }), 24);
+  return group;
+}
+
 export function roadAssets() {
   return Array.from({ length: 16 }, (_, mask) => ({ id: `road.m${mask}`, kind: 'road', category: 'road', variant: 0, mask, tile: true,
-    footprint: { w: 1, d: 1 }, shadow: false, emissive: false, build: (g) => buildRoad(g, mask) }));
+    footprint: { w: 1, d: 1 }, shadow: false, emissive: false, build: (g) => buildRoad(g, mask) }))
+    .concat([{ id: 'road.plaza', kind: 'road', category: 'road', variant: 1, mask: 15, plaza: true, tile: true, footprint: { w: 1, d: 1 }, shadow: false, emissive: false, build: (g) => buildPlaza(g) }]);
 }
