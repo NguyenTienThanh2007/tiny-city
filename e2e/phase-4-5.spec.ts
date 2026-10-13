@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
+// A signed-out visitor's session check (GET /v1/auth/me) answers 401 by design (accounts, PR #16); Chromium logs it.
+const expectedSignedOut = (message: { text(): string; location(): { url: string } }) => /status of 401/.test(message.text()) && /\/v1\/auth\/me(\?|$)/.test(message.location().url);
 
 // Phase 4.5 browser acceptance: occupancy shown in the UI always equals the authoritative world, the player counts
 // once, residents keep their homes through commutes, and everything survives a reload.
@@ -19,7 +21,7 @@ test.slow();
 async function openCity(page: Page, city: CityState = fixture) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text())) errors.push(message.text()); });
+  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text()) && !expectedSignedOut(message)) errors.push(message.text()); });
   await page.addInitScript(({ key, value }) => {
     if (!sessionStorage.getItem('p45-fixture')) { localStorage.setItem(key, JSON.stringify(value)); sessionStorage.setItem('p45-fixture', '1'); }
   }, { key: SAVE_KEY, value: city });

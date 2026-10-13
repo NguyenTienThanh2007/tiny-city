@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Citizen, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
+// A signed-out visitor's session check (GET /v1/auth/me) answers 401 by design (accounts, PR #16); Chromium logs it.
+const expectedSignedOut = (message: { text(): string; location(): { url: string } }) => /status of 401/.test(message.text()) && /\/v1\/auth\/me(\?|$)/.test(message.location().url);
 
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
 // Homes and an office share one street, so morning commutes are visible on the road.
@@ -17,7 +19,7 @@ type Renderer = { fps: number; frameMs: number; residents: number; visibleReside
 async function openCity(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text())) errors.push(message.text()); });
+  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text()) && !expectedSignedOut(message)) errors.push(message.text()); });
   await page.addInitScript(({ key, city }) => {
     if (!sessionStorage.getItem('living-fixture')) { localStorage.setItem(key, JSON.stringify(city)); sessionStorage.setItem('living-fixture', '1'); }
   }, { key: SAVE_KEY, city: fixture });
