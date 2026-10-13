@@ -115,4 +115,15 @@ Phase 4.5 (#13) is merged and green. Acceptance: `docs/visual-world-3/acceptance
 - [x] Slice assets: villa ×4, townhouse ×3, apartment ×3 (both facings), park ×3, 16 road masks, 12 trees/shrubs, lamp, benches, planter, flowers
 - [x] Runtime: baked buildings, roads, decor; ground shadow layer; warm night glow; sprite ghost; reveal-mask construction; terrain painter; `sun` lighting; street trees
 - [x] Visual QA: before/after at matched cameras (`docs/visual-world-3/screenshots`), benchmark (`benchmark-3.0a.json`)
-- [ ] After review: 3.0B (duplex, clubhouse, pool, mall, office; roads and public spaces; vegetation) on `feature/visual-world-3b`
+- [x] 3.0B shipped on `feature/visual-world-3b` (see below)
+
+## Visual World 3.0B buildings & environment (branch `feature/visual-world-3b`, from `origin/main` @ `e5923c3`)
+
+3.0A (#14) merged. Acceptance: `docs/visual-world-3/acceptance-3.0b.md`.
+
+- [x] Deterministic bakes (seeded `Math.random` for GTAO noise); material detail textures and world UVs; props kit
+- [x] All nine building types redesigned (villa, duplex, townhouse, apartment, park, clubhouse, pool, mall, office)
+- [x] Vegetation (mature canopies, new species), textured roads, plaza tile, denser landscaping, curb furniture, home framing
+- [x] WebP + skyline packing + half-resolution soft atlas (99 assets, 1.63 MB); alpha-mask picking; art heights; decor LOD
+- [x] Matched 3.0A/3.0B screenshots (`screenshots/3b-*`), benchmarks (`benchmark-3.0b.json`), tests
+- [ ] After review: 3.0C characters and atmosphere on `feature/visual-world-3c`

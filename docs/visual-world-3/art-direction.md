@@ -60,3 +60,26 @@ in both camera-facing orientations, so entrances face the street.
 | Door | ≈0.3 units tall; a resident sprite is ≈0.75–1.1 units, which reads correctly against doors and windows at gameplay zoom |
 | Street tree | ≈0.9–1.1 units; palm ≈1.0–1.2 |
 | Bake resolution | 2 texture px per world px (sharp up to ~1.5× zoom on standard displays); mipmapped for zoomed-out views |
+
+## 3.0B: the whole city on one standard
+
+3.0B brings all nine catalog types to the same standard and adds material texture, vegetation and street life.
+
+| Type | Design |
+|---|---|
+| Villa (2×2, 4 variants × 2 facings) | Two storeys over a stone plinth: quoins, belt course and cornice, a columned portico with a wrought-iron balcony above, shuttered windows with flower boxes, wall lanterns, a downpipe, textured clay, slate or teal tile roofs, a chimney, and a single-storey garden wing with a vine-covered pergola terrace. Walled front garden with gate piers, hedges, a paved path, and a pool with loungers, timber patio or flowerbeds. |
+| Duplex (3×2, 3 × 2) | Two mirrored modern homes under twin standing-seam gables with round gable windows. White render with timber-clad upper bays and glass-rail balconies, two clear entrances with canopies and lanterns at the outer ends, big ground-floor glazing, a party-wall fin, split front gardens with paths, beds and picket fence, bikes and bins. Deep lots get back gardens with deck, shed and fruit trees. |
+| Townhouse (2×3, 3 × 2) | Individual three-storey units in plaster or brick with pilasters and cornices. Lettered shopfronts (BAKERY, SURF, BOOKS, CAFÉ, FLOWERS) under striped awnings, or stone stoops with lanterns. Flower boxes, balconies, gable roofs with oculus and chimney, slate mansards with dormers, or roof terraces. End walls with windows, side door, ivy and AC unit; a street apron with café umbrella, bikes, bin and a tree in a grate. |
+| Apartment (4×4, 3 × 2) | Six storeys: stone base, a full-height coloured bay, alternating balconies with planters, a lit lobby canopy with lettered name, a corner café, a setback penthouse with solar roof and pergola terrace, stair core and water tank. Courtyard with playground, picnic table and trees; forecourt with planters, bench and bikes. |
+| Park (4×4, 3) | Mown-stripe lawn, curved edged paving, a centrepiece (fountain, pond with bridge, or pavilion), a playground, picnic lawn or kiosk, benches, bins, lamps, four flowerbeds, grass and rocks, and a mature mixed grove (round, lime, olive, pine, poplar, cypress, palms, blossom or jacaranda). |
+| Clubhouse (3×3, 3 × 2) | A modern pavilion: floor-to-ceiling glazing with slim mullions and a visible lounge, a timber-battened service block, a thin cantilevered roof with a sedum green roof and glazed clerestory, a lit name sign, and a deck terrace with umbrellas, loungers and a fire pit, inside palms, beds and hedges. |
+| Pool (3×4, 2 × 2) | A lido: tiled deck, lane pool with lane ropes, ladders and a diving board, a rounded kids' pool, a lifeguard chair, rows of loungers and umbrellas, a striped cabana with lettered sign and lanterns, palms, fan palms, shrubs and hedges. |
+| Mall (6×5, 2 × 2) | Two-storey arcade with lettered shopfronts and awnings either side of a tall glazed atrium (canopy, lit name sign), an upper gallery, solar arrays, skylights, plant and green-roof strips. Plaza with fountain, trees in planters, benches, bollards, sculpture and bikes; a parking court with parked cars and a pylon sign. |
+| Office (4×4, 3 × 2) | An eight-floor glass tower on a stone podium. Curtain-wall bays that light individually at night, spandrel bands and accent fins, a setback crown with a lit company name, a mast with a red beacon and rooftop plant, a podium roof garden, a revolving-door lobby under a canopy, and a plaza with tree planters, sculpture, benches, bikes and visitor parking. |
+
+**Materials.** Every surface carries a subtle detail map: clay tile courses, slate, standing seam, plaster, render,
+brick, stone, planks, paving, cobbles, asphalt, concrete, pool tiles, water ripples, grass, leaves and bark. These
+are kept low-contrast and multiplied by the palette colour, so the art stays cohesive and nothing reads as noise.
+
+**Street life (static).** Parked cars, bikes, café umbrellas, lit signs, lanterns and curb furniture make the city
+feel inhabited. They are decor, not simulated agents: resident behaviour still comes only from the simulation.

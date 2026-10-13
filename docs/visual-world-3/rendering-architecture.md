@@ -107,3 +107,21 @@ world
 
 See `acceptance-3.0a.md` for the measured table (before vs after, same machine and browser flags) and texture
 memory.
+
+## 5. Visual World 3.0B changes
+
+3.0B keeps the 3.0A pipeline and runtime (offline Three.js bake → Pixi atlases, no runtime 3D). What changed:
+
+| Area | 3.0A | 3.0B |
+|---|---|---|
+| Baked kinds | villa, townhouse, apartment, park (others vector) | **all nine** (+ duplex, clubhouse, pool, mall, office). Vector art is only a load-failure fallback. |
+| Materials | flat colours with AO | Procedural detail textures (`scripts/art/lib/textures.js`): clay roof tiles, slate, standing seam, plaster, render, brick, stone, planks, paving, cobbles, asphalt, concrete, pool tiles, water ripples, grass, leaves, bark, fabric. World-space UVs (`applyWorldUVs`) give every asset the same texel density; roofs get slope UVs, so courses always run along the eaves. |
+| Detail kit | windows, doors, awnings, balconies | Adds `lib/props.js`: flower boxes, wall lanterns (lit at night), canvas-lettered shop and building signs (lit at night), AC units, downpipes, parked cars and parking bays, bikes, bins, bollards, picnic tables, playgrounds, pergolas with vines, picket fences, stone walls, sculptures, kiosks, plus flat roofs with ring parapets |
+| Vegetation | 12 small trees and shrubs | Mature leaf-textured canopies (13–17 clusters around a darker core), new species: lime, jacaranda, pine, poplar, fan palm; fuller palms; layered shrubs; grass tufts; rocks |
+| Roads | 16 masks | Textured asphalt, paved sidewalks, stone curbs, plus a **plaza tile** wherever all eight neighbours are road (`selectRoadAsset`) |
+| Atlases | PNG, shelf packer, 26 MB GPU | **WebP** (1.64 MB download for 99 assets), **skyline packer**, pages cut to their exact height, and shadows and night glow in a separate **half-resolution "soft" atlas** (`meta.scale` 1). About 40 MB GPU (about 53 MB with mipmaps) despite 2.4× the assets. |
+| Determinism | claimed | **Verified byte-identical re-bakes.** Three's `SimplexNoise` (GTAO denoise) seeded itself from `Math.random`; the bake page now seeds `Math.random`. |
+| Picking | lift box only | **Alpha masks.** `src/game/art/hitMask.ts` builds a world-pixel mask per building frame when an atlas loads. `buildingAtPoint` tests the sprite's opaque pixels as well as the legacy box, so tall roofs, towers and trees are clickable. |
+| Heights | — | `heightPx` per building in the manifest; nameplates and Life home markers sit on the real art (`buildingTop`) |
+| Landscaping | sparse groves, lamps and street trees | Denser woodland with understorey, lone field trees, wildflower drifts, grass and rocks, softened developed edges, and curb furniture (lamps, street trees, benches, planters, bins, bike racks) on open curbs only (`CURB_DECOR`); `MAX_DECOR` 900 → 2600 |
+| Camera | home zoom ≤ 0.86 | Home zoom ≤ `HOME_MAX_SCALE` (1.0) with tighter margins, so the built city fills more of the view |
