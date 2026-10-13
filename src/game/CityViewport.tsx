@@ -20,6 +20,7 @@ import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry
 import { rejectionFeedback } from '../simulation/feedback';
 import { currentArt, loadArt, type ArtLibrary } from './art/artLibrary';
 import { selectBuildingAsset, selectRoadAsset } from './art/artManifest';
+import { designLabel, predictBuildingId, resolveChoice, type DesignChoices } from './architecture';
 import { drawTerrainArt } from './terrainArt';
 
 export { buildingLift } from './buildingArt';
@@ -67,6 +68,8 @@ type Props = {
   homeHighlights?: readonly HomeHighlight[] | null;
   /** AI Architect: buildings an ambiguous or blocked request refers to (candidate, chosen, to remove, to move). */
   targetHighlights?: readonly TargetHighlight[];
+  /** Visual World 3.1: the architectural model chosen per building type (the ghost shows exactly what gets built). */
+  designChoices?: DesignChoices;
 };
 export type TargetHighlight = { id: string; tone: 'candidate' | 'selected' | 'remove' | 'move' };
 const TARGET_TONES: Record<TargetHighlight['tone'], [number, number]> = {
@@ -228,7 +231,7 @@ function roadSidesFor(building: Building, roadSet: ReadonlySet<string>): RoadSid
 function drawBakedBuilding(layer: Container, shadows: Container | null, building: Building, selected: boolean, progress: number,
   sides: RoadSides, registry: BuildingRegistry, art: ArtLibrary): boolean {
   const spec = BUILDINGS[building.kind];
-  const asset = selectBuildingAsset(art.index, building.kind, building.id, sides);
+  const asset = selectBuildingAsset(art.index, building, sides);
   const texture = art.frame(asset?.color);
   if (!asset || !texture) return false;
   const origin = iso(building.x, building.y);
@@ -308,7 +311,7 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
     return group;
   };
   if (progress >= 1) {
-    const key = [building.id, building.kind, building.x, building.y, selected ? 1 : 0, Number(sides.north), Number(sides.south), Number(sides.east), Number(sides.west)].join(':');
+    const key = [building.id, building.kind, building.design?.model ?? '', building.x, building.y, selected ? 1 : 0, Number(sides.north), Number(sides.south), Number(sides.east), Number(sides.west)].join(':');
     const cached = textures.get(key, vector);
     if (cached) {
       const sprite = new Sprite(cached.texture);
@@ -461,13 +464,13 @@ export function buildingTop(building: Building, roads: CityState['roads'] = []):
   const art = currentArt();
   if (!art) return legacy;
   const roadSet = new Set(roads.map(({ x, y }) => cellKey(x, y)));
-  const height = selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet))?.heightPx;
+  const height = selectBuildingAsset(art.index, building, roadSidesFor(building, roadSet))?.heightPx;
   return height ? Math.max(legacy, height) : legacy;
 }
 
 /** Pixel test against the building's baked sprite (null when no art or no mask is available). */
 function bakedArtHit(building: Building, point: Point, roadSet: ReadonlySet<string>, art: ArtLibrary): boolean | null {
-  const asset = selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet));
+  const asset = selectBuildingAsset(art.index, building, roadSidesFor(building, roadSet));
   const texture = art.frame(asset?.color);
   if (!asset || !texture) return null;
   const origin = iso(building.x, building.y);
@@ -625,8 +628,9 @@ export default function CityViewport(props: Props) {
         const art = currentArt();
         if (!art || !b.type) return 'S';
         const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
-        const editor: Building = { id: b.id, kind: b.type as BuildingKind, x: b.position.x, y: b.position.y, name: b.name, createdAt: 0 };
-        return selectBuildingAsset(art.index, b.type, b.id, roadSidesFor(editor, roadSet))?.front ?? 'S';
+        const design = propsRef.current.city.buildings.find((entry) => entry.id === b.id)?.design;
+        const editor: Building = { id: b.id, kind: b.type as BuildingKind, x: b.position.x, y: b.position.y, name: b.name, createdAt: 0, ...(design ? { design } : {}) };
+        return selectBuildingAsset(art.index, editor, roadSidesFor(editor, roadSet))?.front ?? 'S';
       };
       const npcs = new NpcLayer(buildings, groundOverlay, { frontOf });
       const lifeMarkers = new Container();
@@ -957,7 +961,7 @@ export default function CityViewport(props: Props) {
       const ghostBuilding = (building: Building) => {
         const art = currentArt();
         const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
-        const asset = art ? selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet)) : null;
+        const asset = art ? selectBuildingAsset(art.index, building, roadSidesFor(building, roadSet)) : null;
         const texture = art?.frame(asset?.color) ?? null;
         if (!texture) { drawBuildingArt(ghostArt, building, 1); return; }
         const at = iso(building.x, building.y);
@@ -991,12 +995,15 @@ export default function CityViewport(props: Props) {
           const kind = current.tool as BuildingKind;
           const spec = BUILDINGS[kind];
           const validation = validateBuildingPlacement(current.world, kind, cell);
-          label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
+          // The ghost carries the ID and design the build will get, so preview and result are the same model.
+          const ghostId = predictBuildingId(current.world);
+          const ghostDesign = resolveChoice(kind, current.designChoices?.[kind], ghostId);
+          label = `${spec.label} · ${designLabel(ghostDesign)} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xbfe8c9 : 0xd97962,
             validation.valid ? 0.42 : 0.58, validation.valid ? 0x2f8a5b : 0xb84c43, 0.95);
           if (validation.valid || validation.reason === 'road-required') roadAccessHint(cell.x, cell.y, spec.width, spec.height, validation.valid);
           decor.hideUnder(footprintTiles(cell.x, cell.y, spec.width, spec.height));
-          if (validation.valid) ghostBuilding({ id: 'ghost', kind, x: cell.x, y: cell.y, name: '', createdAt: 0 });
+          if (validation.valid) ghostBuilding({ id: ghostId, kind, x: cell.x, y: cell.y, name: '', createdAt: 0, design: ghostDesign });
         } else if (current.tool === 'move' && current.movingBuildingId) {
           const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
           if (building) {

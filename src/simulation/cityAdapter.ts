@@ -1,5 +1,6 @@
 import { BUILDING_CATALOG, createWorld } from '@tiny-city/simulation';
 import type { CityPlan, WorldState } from '@tiny-city/simulation';
+import type { BuildingDesign } from '@tiny-city/ai-architect';
 import { isLandCell } from '../types';
 import type { Building, CityState } from '../types';
 
@@ -26,15 +27,23 @@ export function createCityWorld(city: CityState): WorldState {
   return createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true }, startingFunds: city.funds });
 }
 
-/** Compatibility view; roads, funds, IDs, positions, and names come only from the world. */
-export function projectCity(world: WorldState, previous?: CityState, constructedAt = 0): CityState {
-  const appearances = new Map(previous?.buildings.map((building) => [building.id, building.createdAt]) ?? []);
+/**
+ * Compatibility view; roads, funds, IDs, positions, and names come only from the world. Frontend-only metadata
+ * (construction time, architectural design) is carried over by building ID; `designs` supplies the design of
+ * buildings this edit created.
+ */
+export function projectCity(world: WorldState, previous?: CityState, constructedAt = 0, designs?: ReadonlyMap<string, BuildingDesign>): CityState {
+  const appearances = new Map(previous?.buildings.map((building) => [building.id, building]) ?? []);
   return {
     size: world.plan.width, funds: world.budget.balance,
     roads: world.plan.roads.map((tile) => ({ ...tile })),
-    buildings: world.plan.buildings.map((building) => ({ id: building.id, name: building.name,
-      kind: building.type ?? (building.kind === 'home' ? 'villa' : building.kind === 'park' ? 'park' : 'clubhouse'),
-      x: building.position.x, y: building.position.y, createdAt: appearances.get(building.id) ?? constructedAt })),
+    buildings: world.plan.buildings.map((building) => {
+      const kept = appearances.get(building.id);
+      const design = kept?.design ?? designs?.get(building.id);
+      return { id: building.id, name: building.name,
+        kind: building.type ?? (building.kind === 'home' ? 'villa' : building.kind === 'park' ? 'park' : 'clubhouse'),
+        x: building.position.x, y: building.position.y, createdAt: kept?.createdAt ?? constructedAt, ...(design ? { design } : {}) };
+    }),
   };
 }
 

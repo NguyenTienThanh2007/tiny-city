@@ -1182,3 +1182,49 @@ kbd { font-family: var(--font-ui); }
   .account-portal, .account-spinner { animation: none; }
   .account-primary, .account-field input { transition: none; }
 }
+
+/* Visual World 3.1: Architectural Style Selector */
+.architecture-picker { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.picker-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.picker-heading span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.picker-heading small { color: var(--faint); font-size: 10.5px; font-weight: 700; }
+.collection-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.collection-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 9px 4px 6px; border: 1px solid var(--line-strong);
+  border-radius: 999px; background: var(--paper); color: var(--ink-soft); font-size: 11.5px; font-weight: 800; transition: border-color .15s, background .15s, box-shadow .15s; }
+.collection-tab:hover:not(:disabled) { border-color: var(--sage-300); }
+.collection-tab.is-active { border-color: var(--forest-500); background: #f3f8f0; color: var(--forest-900); box-shadow: 0 0 0 2px rgba(79, 122, 94, .2); }
+.collection-tab:disabled { opacity: .5; }
+.collection-tab .swatches { display: inline-flex; }
+.collection-tab .swatches i { width: 9px; height: 18px; display: block; }
+.collection-tab .swatches i:first-child { border-radius: 9px 0 0 9px; }
+.collection-tab .swatches i:last-child { border-radius: 0 9px 9px 0; }
+.collection-count { min-width: 18px; padding: 1px 6px; border-radius: 999px; background: var(--sand-100); color: var(--muted); font-size: 10px; text-align: center; }
+.collection-blurb { margin: 8px 0 0 !important; color: var(--muted) !important; font-size: 11.5px !important; line-height: 1.4; }
+.model-preview { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: center; margin-top: 10px; padding: 8px; border-radius: var(--radius-md);
+  background: linear-gradient(160deg, var(--sage-100), var(--sand-100)); }
+.model-preview small { display: block; color: var(--muted); font-size: 9.5px; font-weight: 800; letter-spacing: .12em; }
+.model-preview strong { display: block; margin-top: 2px; font: 600 15px/1.2 var(--font-display); color: var(--forest-900); }
+.model-preview p { margin: 4px 0 0 !important; font-size: 11.5px !important; line-height: 1.4; color: var(--ink-soft); }
+.model-thumb { display: block; object-fit: contain; border-radius: var(--radius-sm); }
+.model-thumb.is-glyph { display: grid; place-items: center; background: var(--sand-100); }
+.model-thumb.is-glyph .building-thumb { width: 70%; height: 70%; }
+.feature-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
+.feature-tags li { padding: 2px 7px; border-radius: 999px; background: rgba(255, 253, 248, .85); color: var(--forest-700); font-size: 10px; font-weight: 800; }
+.model-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.model-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 92px; padding: 6px 4px 7px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--paper); color: var(--ink); transition: border-color .15s, box-shadow .15s, transform .15s; }
+.model-card:hover:not(:disabled) { border-color: var(--sage-300); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.model-card.is-selected { border-color: var(--forest-500); background: #f3f8f0; box-shadow: 0 0 0 2px rgba(79, 122, 94, .25); }
+.model-card.is-planned { opacity: .6; }
+.model-name { font-size: 10.5px; font-weight: 800; line-height: 1.2; text-align: center; }
+.model-soon { font-size: 9.5px; font-weight: 800; color: var(--terracotta-600); letter-spacing: .04em; }
+.mix-stack { display: flex; align-items: flex-end; height: 58px; }
+.mix-stack .model-thumb + .model-thumb { margin-left: -12px; }
+.apply-collection { margin-top: 8px; padding-left: 0; }
+.building-design { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 11.5px; font-weight: 700; }
+@media (max-width: 760px) {
+  .model-grid { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; scroll-snap-type: x mandatory; }
+  .model-card { flex: 0 0 96px; scroll-snap-align: start; }
+  .model-preview { grid-template-columns: 72px 1fr; }
+  .model-preview .model-thumb { width: 72px; height: 72px; }
+}

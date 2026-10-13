@@ -7,3 +7,6 @@ export { interpretLocally } from './interpret.js';
 export type { InterpretContext } from './interpret.js';
 export { resolveTarget, targetLabel } from './targets.js';
 export type { TargetResolution } from './targets.js';
+export { ARCHITECTURE_COLLECTIONS, ARCHITECTURE_MODELS, architectureCollection, architectureModel, classicModel, collectionModelAt,
+  collectionsFor, designOf, findArchitectureMentions, isCollectionId, isKnownDesign, isSelectableDesign, modelsFor } from './architecture.js';
+export type { ArchitectureCollection, ArchitectureCollectionId, ArchitectureMention, ArchitectureModel, ArchitectureStatus, BuildingDesign } from './architecture.js';

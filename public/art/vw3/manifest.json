@@ -32,6 +32,54 @@
    "sha256": "35dde025cd8060bb"
   },
   {
+   "file": "luxury-0.json",
+   "image": "luxury-0.webp",
+   "scale": 2,
+   "width": 2048,
+   "height": 2032,
+   "sha256": "d55327176a8f0aa0"
+  },
+  {
+   "file": "luxury-1.json",
+   "image": "luxury-1.webp",
+   "scale": 2,
+   "width": 2048,
+   "height": 520,
+   "sha256": "843fea6a37eb59bf"
+  },
+  {
+   "file": "luxury-soft-0.json",
+   "image": "luxury-soft-0.webp",
+   "scale": 1,
+   "width": 2048,
+   "height": 760,
+   "sha256": "d00629e036bc6723"
+  },
+  {
+   "file": "collections-0.json",
+   "image": "collections-0.webp",
+   "scale": 2,
+   "width": 2048,
+   "height": 1960,
+   "sha256": "3780d9571b36e9b0"
+  },
+  {
+   "file": "collections-1.json",
+   "image": "collections-1.webp",
+   "scale": 2,
+   "width": 2048,
+   "height": 152,
+   "sha256": "a5a88385568c0dbb"
+  },
+  {
+   "file": "collections-soft-0.json",
+   "image": "collections-soft-0.webp",
+   "scale": 1,
+   "width": 2048,
+   "height": 592,
+   "sha256": "0338e514d0b17e64"
+  },
+  {
    "file": "nature-0.json",
    "image": "nature-0.webp",
    "scale": 2,
@@ -742,6 +790,1067 @@
    "color": "office.v2.E#color",
    "shadow": "office.v2.E#shadow",
    "emissive": "office.v2.E#emissive"
+  },
+  "lm.villa.glass-pavilion.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.glass-pavilion",
+   "heightPx": 19.4,
+   "color": "lm.villa.glass-pavilion.S#color",
+   "shadow": "lm.villa.glass-pavilion.S#shadow",
+   "emissive": "lm.villa.glass-pavilion.S#emissive"
+  },
+  "lm.villa.glass-pavilion.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.glass-pavilion",
+   "heightPx": 19.4,
+   "color": "lm.villa.glass-pavilion.E#color",
+   "shadow": "lm.villa.glass-pavilion.E#shadow",
+   "emissive": "lm.villa.glass-pavilion.E#emissive"
+  },
+  "lm.villa.sculptural-concrete.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.sculptural-concrete",
+   "heightPx": 30.3,
+   "color": "lm.villa.sculptural-concrete.S#color",
+   "shadow": "lm.villa.sculptural-concrete.S#shadow",
+   "emissive": "lm.villa.sculptural-concrete.S#emissive"
+  },
+  "lm.villa.sculptural-concrete.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.sculptural-concrete",
+   "heightPx": 30.3,
+   "color": "lm.villa.sculptural-concrete.E#color",
+   "shadow": "lm.villa.sculptural-concrete.E#shadow",
+   "emissive": "lm.villa.sculptural-concrete.E#emissive"
+  },
+  "lm.villa.minimal-courtyard.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.minimal-courtyard",
+   "heightPx": 21,
+   "color": "lm.villa.minimal-courtyard.S#color",
+   "shadow": "lm.villa.minimal-courtyard.S#shadow",
+   "emissive": "lm.villa.minimal-courtyard.S#emissive"
+  },
+  "lm.villa.minimal-courtyard.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.minimal-courtyard",
+   "heightPx": 21,
+   "color": "lm.villa.minimal-courtyard.E#color",
+   "shadow": "lm.villa.minimal-courtyard.E#shadow",
+   "emissive": "lm.villa.minimal-courtyard.E#emissive"
+  },
+  "lm.villa.sky-terrace.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.sky-terrace",
+   "heightPx": 35.2,
+   "color": "lm.villa.sky-terrace.S#color",
+   "shadow": "lm.villa.sky-terrace.S#shadow",
+   "emissive": "lm.villa.sky-terrace.S#emissive"
+  },
+  "lm.villa.sky-terrace.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 3,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.sky-terrace",
+   "heightPx": 35.2,
+   "color": "lm.villa.sky-terrace.E#color",
+   "shadow": "lm.villa.sky-terrace.E#shadow",
+   "emissive": "lm.villa.sky-terrace.E#emissive"
+  },
+  "lm.villa.linear-modern.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 4,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.linear-modern",
+   "heightPx": 26.2,
+   "color": "lm.villa.linear-modern.S#color",
+   "shadow": "lm.villa.linear-modern.S#shadow",
+   "emissive": "lm.villa.linear-modern.S#emissive"
+  },
+  "lm.villa.linear-modern.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 4,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.linear-modern",
+   "heightPx": 26.2,
+   "color": "lm.villa.linear-modern.E#color",
+   "shadow": "lm.villa.linear-modern.E#shadow",
+   "emissive": "lm.villa.linear-modern.E#emissive"
+  },
+  "lm.villa.tropical-minimalist.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 5,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.tropical-minimalist",
+   "heightPx": 38.2,
+   "color": "lm.villa.tropical-minimalist.S#color",
+   "shadow": "lm.villa.tropical-minimalist.S#shadow",
+   "emissive": "lm.villa.tropical-minimalist.S#emissive"
+  },
+  "lm.villa.tropical-minimalist.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 5,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "lm.villa.tropical-minimalist",
+   "heightPx": 38.2,
+   "color": "lm.villa.tropical-minimalist.E#color",
+   "shadow": "lm.villa.tropical-minimalist.E#shadow",
+   "emissive": "lm.villa.tropical-minimalist.E#emissive"
+  },
+  "lm.duplex.twin-glass.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.twin-glass",
+   "heightPx": 31.6,
+   "color": "lm.duplex.twin-glass.S#color",
+   "shadow": "lm.duplex.twin-glass.S#shadow",
+   "emissive": "lm.duplex.twin-glass.S#emissive"
+  },
+  "lm.duplex.twin-glass.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.twin-glass",
+   "heightPx": 31.6,
+   "color": "lm.duplex.twin-glass.E#color",
+   "shadow": "lm.duplex.twin-glass.E#shadow",
+   "emissive": "lm.duplex.twin-glass.E#emissive"
+  },
+  "lm.duplex.asymmetric-concrete.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.asymmetric-concrete",
+   "heightPx": 30.9,
+   "color": "lm.duplex.asymmetric-concrete.S#color",
+   "shadow": "lm.duplex.asymmetric-concrete.S#shadow",
+   "emissive": "lm.duplex.asymmetric-concrete.S#emissive"
+  },
+  "lm.duplex.asymmetric-concrete.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.asymmetric-concrete",
+   "heightPx": 30.9,
+   "color": "lm.duplex.asymmetric-concrete.E#color",
+   "shadow": "lm.duplex.asymmetric-concrete.E#shadow",
+   "emissive": "lm.duplex.asymmetric-concrete.E#emissive"
+  },
+  "lm.duplex.courtyard.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.courtyard",
+   "heightPx": 26.5,
+   "color": "lm.duplex.courtyard.S#color",
+   "shadow": "lm.duplex.courtyard.S#shadow",
+   "emissive": "lm.duplex.courtyard.S#emissive"
+  },
+  "lm.duplex.courtyard.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.courtyard",
+   "heightPx": 26.5,
+   "color": "lm.duplex.courtyard.E#color",
+   "shadow": "lm.duplex.courtyard.E#shadow",
+   "emissive": "lm.duplex.courtyard.E#emissive"
+  },
+  "lm.duplex.urban-terrace.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.urban-terrace",
+   "heightPx": 37.9,
+   "color": "lm.duplex.urban-terrace.S#color",
+   "shadow": "lm.duplex.urban-terrace.S#shadow",
+   "emissive": "lm.duplex.urban-terrace.S#emissive"
+  },
+  "lm.duplex.urban-terrace.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 3,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "model": "lm.duplex.urban-terrace",
+   "heightPx": 37.9,
+   "color": "lm.duplex.urban-terrace.E#color",
+   "shadow": "lm.duplex.urban-terrace.E#shadow",
+   "emissive": "lm.duplex.urban-terrace.E#emissive"
+  },
+  "lm.townhouse.vertical-minimalist.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.vertical-minimalist",
+   "heightPx": 50.4,
+   "color": "lm.townhouse.vertical-minimalist.S#color",
+   "shadow": "lm.townhouse.vertical-minimalist.S#shadow",
+   "emissive": "lm.townhouse.vertical-minimalist.S#emissive"
+  },
+  "lm.townhouse.vertical-minimalist.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.vertical-minimalist",
+   "heightPx": 50.4,
+   "color": "lm.townhouse.vertical-minimalist.E#color",
+   "shadow": "lm.townhouse.vertical-minimalist.E#shadow",
+   "emissive": "lm.townhouse.vertical-minimalist.E#emissive"
+  },
+  "lm.townhouse.urban-glass.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.urban-glass",
+   "heightPx": 46.6,
+   "color": "lm.townhouse.urban-glass.S#color",
+   "shadow": "lm.townhouse.urban-glass.S#shadow",
+   "emissive": "lm.townhouse.urban-glass.S#emissive"
+  },
+  "lm.townhouse.urban-glass.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.urban-glass",
+   "heightPx": 46.6,
+   "color": "lm.townhouse.urban-glass.E#color",
+   "shadow": "lm.townhouse.urban-glass.E#shadow",
+   "emissive": "lm.townhouse.urban-glass.E#emissive"
+  },
+  "lm.townhouse.rooftop-terrace.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.rooftop-terrace",
+   "heightPx": 45.7,
+   "color": "lm.townhouse.rooftop-terrace.S#color",
+   "shadow": "lm.townhouse.rooftop-terrace.S#shadow",
+   "emissive": "lm.townhouse.rooftop-terrace.S#emissive"
+  },
+  "lm.townhouse.rooftop-terrace.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.rooftop-terrace",
+   "heightPx": 45.7,
+   "color": "lm.townhouse.rooftop-terrace.E#color",
+   "shadow": "lm.townhouse.rooftop-terrace.E#shadow",
+   "emissive": "lm.townhouse.rooftop-terrace.E#emissive"
+  },
+  "lm.townhouse.warm-timber.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.warm-timber",
+   "heightPx": 46,
+   "color": "lm.townhouse.warm-timber.S#color",
+   "shadow": "lm.townhouse.warm-timber.S#shadow",
+   "emissive": "lm.townhouse.warm-timber.S#emissive"
+  },
+  "lm.townhouse.warm-timber.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 3,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "model": "lm.townhouse.warm-timber",
+   "heightPx": 46,
+   "color": "lm.townhouse.warm-timber.E#color",
+   "shadow": "lm.townhouse.warm-timber.E#shadow",
+   "emissive": "lm.townhouse.warm-timber.E#emissive"
+  },
+  "lm.apartment.premium-glass.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.premium-glass",
+   "heightPx": 110.8,
+   "color": "lm.apartment.premium-glass.S#color",
+   "shadow": "lm.apartment.premium-glass.S#shadow",
+   "emissive": "lm.apartment.premium-glass.S#emissive"
+  },
+  "lm.apartment.premium-glass.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.premium-glass",
+   "heightPx": 110.8,
+   "color": "lm.apartment.premium-glass.E#color",
+   "shadow": "lm.apartment.premium-glass.E#shadow",
+   "emissive": "lm.apartment.premium-glass.E#emissive"
+  },
+  "lm.apartment.green-terrace.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.green-terrace",
+   "heightPx": 96.4,
+   "color": "lm.apartment.green-terrace.S#color",
+   "shadow": "lm.apartment.green-terrace.S#shadow",
+   "emissive": "lm.apartment.green-terrace.S#emissive"
+  },
+  "lm.apartment.green-terrace.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.green-terrace",
+   "heightPx": 96.4,
+   "color": "lm.apartment.green-terrace.E#color",
+   "shadow": "lm.apartment.green-terrace.E#shadow",
+   "emissive": "lm.apartment.green-terrace.E#emissive"
+  },
+  "lm.apartment.residential-tower.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.residential-tower",
+   "heightPx": 139.6,
+   "color": "lm.apartment.residential-tower.S#color",
+   "shadow": "lm.apartment.residential-tower.S#shadow",
+   "emissive": "lm.apartment.residential-tower.S#emissive"
+  },
+  "lm.apartment.residential-tower.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.residential-tower",
+   "heightPx": 139.6,
+   "color": "lm.apartment.residential-tower.E#color",
+   "shadow": "lm.apartment.residential-tower.E#shadow",
+   "emissive": "lm.apartment.residential-tower.E#emissive"
+  },
+  "lm.apartment.contemporary-courtyard.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.contemporary-courtyard",
+   "heightPx": 75.1,
+   "color": "lm.apartment.contemporary-courtyard.S#color",
+   "shadow": "lm.apartment.contemporary-courtyard.S#shadow",
+   "emissive": "lm.apartment.contemporary-courtyard.S#emissive"
+  },
+  "lm.apartment.contemporary-courtyard.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 3,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.apartment.contemporary-courtyard",
+   "heightPx": 75.1,
+   "color": "lm.apartment.contemporary-courtyard.E#color",
+   "shadow": "lm.apartment.contemporary-courtyard.E#shadow",
+   "emissive": "lm.apartment.contemporary-courtyard.E#emissive"
+  },
+  "lm.office.architectural-concrete.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.office.architectural-concrete",
+   "heightPx": 112.2,
+   "color": "lm.office.architectural-concrete.S#color",
+   "shadow": "lm.office.architectural-concrete.S#shadow",
+   "emissive": "lm.office.architectural-concrete.S#emissive"
+  },
+  "lm.office.architectural-concrete.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.office.architectural-concrete",
+   "heightPx": 112.2,
+   "color": "lm.office.architectural-concrete.E#color",
+   "shadow": "lm.office.architectural-concrete.E#shadow",
+   "emissive": "lm.office.architectural-concrete.E#emissive"
+  },
+  "lm.mall.boutique-frontage.S": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "model": "lm.mall.boutique-frontage",
+   "heightPx": 58.3,
+   "color": "lm.mall.boutique-frontage.S#color",
+   "shadow": "lm.mall.boutique-frontage.S#shadow",
+   "emissive": "lm.mall.boutique-frontage.S#emissive"
+  },
+  "lm.mall.boutique-frontage.E": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "model": "lm.mall.boutique-frontage",
+   "heightPx": 58.3,
+   "color": "lm.mall.boutique-frontage.E#color",
+   "shadow": "lm.mall.boutique-frontage.E#shadow",
+   "emissive": "lm.mall.boutique-frontage.E#emissive"
+  },
+  "lm.clubhouse.glass-pavilion.S": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "model": "lm.clubhouse.glass-pavilion",
+   "heightPx": 25.2,
+   "color": "lm.clubhouse.glass-pavilion.S#color",
+   "shadow": "lm.clubhouse.glass-pavilion.S#shadow",
+   "emissive": "lm.clubhouse.glass-pavilion.S#emissive"
+  },
+  "lm.clubhouse.glass-pavilion.E": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "model": "lm.clubhouse.glass-pavilion",
+   "heightPx": 25.2,
+   "color": "lm.clubhouse.glass-pavilion.E#color",
+   "shadow": "lm.clubhouse.glass-pavilion.E#shadow",
+   "emissive": "lm.clubhouse.glass-pavilion.E#emissive"
+  },
+  "lm.pool.geometric.S": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "model": "lm.pool.geometric",
+   "heightPx": 13.7,
+   "color": "lm.pool.geometric.S#color",
+   "shadow": "lm.pool.geometric.S#shadow",
+   "emissive": "lm.pool.geometric.S#emissive"
+  },
+  "lm.pool.geometric.E": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "model": "lm.pool.geometric",
+   "heightPx": 13.7,
+   "color": "lm.pool.geometric.E#color",
+   "shadow": "lm.pool.geometric.E#shadow",
+   "emissive": "lm.pool.geometric.E#emissive"
+  },
+  "lm.park.community-plaza.S": {
+   "kind": "park",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "lm.park.community-plaza",
+   "heightPx": 25.4,
+   "color": "lm.park.community-plaza.S#color",
+   "shadow": "lm.park.community-plaza.S#shadow",
+   "emissive": "lm.park.community-plaza.S#emissive"
+  },
+  "mc.villa.shoreline.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "mc.villa.shoreline",
+   "heightPx": 36.7,
+   "color": "mc.villa.shoreline.S#color",
+   "shadow": "mc.villa.shoreline.S#shadow",
+   "emissive": "mc.villa.shoreline.S#emissive"
+  },
+  "mc.villa.shoreline.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "mc.villa.shoreline",
+   "heightPx": 36.7,
+   "color": "mc.villa.shoreline.E#color",
+   "shadow": "mc.villa.shoreline.E#shadow",
+   "emissive": "mc.villa.shoreline.E#emissive"
+  },
+  "mc.clubhouse.leisure.S": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "model": "mc.clubhouse.leisure",
+   "heightPx": 40.1,
+   "color": "mc.clubhouse.leisure.S#color",
+   "shadow": "mc.clubhouse.leisure.S#shadow",
+   "emissive": "mc.clubhouse.leisure.S#emissive"
+  },
+  "mc.clubhouse.leisure.E": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "model": "mc.clubhouse.leisure",
+   "heightPx": 40.1,
+   "color": "mc.clubhouse.leisure.E#color",
+   "shadow": "mc.clubhouse.leisure.E#shadow",
+   "emissive": "mc.clubhouse.leisure.E#emissive"
+  },
+  "tc.villa.lanai.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "tc.villa.lanai",
+   "heightPx": 39.8,
+   "color": "tc.villa.lanai.S#color",
+   "shadow": "tc.villa.lanai.S#shadow",
+   "emissive": "tc.villa.lanai.S#emissive"
+  },
+  "tc.villa.lanai.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "tc.villa.lanai",
+   "heightPx": 39.8,
+   "color": "tc.villa.lanai.E#color",
+   "shadow": "tc.villa.lanai.E#shadow",
+   "emissive": "tc.villa.lanai.E#emissive"
+  },
+  "tc.mall.shopping-pavilion.S": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "model": "tc.mall.shopping-pavilion",
+   "heightPx": 41.5,
+   "color": "tc.mall.shopping-pavilion.S#color",
+   "shadow": "tc.mall.shopping-pavilion.S#shadow",
+   "emissive": "tc.mall.shopping-pavilion.S#emissive"
+  },
+  "tc.mall.shopping-pavilion.E": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "model": "tc.mall.shopping-pavilion",
+   "heightPx": 41.6,
+   "color": "tc.mall.shopping-pavilion.E#color",
+   "shadow": "tc.mall.shopping-pavilion.E#shadow",
+   "emissive": "tc.mall.shopping-pavilion.E#emissive"
+  },
+  "tc.office.rooftop-garden.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "tc.office.rooftop-garden",
+   "heightPx": 94.8,
+   "color": "tc.office.rooftop-garden.S#color",
+   "shadow": "tc.office.rooftop-garden.S#shadow",
+   "emissive": "tc.office.rooftop-garden.S#emissive"
+  },
+  "tc.office.rooftop-garden.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "tc.office.rooftop-garden",
+   "heightPx": 94.8,
+   "color": "tc.office.rooftop-garden.E#color",
+   "shadow": "tc.office.rooftop-garden.E#shadow",
+   "emissive": "tc.office.rooftop-garden.E#emissive"
+  },
+  "tc.clubhouse.resort.S": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "model": "tc.clubhouse.resort",
+   "heightPx": 47.7,
+   "color": "tc.clubhouse.resort.S#color",
+   "shadow": "tc.clubhouse.resort.S#shadow",
+   "emissive": "tc.clubhouse.resort.S#emissive"
+  },
+  "tc.clubhouse.resort.E": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "model": "tc.clubhouse.resort",
+   "heightPx": 47.7,
+   "color": "tc.clubhouse.resort.E#color",
+   "shadow": "tc.clubhouse.resort.E#shadow",
+   "emissive": "tc.clubhouse.resort.E#emissive"
+  },
+  "tc.pool.resort.S": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "model": "tc.pool.resort",
+   "heightPx": 41.5,
+   "color": "tc.pool.resort.S#color",
+   "shadow": "tc.pool.resort.S#shadow"
+  },
+  "tc.pool.resort.E": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "model": "tc.pool.resort",
+   "heightPx": 41.5,
+   "color": "tc.pool.resort.E#color",
+   "shadow": "tc.pool.resort.E#shadow"
+  },
+  "tc.park.tropical-garden.S": {
+   "kind": "park",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "tc.park.tropical-garden",
+   "heightPx": 44.5,
+   "color": "tc.park.tropical-garden.S#color",
+   "shadow": "tc.park.tropical-garden.S#shadow",
+   "emissive": "tc.park.tropical-garden.S#emissive"
+  },
+  "up.office.glass.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "up.office.glass",
+   "heightPx": 123.5,
+   "color": "up.office.glass.S#color",
+   "shadow": "up.office.glass.S#shadow",
+   "emissive": "up.office.glass.S#emissive"
+  },
+  "up.office.glass.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "up.office.glass",
+   "heightPx": 123.5,
+   "color": "up.office.glass.E#color",
+   "shadow": "up.office.glass.E#shadow",
+   "emissive": "up.office.glass.E#emissive"
+  },
+  "up.office.premium-tower.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "up.office.premium-tower",
+   "heightPx": 173.5,
+   "color": "up.office.premium-tower.S#color",
+   "shadow": "up.office.premium-tower.S#shadow",
+   "emissive": "up.office.premium-tower.S#emissive"
+  },
+  "up.office.premium-tower.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "up.office.premium-tower",
+   "heightPx": 173.5,
+   "color": "up.office.premium-tower.E#color",
+   "shadow": "up.office.premium-tower.E#shadow",
+   "emissive": "up.office.premium-tower.E#emissive"
+  },
+  "up.mall.glass.S": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "model": "up.mall.glass",
+   "heightPx": 41.2,
+   "color": "up.mall.glass.S#color",
+   "shadow": "up.mall.glass.S#shadow",
+   "emissive": "up.mall.glass.S#emissive"
+  },
+  "up.mall.glass.E": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "model": "up.mall.glass",
+   "heightPx": 41.2,
+   "color": "up.mall.glass.E#color",
+   "shadow": "up.mall.glass.E#shadow",
+   "emissive": "up.mall.glass.E#emissive"
+  },
+  "up.park.urban.S": {
+   "kind": "park",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "model": "up.park.urban",
+   "heightPx": 19.7,
+   "color": "up.park.urban.S#color",
+   "shadow": "up.park.urban.S#shadow",
+   "emissive": "up.park.urban.S#emissive"
+  },
+  "fg.villa.garden-porch.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "fg.villa.garden-porch",
+   "heightPx": 37.9,
+   "color": "fg.villa.garden-porch.S#color",
+   "shadow": "fg.villa.garden-porch.S#shadow",
+   "emissive": "fg.villa.garden-porch.S#emissive"
+  },
+  "fg.villa.garden-porch.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "model": "fg.villa.garden-porch",
+   "heightPx": 37.9,
+   "color": "fg.villa.garden-porch.E#color",
+   "shadow": "fg.villa.garden-porch.E#shadow",
+   "emissive": "fg.villa.garden-porch.E#emissive"
+  },
+  "fg.pool.community.S": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "model": "fg.pool.community",
+   "heightPx": 35.1,
+   "color": "fg.pool.community.S#color",
+   "shadow": "fg.pool.community.S#shadow"
+  },
+  "fg.pool.community.E": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "model": "fg.pool.community",
+   "heightPx": 35.4,
+   "color": "fg.pool.community.E#color",
+   "shadow": "fg.pool.community.E#shadow"
   },
   "tree.broadleaf.0": {
    "kind": "tree",

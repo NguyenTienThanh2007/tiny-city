@@ -4,6 +4,7 @@ import { initialCity } from '../data/initialCity';
 import { BUILDINGS, MAP_SIZE } from '../types';
 import type { CityState } from '../types';
 import { createCityWorld, plansMatch, projectCity, toCityPlan } from './cityAdapter';
+import { sanitizeDesign } from '../game/architecture';
 
 export const SAVE_KEY = 'tiny-city-imagine-save-v1';
 
@@ -33,9 +34,12 @@ function isCity(value: unknown): value is CityState {
 
 function restoreAppearances(city: CityState): CityState {
   const now = Date.now();
-  return { ...city, buildings: city.buildings.map((building) => ({
-    ...building, createdAt: Math.min(now, building.createdAt),
-  })) };
+  return { ...city, buildings: city.buildings.map((building) => {
+    // Architectural designs (3.1) are optional; a malformed one is dropped so the building keeps its classic look.
+    const { design: raw, ...rest } = building as CityState['buildings'][number] & { design?: unknown };
+    const design = sanitizeDesign(raw);
+    return { ...rest, createdAt: Math.min(now, building.createdAt), ...(design ? { design } : {}) };
+  }) };
 }
 
 /** Keep the original save key and top-level map fields for v1 compatibility. */

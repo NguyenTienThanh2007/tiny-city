@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
 import type { LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
-import type { CityCommand, CitySnapshot } from '@tiny-city/simulation';
+import type { Building as SimBuilding, CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
-import type { PlanProposal, PlanningConstraints, PlanningHost, PlanningResponse, ValidationRequest } from '@tiny-city/ai-architect';
+import type { BuildingDesign, PlanProposal, PlanningConstraints, PlanningHost, PlanningResponse, ValidationRequest } from '@tiny-city/ai-architect';
+import { applyCollectionToAll, DEFAULT_CHOICE, readDesignChoices, resolveChoice, writeDesignChoices, type DesignChoices } from './game/architecture';
+import { architectureCollection } from '@tiny-city/ai-architect';
 import CityViewport from './game/CityViewport';
 import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea, TargetHighlight } from './game/CityViewport';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
@@ -153,6 +155,13 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [redoHistory, setRedoHistory] = useState<HistoryEntry[]>([]);
   const [tool, setTool] = useState<Tool>('select');
+  /** Visual World 3.1: the architectural model chosen per building type (remembered per viewer). */
+  const [designChoices, setDesignChoicesState] = useState<DesignChoices>(readDesignChoices);
+  const designChoicesRef = useRef(designChoices);
+  designChoicesRef.current = designChoices;
+  const setDesignChoices = useCallback((update: (current: DesignChoices) => DesignChoices) => {
+    setDesignChoicesState((current) => { const next = update(current); writeDesignChoices(next); return next; });
+  }, []);
   const [movingBuildingId, setMovingBuildingId] = useState<string | null>(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [command, setCommand] = useState('');
@@ -222,7 +231,11 @@ function App() {
     if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
   }, []);
 
-  const commitCommands = useCallback((commands: readonly CityCommand[]) => {
+  /**
+   * The one city edit path. `designFor` gives each building this edit creates its architectural design (3.1),
+   * recorded as editor metadata in the same history step.
+   */
+  const commitCommands = useCallback((commands: readonly CityCommand[], designFor?: (building: SimBuilding, index: number) => BuildingDesign | undefined) => {
     const previous = { snapshot: getCitySnapshot(), city: cityRef.current };
     const result = executeBatch(commands);
     if (!result.applied) {
@@ -234,7 +247,15 @@ function App() {
       }
       return result;
     }
-    const next = projectCity(result.state, cityRef.current, Date.now());
+    const designs = new Map<string, BuildingDesign>();
+    let built = 0;
+    for (const event of result.events) {
+      if (event.type !== 'city.building-built') continue;
+      const design = designFor?.(event.building, built) ?? (event.building.type ? resolveChoice(event.building.type, DEFAULT_CHOICE, event.building.id) : undefined);
+      if (design) designs.set(event.building.id, design);
+      built += 1;
+    }
+    const next = projectCity(result.state, cityRef.current, Date.now(), designs);
     if (!gestureRef.current.active || !gestureRef.current.recorded) {
       setHistory((current) => [...current.slice(-39), previous]);
       gestureRef.current.recorded = true;
@@ -318,7 +339,10 @@ function App() {
   }, [commitCommands, getSnapshot]);
 
   const placeBuilding = useCallback((kind: BuildingKind, x: number, y: number) => {
-    const result = commitCommands([{ type: 'city.build', buildingType: kind, position: { x, y } }]);
+    // The same choice and building ID the placement preview used, so the result is the previewed model.
+    const choice = designChoicesRef.current[kind];
+    const result = commitCommands([{ type: 'city.build', buildingType: kind, position: { x, y } }],
+      (building) => resolveChoice(kind, choice, building.id));
     if (!result.applied) return;
     const event = result.events.find((entry) => entry.type === 'city.building-built');
     if (event?.type === 'city.building-built') setSelectedBuildingId(event.building.id);
@@ -1016,6 +1040,7 @@ function App() {
           proposal={overlayProposal}
           onSimulationFrame={advanceSimulation}
           tool={tool}
+          designChoices={designChoices}
           selectedBuildingId={selectedBuildingId}
           movingBuildingId={movingBuildingId}
           selectedCitizenId={selectedCitizenId}
@@ -1312,7 +1337,13 @@ function App() {
           onHideGuide={() => { setGuideHidden(true); writeGuideHidden(true); }}
           onShowGuide={() => { setGuideHidden(false); writeGuideHidden(false); }}
           onChoose={(kind) => { setMovingBuildingId(null); setTool(kind); if (compact) setSheetOpen(false); }}
-          onWelcome={welcomeResidents} populationEnabled={populationEnabled} />}
+          onWelcome={welcomeResidents} populationEnabled={populationEnabled}
+          designChoices={designChoices}
+          onDesignChange={(kind, choice) => setDesignChoices((current) => ({ ...current, [kind]: choice }))}
+          onApplyCollection={(collection) => {
+            setDesignChoices((current) => applyCollectionToAll(current, collection));
+            showNotice(`New buildings will use ${architectureCollection(collection)?.name ?? collection} where it has models. Existing buildings keep their look.`);
+          }} />}
 
         {view === 'live' && <LivePanel populationEnabled={populationEnabled} homes={villas} capacity={homeCapacity} citizens={citizens}
           summary={activitySummary} jobless={jobless} feed={feed.entries} paused={world.clock.paused} selectedCitizenId={selectedCitizenId}

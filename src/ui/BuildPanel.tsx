@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { CONSTRUCTION_COSTS } from '@tiny-city/simulation';
 import { BUILDINGS, type BuildingKind, type Tool } from '../types';
 import { BuildingThumb } from './BuildingThumb';
+import { ArchitecturePicker } from './ArchitecturePicker';
+import type { ArchitectureCollectionId } from '@tiny-city/ai-architect';
+import type { DesignChoice, DesignChoices } from '../game/architecture';
 import { Icon } from './Icon';
 
 export interface OnboardingStep { id: string; label: string; hint: string; done: boolean }
@@ -20,7 +23,7 @@ function capacityLabel(kind: BuildingKind): string {
   return `${spec.capacity} visitors`;
 }
 
-export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onShowGuide, onChoose, onWelcome, populationEnabled }: {
+export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onShowGuide, onChoose, onWelcome, populationEnabled, designChoices = {}, onDesignChange, onApplyCollection }: {
   tool: Tool;
   funds: number;
   steps: OnboardingStep[];
@@ -30,6 +33,10 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
   onChoose: (kind: BuildingKind) => void;
   onWelcome: () => void;
   populationEnabled: boolean;
+  /** Visual World 3.1 Architectural Style Selector. */
+  designChoices?: DesignChoices;
+  onDesignChange?: (kind: BuildingKind, choice: DesignChoice) => void;
+  onApplyCollection?: (collection: ArchitectureCollectionId) => void;
 }) {
   const remaining = steps.filter((step) => !step.done);
   const next = remaining[0];
@@ -66,6 +73,8 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
         <div><small>SELECTED TOOL</small><strong>{toolCard.title}</strong></div></div>
       <dl>{toolCard.rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       <p>{toolCard.hint}</p>
+      {toolCard.kind && onDesignChange && <ArchitecturePicker kind={toolCard.kind} choice={designChoices[toolCard.kind]}
+        onChange={(choice) => onDesignChange(toolCard.kind!, choice)} onApplyToAll={(collection) => onApplyCollection?.(collection)} />}
     </div>}
     <button type="button" className="catalog-toggle" aria-expanded={catalogOpen} onClick={() => setCatalogOpen((open) => !open)}>
       <Icon name="layers" size={15} /><span>{catalogOpen ? 'Hide building catalog' : 'Browse building catalog'}</span><Icon name="chevron" size={14} className={catalogOpen ? 'is-open' : ''} />
