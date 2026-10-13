@@ -4,9 +4,14 @@ version = "0.2.0"
 description = "Phase 2A AI city architect API for TINY CITY"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.13,<2",
+    "email-validator>=2,<3",
     "fastapi>=0.143,<1",
     "google-genai>=1.0,<3",
+    "psycopg[binary]>=3.2,<4",
+    "pwdlib[argon2]>=0.2,<1",
     "pydantic-settings>=2.0,<3",
+    "sqlalchemy>=2,<3",
     "uvicorn>=0.30,<1",
 ]
 
