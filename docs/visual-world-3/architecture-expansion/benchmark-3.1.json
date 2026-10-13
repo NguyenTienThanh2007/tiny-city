@@ -1,0 +1,410 @@
+{
+ "note": "node scripts/vw31_benchmark.mjs; Apple M2, Playwright Chromium, ANGLE Metal, vsync on, 1440x900",
+ "runs": {
+  "after": {
+   "label": "3.1-designs",
+   "base": "http://127.0.0.1:4191",
+   "uncapped": false,
+   "software": false,
+   "designs": true,
+   "date": "2026-10-13T17:10:47.666Z",
+   "scenarios": [
+    {
+     "name": "default-city-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.09,
+     "gpuTextureMB": 107.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 12,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.2,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-zoomed-in-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.26,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-overview-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.69,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 112,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-gameplay-night",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.21,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-camera-movement",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60
+    },
+    {
+     "name": "large-mixed-use-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.53,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 53,
+     "bakedBuildings": 74,
+     "vectorBuildings": 0,
+     "buildings": 74
+    },
+    {
+     "name": "large-mixed-use-overview-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.54,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 71,
+     "bakedBuildings": 74,
+     "vectorBuildings": 0,
+     "buildings": 74
+    },
+    {
+     "name": "large-mixed-use-after-long-session",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.23,
+     "gpuTextureMB": 131.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 74,
+     "vectorBuildings": 0,
+     "buildings": 74,
+     "jsHeapMB": 92.9
+    },
+    {
+     "name": "life-mode-follow",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.28,
+     "gpuTextureMB": 120.4,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    }
+   ],
+   "load": {
+    "loadMs": 1252,
+    "artBytes": 377839,
+    "atlasPages": 13,
+    "atlasBytes": 133606060
+   }
+  },
+  "after-classic": {
+   "label": "3.1-classic",
+   "base": "http://127.0.0.1:4191",
+   "uncapped": false,
+   "software": false,
+   "designs": false,
+   "date": "2026-10-13T17:14:05.920Z",
+   "scenarios": [
+    {
+     "name": "default-city-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.1,
+     "gpuTextureMB": 107.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 12,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.17,
+     "gpuTextureMB": 118.9,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-zoomed-in-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.31,
+     "gpuTextureMB": 118.9,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-overview-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 1.1,
+     "gpuTextureMB": 118.9,
+     "visibleResidents": 112,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-gameplay-night",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.3,
+     "gpuTextureMB": 118.9,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    },
+    {
+     "name": "dense-residential-camera-movement",
+     "avgMs": 16.71,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 59.8
+    },
+    {
+     "name": "large-mixed-use-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.44,
+     "gpuTextureMB": 119,
+     "visibleResidents": 51,
+     "bakedBuildings": 74,
+     "vectorBuildings": 0,
+     "buildings": 74
+    },
+    {
+     "name": "large-mixed-use-overview-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.55,
+     "gpuTextureMB": 119,
+     "visibleResidents": 77,
+     "bakedBuildings": 74,
+     "vectorBuildings": 0,
+     "buildings": 74
+    },
+    {
+     "name": "large-mixed-use-after-long-session",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.3,
+     "gpuTextureMB": 119,
+     "visibleResidents": 0,
+     "bakedBuildings": 74,
+     "vectorBuildings": 0,
+     "buildings": 74,
+     "jsHeapMB": 68.9
+    },
+    {
+     "name": "life-mode-follow",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.26,
+     "gpuTextureMB": 107.7,
+     "visibleResidents": 0,
+     "bakedBuildings": 47,
+     "vectorBuildings": 0
+    }
+   ],
+   "load": {
+    "loadMs": 850,
+    "artBytes": 6572,
+    "atlasPages": 13,
+    "atlasBytes": 133606060
+   }
+  },
+  "before": {
+   "label": "3.0C",
+   "base": "http://127.0.0.1:4190",
+   "uncapped": false,
+   "software": false,
+   "designs": false,
+   "date": "2026-10-13T17:17:23.238Z",
+   "scenarios": [
+    {
+     "name": "default-city-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.09,
+     "gpuTextureMB": null,
+     "visibleResidents": 0,
+     "bakedBuildings": null,
+     "vectorBuildings": null
+    },
+    {
+     "name": "dense-residential-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.29,
+     "gpuTextureMB": null,
+     "visibleResidents": 0,
+     "bakedBuildings": null,
+     "vectorBuildings": null
+    },
+    {
+     "name": "dense-residential-zoomed-in-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.31,
+     "gpuTextureMB": null,
+     "visibleResidents": 0,
+     "bakedBuildings": null,
+     "vectorBuildings": null
+    },
+    {
+     "name": "dense-residential-overview-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.72,
+     "gpuTextureMB": null,
+     "visibleResidents": 112,
+     "bakedBuildings": null,
+     "vectorBuildings": null
+    },
+    {
+     "name": "dense-residential-gameplay-night",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.25,
+     "gpuTextureMB": null,
+     "visibleResidents": 0,
+     "bakedBuildings": null,
+     "vectorBuildings": null
+    },
+    {
+     "name": "dense-residential-camera-movement",
+     "avgMs": 16.76,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 59.7
+    },
+    {
+     "name": "large-mixed-use-gameplay-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.51,
+     "gpuTextureMB": null,
+     "visibleResidents": 51,
+     "bakedBuildings": null,
+     "vectorBuildings": null,
+     "buildings": 74
+    },
+    {
+     "name": "large-mixed-use-overview-day",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.6,
+     "gpuTextureMB": null,
+     "visibleResidents": 77,
+     "bakedBuildings": null,
+     "vectorBuildings": null,
+     "buildings": 74
+    },
+    {
+     "name": "large-mixed-use-after-long-session",
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.28,
+     "gpuTextureMB": null,
+     "visibleResidents": 0,
+     "bakedBuildings": null,
+     "vectorBuildings": null,
+     "buildings": 74,
+     "jsHeapMB": 77.6
+    },
+    {
+     "name": "life-mode-follow",
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererMs": 0.31,
+     "gpuTextureMB": null,
+     "visibleResidents": 0,
+     "bakedBuildings": null,
+     "vectorBuildings": null
+    }
+   ],
+   "load": {
+    "loadMs": 846,
+    "artBytes": 22986,
+    "atlasPages": null,
+    "atlasBytes": null
+   }
+  }
+ }
+}
