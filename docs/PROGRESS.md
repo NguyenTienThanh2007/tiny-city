@@ -138,3 +138,10 @@ Phase 4.5 (#13) is merged and green. Acceptance: `docs/visual-world-3/acceptance
 - [x] Lighting: smooth cinematic keys, night light pools, window life, foliage sway, shimmer, fireflies; pause and reduced motion freeze
 - [x] Matched 3.0B/3.0C shots and animation sequences, population benchmarks (20–1,000), tests (unit 173, e2e 46)
 - [ ] Next: Camera & Zoom Fix (audit cameraRequest handling), then Phase 5 Economy
+
+## Main CI recovery (branch `fix/main-ci-recovery`, from `origin/main` @ `5aec726`)
+
+- [x] Root cause 1 (run 38365939970, 22 failures): every signed-out page load called `GET /v1/auth/me`, which answers 401; Chromium logs that as a console error and the e2e specs fail on any console error. Fix: `GET /v1/auth/session` (200 for guests and users) for the start-up check; `/me` and all account endpoints still return 401. The PR #17 test-side 401 allowance is removed.
+- [x] Root cause 2 (run 38380000164, cancelled; same six Life/AI failures on PR #18's first run): the baked player figure (3.0C) re-encoded a PNG every 115 ms in the Character Creator and on every ~100 ms HUD refresh for the Life portrait, on GPU-backed 2D canvases. Under SwiftShader that kept the main thread blocked for ~5 s of every 5 s (M2), several seconds per action on slow runners, so the 4.5 s "Welcome home" toast expired before Playwright could read it, and the suite overran the 35-minute job. Fix: cached figure frames on CPU-backed canvases (0 long tasks with the Creator open), toast lifetime counted from its first frame.
+- [x] Hardening: game-time e2e waits (`e2e/support/gameTime.ts`; game time follows the frame rate), a settled-camera wait, Playwright `globalTimeout` 50 min under a 60-minute job, traces uploaded on cancel.
+- [x] Regression tests: API session test, auth unit tests, `e2e/guest-session.spec.ts`

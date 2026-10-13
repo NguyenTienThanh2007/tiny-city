@@ -18,7 +18,7 @@ The session cookie is opaque, HttpOnly, Secure in production, and checked agains
 
 ### Account routes
 
-- `GET /v1/auth/csrf`; `POST /v1/auth/register`, `/verify-email`, `/resend-verification`, `/login`, `/logout`, `/forgot-password`, `/reset-password`; `GET /v1/auth/me`.
+- `GET /v1/auth/csrf`; `POST /v1/auth/register`, `/verify-email`, `/resend-verification`, `/login`, `/logout`, `/forgot-password`, `/reset-password`; `GET /v1/auth/me` (401 without a session); `GET /v1/auth/session` (always 200: `{authenticated, user}`, used by the app's start-up check so guests never trigger a failed request).
 - `GET/PUT/DELETE /v1/users/me`; `POST /v1/users/me/password`; `GET/DELETE /v1/users/me/sessions` and `DELETE /v1/users/me/sessions/{session_id}`.
 - `GET/POST /v1/users/me/cities`; `GET/PUT/DELETE /v1/users/me/cities/{save_id}`.
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { untilClock } from './support/gameTime';
 import type { CityState } from '../src/types';
 
 /** Visual World 3.0C: baked characters, real venue visitors, camera stability, reduced motion. */
@@ -25,12 +26,11 @@ async function openCity(page: Page, city: unknown = street) {
   return errors;
 }
 const stats = (page: Page) => page.evaluate(() => (window as unknown as { __tinyCityRenderer?: Stats }).__tinyCityRenderer ?? null);
-const minutes = async (page: Page) => { const [, h, m] = /(\d\d):(\d\d)/.exec((await page.getByLabel('Simulation clock').textContent())!)!; return Number(h) * 60 + Number(m); };
 async function runUntil(page: Page, minute: number) {
   const resume = page.getByRole('button', { name: 'Resume', exact: true });
   if (await resume.isVisible()) await resume.click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
-  await expect.poll(() => minutes(page), { timeout: 150_000 }).toBeGreaterThanOrEqual(minute);
+  await untilClock(page, minute);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
 }
 async function footprint(page: Page) {
@@ -86,6 +86,16 @@ test('real park visitors are drawn at the park instead of disappearing inside it
 });
 
 test('the Character Creator previews the baked character with the same accessible name', async ({ page }) => {
+  // Count PNG encodes: the animated preview must reuse cached frames, not re-encode one every 115 ms (that kept
+  // the main thread busy for seconds per action on slow CI runners, and toasts expired before they were seen).
+  await page.addInitScript(() => {
+    const encode = HTMLCanvasElement.prototype.toDataURL;
+    (window as unknown as { __encodes: number }).__encodes = 0;
+    HTMLCanvasElement.prototype.toDataURL = function (...args: Parameters<typeof encode>) {
+      (window as unknown as { __encodes: number }).__encodes += 1;
+      return encode.apply(this, args);
+    };
+  });
   await openCity(page);
   await page.getByRole('button', { name: 'Life', exact: true }).click();
   await page.getByRole('button', { name: 'Create character' }).click();
@@ -93,6 +103,16 @@ test('the Character Creator previews the baked character with the same accessibl
   const preview = page.getByRole('img', { name: 'Preview of Mai Nguyen' });
   await expect(preview).toBeVisible();
   await expect(preview).toHaveAttribute('data-art', 'baked');
+  const encodes = () => page.evaluate(() => (window as unknown as { __encodes: number }).__encodes);
+  // Once each walk frame has been drawn, the running animation encodes nothing more (before the fix: one every 115 ms).
+  let previous = -1;
+  await expect.poll(async () => {
+    const count = await encodes();
+    const settled = count === previous;
+    previous = count;
+    return settled;
+  }, { intervals: [1500], timeout: 20_000 }).toBe(true);
+  await expect(preview).toHaveAttribute('src', /^data:image\/png/);
   // Choices update the preview image.
   const src = await preview.getAttribute('src');
   await page.getByRole('radio', { name: 'Accessory Sun hat' }).check();

@@ -1,8 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { CityState } from '../src/types';
 import { BUILDING_CATALOG, CONSTRUCTION_COSTS, type BuildingType } from '../packages/simulation/src/index';
-// A signed-out visitor's session check (GET /v1/auth/me) answers 401 by design (accounts, PR #16); Chromium logs it.
-const expectedSignedOut = (message: { text(): string; location(): { url: string } }) => /status of 401/.test(message.text()) && /\/v1\/auth\/me(\?|$)/.test(message.location().url);
 
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
 const toolNames: Record<BuildingType, string> = {
@@ -15,7 +13,7 @@ const fixture = { size: 64, funds: 5000, buildings: [],
 async function openCity(page: Page, city: CityState = fixture) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if ((message.type() === 'warning' || message.type() === 'error') && !/GL Driver Message.*GPU stall due to ReadPixels/.test(message.text()) && !expectedSignedOut(message)) errors.push(message.text()); });
+  page.on('console', (message) => { if ((message.type() === 'warning' || message.type() === 'error') && !/GL Driver Message.*GPU stall due to ReadPixels/.test(message.text())) errors.push(message.text()); });
   await page.addInitScript(({ key, city }) => {
     if (!sessionStorage.getItem('acceptance-fixture')) {
       localStorage.setItem(key, JSON.stringify(city));

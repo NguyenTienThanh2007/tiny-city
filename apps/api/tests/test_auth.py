@@ -11,6 +11,7 @@ from tiny_city_api.config import Settings
 from tiny_city_api.email_service import MemoryEmailSender
 from tiny_city_api.main import create_app
 from tiny_city_api.models import AuthSession, Base, OneTimeToken, User, UserCitySave
+from tiny_city_api.security import session_cookie_name
 
 
 ORIGIN = 'http://localhost:5173'
@@ -146,6 +147,32 @@ def test_session_cookie_me_logout_and_expiry_are_server_checked(client):
     with client.db_engine.connect() as connection:
         from sqlalchemy.orm import Session
         assert Session(bind=connection).scalar(select(AuthSession).where(AuthSession.revoked_at.is_not(None))) is not None
+
+
+def test_session_status_answers_guests_with_200_but_protected_endpoints_still_require_a_session(client):
+    # A guest (no cookie) and a forged or expired cookie are normal answers here, never 401, and reveal no user.
+    name = session_cookie_name(client.app.state.settings)
+    for cookies in ({}, {name: 'forged-token-value'}):
+        client.cookies.clear()
+        for key, value in cookies.items():
+            client.cookies.set(key, value)
+        guest = client.get('/v1/auth/session')
+        assert guest.status_code == 200
+        assert guest.json() == {'authenticated': False, 'user': None}
+        assert guest.headers['cache-control'] == 'no-store'
+        # Access rules are unchanged: account endpoints still refuse without a valid session.
+        assert client.get('/v1/auth/me').status_code == 401
+        assert client.get('/v1/users/me/cities').status_code == 401
+        assert client.get('/v1/users/me/sessions').status_code == 401
+    client.cookies.clear()
+    register_and_verify(client)
+    assert sign_in(client).status_code == 200
+    signed_in = client.get('/v1/auth/session')
+    assert signed_in.status_code == 200
+    assert signed_in.json()['authenticated'] is True
+    assert signed_in.json()['user']['email'] == 'city@example.com'
+    assert client.post('/v1/auth/logout', headers=csrf(client)).status_code == 204
+    assert client.get('/v1/auth/session').json() == {'authenticated': False, 'user': None}
 
 
 def test_profile_password_change_and_reset_revoke_other_sessions(client):

@@ -62,8 +62,10 @@ jobs:
 
   gameplay:
     runs-on: ubuntu-latest
-    # 26 software-rendered browser specs, including three multi-hour living-world simulations.
-    timeout-minutes: 35
+    # 48 software-rendered browser specs, including multi-hour living-world simulations. The same suite takes
+    # 16–32 min on hosted runners and up to ~2x longer on a slow one (game time follows the frame rate there).
+    # Playwright's own globalTimeout (50 min) stops first, so a slow run still prints its failure report.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -83,7 +85,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
+        if: failure() || cancelled()
         with:
           name: gameplay-failure-traces
           path: test-results/

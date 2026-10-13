@@ -188,6 +188,7 @@ function App() {
     setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, ...(cell ? { cell } : {}) }));
   }, []);
   const noticeTimerRef = useRef<number | null>(null);
+  const noticeSeqRef = useRef(0);
 
   useEffect(() => {
     if (pathname !== '/' && !getSnapshot().clock.paused) togglePause();
@@ -203,13 +204,21 @@ function App() {
     setNotice(message);
     setNoticeTone(tone);
     if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = window.setTimeout(() => {
-      setNotice('');
-      noticeTimerRef.current = null;
-    }, 4500);
+    noticeTimerRef.current = null;
+    // Count the 4.5 s from the first frame that shows the notice, so a busy main thread (a slow machine, a big
+    // city edit) cannot spend its whole lifetime before it is ever painted.
+    const seq = ++noticeSeqRef.current;
+    window.requestAnimationFrame(() => {
+      if (seq !== noticeSeqRef.current) return;
+      noticeTimerRef.current = window.setTimeout(() => {
+        setNotice('');
+        noticeTimerRef.current = null;
+      }, 4500);
+    });
   }, []);
 
   useEffect(() => () => {
+    noticeSeqRef.current += 1;
     if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
   }, []);
 

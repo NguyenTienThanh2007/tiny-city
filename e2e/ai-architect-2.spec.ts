@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { untilText } from './support/gameTime';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
 
@@ -188,14 +189,21 @@ test('AI-built housing keeps a room for a waiting character, who moves in, walks
   // Walk out along the street to prove the character is playable.
   const bounds = (await page.locator('canvas').boundingBox())!;
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
-  await page.waitForTimeout(500);
+  // The camera glides; a fixed wait can read it mid-move on a slow runner. Wait until the minimap footprint settles.
+  let previous = '';
+  await expect.poll(async () => {
+    const current = (await page.getByTestId('minimap-camera').getAttribute('points')) ?? '';
+    const settled = current === previous;
+    previous = current;
+    return settled;
+  }, { intervals: [250], timeout: 10_000 }).toBe(true);
   const pts = (await page.getByTestId('minimap-camera').getAttribute('points'))!.split(' ').map((p) => p.split(',').map((n) => Number(n) * 64 / 100));
   const w = (gx: number, gy: number) => ({ x: (gx - gy) * 28, y: (gx + gy) * 14 });
   const o = w(pts[0][0], pts[0][1]), r = w(pts[1][0], pts[1][1]), sc = bounds.width / (r.x - o.x), t = w(30.5, 20.5);
   await page.mouse.click(bounds.x + (t.x - o.x) * sc, bounds.y + (t.y - o.y) * sc);
   await expect(page.getByRole('status', { name: 'Current activity' })).toContainText('Walking to the street at 30, 20');
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect(page.getByRole('status', { name: 'Current activity' })).toContainText('Free to explore', { timeout: 30_000 });
+  await untilText(page, page.getByRole('status', { name: 'Current activity' }), 'Free to explore', { within: 240 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   const saved = (await save(page)).simulation;
   await page.reload();

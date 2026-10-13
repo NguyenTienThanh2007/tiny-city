@@ -1,8 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { untilClock, untilInGameTime } from './support/gameTime';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
-// A signed-out visitor's session check (GET /v1/auth/me) answers 401 by design (accounts, PR #16); Chromium logs it.
-const expectedSignedOut = (message: { text(): string; location(): { url: string } }) => /status of 401/.test(message.text()) && /\/v1\/auth\/me(\?|$)/.test(message.location().url);
 
 // Phase 4.5 browser acceptance: occupancy shown in the UI always equals the authoritative world, the player counts
 // once, residents keep their homes through commutes, and everything survives a reload.
@@ -21,7 +20,7 @@ test.slow();
 async function openCity(page: Page, city: CityState = fixture) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text()) && !expectedSignedOut(message)) errors.push(message.text()); });
+  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text())) errors.push(message.text()); });
   await page.addInitScript(({ key, value }) => {
     if (!sessionStorage.getItem('p45-fixture')) { localStorage.setItem(key, JSON.stringify(value)); sessionStorage.setItem('p45-fixture', '1'); }
   }, { key: SAVE_KEY, value: city });
@@ -54,10 +53,6 @@ async function screenPoint(page: Page, x: number, y: number, lift = 0) {
 async function save(page: Page): Promise<Saved> {
   await page.getByRole('button', { name: /^(Save|Saved)$/ }).click();
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), SAVE_KEY);
-}
-async function minutes(page: Page) {
-  const [, h, m] = /(\d\d):(\d\d)/.exec((await page.getByLabel('Simulation clock').textContent())!)!;
-  return Number(h) * 60 + Number(m);
 }
 /** Opens the building inspector by clicking the roof in Build mode with the Select tool. */
 async function inspect(page: Page, building: { x: number; y: number; kind: keyof typeof ROOF_LIFT; width: number; height: number }) {
@@ -124,7 +119,7 @@ test('occupancy: the home picker tells the truth, the player counts once, reside
   // D. Residents commute to work and come back to the same homes.
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
-  await expect.poll(() => minutes(page), { timeout: 90_000 }).toBeGreaterThanOrEqual(11 * 60);
+  await untilClock(page, 11 * 60);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   const morning = (await save(page)).simulation;
   expect(morning.citizens.filter((c) => c.movement?.status === 'inside' && c.movement.currentBuildingId === 'office').length).toBeGreaterThan(0);
@@ -137,7 +132,7 @@ test('occupancy: the home picker tells the truth, the player counts once, reside
   await page.getByRole('button', { name: 'Close building inspector' }).click();
   await page.getByRole('button', { name: 'Life', exact: true }).click();
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect.poll(() => minutes(page), { timeout: 150_000 }).toBeGreaterThanOrEqual(21 * 60);
+  await untilClock(page, 21 * 60);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   const night = (await save(page)).simulation;
   for (const c of night.citizens) {
@@ -240,12 +235,12 @@ test('a road removed under a walking resident: they step onto the street and sti
   await page.getByRole('button', { name: 'Welcome residents' }).click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
   let walker: WorldState['citizens'][number] | undefined;
-  await expect.poll(async () => {
+  await untilInGameTime(page, 'a resident walking to the office', async () => {
     const world = (await save(page)).simulation;
     walker = world.citizens.find((c) => c.movement?.status === 'travelling' && c.movement.destinationBuildingId === 'office' &&
       Math.floor(c.position.y) === 20 && c.position.x > 26 && c.position.x < 40);
     return walker !== undefined;
-  }, { timeout: 120_000, intervals: [100] }).toBe(true);
+  }, (found) => found, { within: 2 * 24 * 60 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   const paused = (await save(page)).simulation;
   walker = paused.citizens.find((c) => c.id === walker!.id)!;
@@ -265,9 +260,9 @@ test('a road removed under a walking resident: they step onto the street and sti
   expect(Math.abs(moved.position.x - walker.position.x) + Math.abs(moved.position.y - walker.position.y)).toBeLessThanOrEqual(1.5);
   await page.getByRole('button', { name: 'Live', exact: true }).click();
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect.poll(async () => {
+  await untilInGameTime(page, 'the walker reaching work', async () => {
     const c = (await save(page)).simulation.citizens.find((entry) => entry.id === walker!.id)!;
     return c.movement?.status === 'inside' && c.movement.currentBuildingId === 'office';
-  }, { timeout: 90_000, intervals: [250] }).toBe(true);
+  }, (arrived) => arrived, { within: 600 });
   expect(errors).toEqual([]);
 });

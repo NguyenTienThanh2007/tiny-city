@@ -1,8 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { untilClock, untilInGameTime } from './support/gameTime';
 import type { Citizen, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
-// A signed-out visitor's session check (GET /v1/auth/me) answers 401 by design (accounts, PR #16); Chromium logs it.
-const expectedSignedOut = (message: { text(): string; location(): { url: string } }) => /status of 401/.test(message.text()) && /\/v1\/auth\/me(\?|$)/.test(message.location().url);
 
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
 // Homes and an office share one street, so morning commutes are visible on the road.
@@ -19,7 +18,7 @@ type Renderer = { fps: number; frameMs: number; residents: number; visibleReside
 async function openCity(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text()) && !expectedSignedOut(message)) errors.push(message.text()); });
+  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text())) errors.push(message.text()); });
   await page.addInitScript(({ key, city }) => {
     if (!sessionStorage.getItem('living-fixture')) { localStorage.setItem(key, JSON.stringify(city)); sessionStorage.setItem('living-fixture', '1'); }
   }, { key: SAVE_KEY, city: fixture });
@@ -39,10 +38,6 @@ async function screenPoint(page: Page, x: number, y: number, lift = 0) {
   const target = world(x, y);
   return { x: bounds.x + (target.x - origin.x) * scale, y: bounds.y + (target.y - origin.y) * scale - lift * scale };
 }
-async function minutes(page: Page) {
-  const [, h, m] = /(\d\d):(\d\d)/.exec((await page.getByLabel('Simulation clock').textContent())!)!;
-  return Number(h) * 60 + Number(m);
-}
 async function save(page: Page): Promise<CityState & { simulation: WorldState }> {
   await page.getByRole('button', { name: /^(Save|Saved)$/ }).click();
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), SAVE_KEY);
@@ -57,7 +52,7 @@ async function welcomeAndCommute(page: Page) {
   await expect(page.getByRole('status', { name: 'City notice' })).toContainText('8 residents moved in');
   await expect(page.getByRole('heading', { name: '8 residents' })).toBeVisible();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
-  await expect.poll(() => minutes(page), { timeout: 60_000 }).toBeGreaterThanOrEqual(6 * 60 + 50);
+  await untilClock(page, 6 * 60 + 50);
   await expect.poll(async () => (await renderer(page))?.visibleResidents ?? 0, { timeout: 30_000 }).toBeGreaterThan(0);
   // Real-time speed keeps the long commute on screen for the rest of the test.
   await page.getByRole('button', { name: 'Speed 1x' }).click();
@@ -145,7 +140,7 @@ test('residents recover when a road under their commute is removed and restored'
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect.poll(async () => (await save(page)).simulation.citizens.filter((citizen) => citizen.activity === 'work').length, { timeout: 45_000 }).toBeGreaterThan(0);
+  await untilInGameTime(page, 'a resident at work', async () => (await save(page)).simulation.citizens.filter((citizen) => citizen.activity === 'work').length, (working) => working > 0, { within: 24 * 60 });
   expect(errors).toEqual([]);
 });
 

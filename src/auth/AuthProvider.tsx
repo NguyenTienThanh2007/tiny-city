@@ -22,9 +22,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const result = await accountApi.me();
+      const result = await accountApi.session();
       setCurrentUser(result.user);
-      setStatus('authenticated');
+      setStatus(result.user ? 'authenticated' : 'guest');
       setError(null);
       return result.user;
     } catch (reason) {
