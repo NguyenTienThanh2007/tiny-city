@@ -1,7 +1,9 @@
 import type { BuildingOccupancy, Citizen, PlayerCharacter } from '@tiny-city/simulation';
 import { homeOccupancy, residentWhereabouts } from '../simulation/housingView';
 import { BUILDINGS, type Building } from '../types';
-import { BuildingThumb } from './BuildingThumb';
+import { architectureCollection, architectureModel } from '@tiny-city/ai-architect';
+import { designOf } from '../game/architecture';
+import { ModelThumb } from './ArchitecturePicker';
 import { Icon } from './Icon';
 
 const roleLabels = { home: 'Residential', workplace: 'Workplace', park: 'Leisure' } as const;
@@ -23,6 +25,8 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
   onSelectCitizen: (id: string) => void;
 }) {
   const spec = BUILDINGS[building.kind];
+  const design = designOf(building);
+  const model = architectureModel(design.model);
   const leisure = spec.role === 'park' || building.kind === 'clubhouse';
   const jobs = spec.role === 'workplace' && building.kind !== 'clubhouse';
   const home = spec.role === 'home';
@@ -41,10 +45,11 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
       <button className="inspector-close panel-close" aria-label="Close building inspector" onClick={onClose}><Icon name="close" size={16} /></button>
     </div>
     <div className={`building-hero is-${building.kind}`}>
-      <BuildingThumb kind={building.kind} />
+      <ModelThumb model={model ?? null} kind={building.kind} size={64} />
       <div>
         <h2 id="building-name">{building.name}</h2>
         <p className="inspector-subtitle">{spec.label}</p>
+        <p className="building-design" aria-label="Architecture">{architectureCollection(design.collection)?.name ?? design.collection} · {model?.name ?? design.model}</p>
         <span className="status-pill is-ready">Open</span>
       </div>
     </div>

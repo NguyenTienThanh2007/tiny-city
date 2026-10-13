@@ -20,6 +20,7 @@ import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry
 import { rejectionFeedback } from '../simulation/feedback';
 import { currentArt, loadArt, type ArtLibrary } from './art/artLibrary';
 import { selectBuildingAsset, selectRoadAsset } from './art/artManifest';
+import { designLabel, predictBuildingId, resolveChoice, type DesignChoices } from './architecture';
 import { drawTerrainArt } from './terrainArt';
 
 export { buildingLift } from './buildingArt';
@@ -27,7 +28,30 @@ export { buildingLift } from './buildingArt';
 /** `cell` may be fractional (a resident's position). `zoom` multiplies the scale around the visible center. */
 export type CameraRequest = { id: number; cell?: Position; zoom?: number; scale?: number };
 export type SafeArea = { left: number; right: number; top: number; bottom: number };
-export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number; venueVisitors?: number; art?: string };
+export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number; venueVisitors?: number; art?: string;
+  /** Finished and constructing buildings drawn from baked art vs the vector fallback at the last city redraw (3.1). */
+  bakedBuildings?: number; vectorBuildings?: number;
+  /** Baked art drawn per model (classic art as `classic:<kind>:v<variant>`), so tests can see exactly what is shown. */
+  drawnModels?: Record<string, number>;
+  /** Estimated GPU bytes of all loaded atlas pages (with mipmaps) and their count. */
+  atlasBytes?: number; atlasPages?: number;
+  /** Measured: bytes of every texture actually uploaded to the GPU (Pixi uploads atlas pages only when drawn). */
+  gpuTextureBytes?: number; gpuTextures?: number };
+/** Bytes of the textures currently uploaded to the GPU (WebGL renderer), with a third more for mip chains. */
+function gpuTextureUse(renderer: unknown): { gpuTextureBytes?: number; gpuTextures?: number } {
+  const sources = (renderer as { texture?: { managedTextures?: readonly ({ pixelWidth: number; pixelHeight: number; autoGenerateMipmaps?: boolean } | null)[] } }).texture?.managedTextures;
+  if (!sources) return {};
+  // Pixi leaves null slots for destroyed sources.
+  let bytes = 0, count = 0;
+  for (const source of sources) {
+    if (!source) continue;
+    bytes += source.pixelWidth * source.pixelHeight * 4 * (source.autoGenerateMipmaps ? 4 / 3 : 1);
+    count += 1;
+  }
+  return { gpuTextureBytes: Math.round(bytes), gpuTextures: count };
+}
+/** Counters for the last city redraw (read into RendererStats). */
+const drawStats = { baked: 0, vector: 0, models: {} as Record<string, number> };
 /** What a Life Mode click points at, in priority order: the player, a resident, a building, then a tile. */
 export type LifeTarget = { type: 'player' } | { type: 'citizen'; id: string } | { type: 'building'; id: string } | { type: 'tile'; cell: Cell };
 export type { HomeHighlight, LifeFeedback };
@@ -67,6 +91,8 @@ type Props = {
   homeHighlights?: readonly HomeHighlight[] | null;
   /** AI Architect: buildings an ambiguous or blocked request refers to (candidate, chosen, to remove, to move). */
   targetHighlights?: readonly TargetHighlight[];
+  /** Visual World 3.1: the architectural model chosen per building type (the ghost shows exactly what gets built). */
+  designChoices?: DesignChoices;
 };
 export type TargetHighlight = { id: string; tone: 'candidate' | 'selected' | 'remove' | 'move' };
 const TARGET_TONES: Record<TargetHighlight['tone'], [number, number]> = {
@@ -228,9 +254,11 @@ function roadSidesFor(building: Building, roadSet: ReadonlySet<string>): RoadSid
 function drawBakedBuilding(layer: Container, shadows: Container | null, building: Building, selected: boolean, progress: number,
   sides: RoadSides, registry: BuildingRegistry, art: ArtLibrary): boolean {
   const spec = BUILDINGS[building.kind];
-  const asset = selectBuildingAsset(art.index, building.kind, building.id, sides);
+  const asset = selectBuildingAsset(art.index, building, sides);
   const texture = art.frame(asset?.color);
   if (!asset || !texture) return false;
+  const shown = asset.model ?? `classic:${asset.kind}:v${asset.variant}`;
+  drawStats.models[shown] = (drawStats.models[shown] ?? 0) + 1;
   const origin = iso(building.x, building.y);
   const depth = buildingDepth(building.x, building.y, spec.width, spec.height);
   const item = new Container();
@@ -291,7 +319,8 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   const spec = BUILDINGS[building.kind];
   const sides = roadSidesFor(building, roadSet);
   const art = currentArt();
-  if (art && drawBakedBuilding(layer, shadows, building, selected, progress, sides, registry, art)) return;
+  if (art && drawBakedBuilding(layer, shadows, building, selected, progress, sides, registry, art)) { drawStats.baked += 1; return; }
+  drawStats.vector += 1;
   const item = new Container();
   item.label = 'building';
   const ground = footprint(building.x, building.y, spec.width, spec.height);
@@ -308,7 +337,7 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
     return group;
   };
   if (progress >= 1) {
-    const key = [building.id, building.kind, building.x, building.y, selected ? 1 : 0, Number(sides.north), Number(sides.south), Number(sides.east), Number(sides.west)].join(':');
+    const key = [building.id, building.kind, building.design?.model ?? '', building.x, building.y, selected ? 1 : 0, Number(sides.north), Number(sides.south), Number(sides.east), Number(sides.west)].join(':');
     const cached = textures.get(key, vector);
     if (cached) {
       const sprite = new Sprite(cached.texture);
@@ -362,6 +391,7 @@ function clearBuildings(buildings: Container, registry: BuildingRegistry, shadow
 
 function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, registry: BuildingRegistry, textures: BuildingTextures, shadows: Container | null = null) {
   clearBuildings(buildings, registry, shadows);
+  drawStats.baked = 0; drawStats.vector = 0; drawStats.models = {};
   const roadSet = new Set(plan.roads.map(({ x, y }) => cellKey(x, y)));
   textures.begin();
   for (const building of getRenderBuildings(city, plan)) {
@@ -436,6 +466,30 @@ function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null |
     buildings.stroke({ color: 0xffffff, width: 1.6, alpha: 0.9 });
   }
   layer.addChild(buildings);
+  // 3.1: each planned building shows its exact architectural model as a translucent blueprint sprite (the classic
+  // look its ID will get when the plan names no design), facing the roads of the projected plan.
+  const art = currentArt();
+  if (!art) return;
+  const roadSet = new Set(proposal.projectedPlan.roads.map((tile) => cellKey(tile.x, tile.y)));
+  const ghosts = new Container();
+  ghosts.sortableChildren = true;
+  for (const placement of proposal.placements) {
+    if (placement.operation !== 'build') continue;
+    const kind = placement.buildingType as BuildingKind;
+    const editor: Building = { id: placement.buildingId, kind, x: placement.position.x, y: placement.position.y, name: '', createdAt: 0,
+      design: placement.design ?? resolveChoice(kind, undefined, placement.buildingId) };
+    const asset = selectBuildingAsset(art.index, editor, roadSidesFor(editor, roadSet));
+    const texture = art.frame(asset?.color);
+    if (!texture) continue;
+    const sprite = new Sprite(texture);
+    const at = iso(editor.x, editor.y);
+    sprite.anchor.copyFrom(texture.defaultAnchor ?? { x: 0, y: 0 });
+    sprite.position.set(at.x, at.y);
+    sprite.alpha = 0.78;
+    sprite.zIndex = buildingDepth(editor.x, editor.y, BUILDINGS[kind].width, BUILDINGS[kind].height);
+    ghosts.addChild(sprite);
+  }
+  layer.addChild(ghosts);
 }
 
 function buildingAt(city: CityState, x: number, y: number): Building | undefined {
@@ -461,13 +515,13 @@ export function buildingTop(building: Building, roads: CityState['roads'] = []):
   const art = currentArt();
   if (!art) return legacy;
   const roadSet = new Set(roads.map(({ x, y }) => cellKey(x, y)));
-  const height = selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet))?.heightPx;
+  const height = selectBuildingAsset(art.index, building, roadSidesFor(building, roadSet))?.heightPx;
   return height ? Math.max(legacy, height) : legacy;
 }
 
 /** Pixel test against the building's baked sprite (null when no art or no mask is available). */
 function bakedArtHit(building: Building, point: Point, roadSet: ReadonlySet<string>, art: ArtLibrary): boolean | null {
-  const asset = selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet));
+  const asset = selectBuildingAsset(art.index, building, roadSidesFor(building, roadSet));
   const texture = art.frame(asset?.color);
   if (!asset || !texture) return null;
   const origin = iso(building.x, building.y);
@@ -625,8 +679,9 @@ export default function CityViewport(props: Props) {
         const art = currentArt();
         if (!art || !b.type) return 'S';
         const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
-        const editor: Building = { id: b.id, kind: b.type as BuildingKind, x: b.position.x, y: b.position.y, name: b.name, createdAt: 0 };
-        return selectBuildingAsset(art.index, b.type, b.id, roadSidesFor(editor, roadSet))?.front ?? 'S';
+        const design = propsRef.current.city.buildings.find((entry) => entry.id === b.id)?.design;
+        const editor: Building = { id: b.id, kind: b.type as BuildingKind, x: b.position.x, y: b.position.y, name: b.name, createdAt: 0, ...(design ? { design } : {}) };
+        return selectBuildingAsset(art.index, editor, roadSidesFor(editor, roadSet))?.front ?? 'S';
       };
       const npcs = new NpcLayer(buildings, groundOverlay, { frontOf });
       const lifeMarkers = new Container();
@@ -957,7 +1012,7 @@ export default function CityViewport(props: Props) {
       const ghostBuilding = (building: Building) => {
         const art = currentArt();
         const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
-        const asset = art ? selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet)) : null;
+        const asset = art ? selectBuildingAsset(art.index, building, roadSidesFor(building, roadSet)) : null;
         const texture = art?.frame(asset?.color) ?? null;
         if (!texture) { drawBuildingArt(ghostArt, building, 1); return; }
         const at = iso(building.x, building.y);
@@ -991,12 +1046,15 @@ export default function CityViewport(props: Props) {
           const kind = current.tool as BuildingKind;
           const spec = BUILDINGS[kind];
           const validation = validateBuildingPlacement(current.world, kind, cell);
-          label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]}`;
+          // The ghost carries the ID and design the build will get, so preview and result are the same model.
+          const ghostId = predictBuildingId(current.world);
+          const ghostDesign = resolveChoice(kind, current.designChoices?.[kind], ghostId);
+          label = `${spec.label} · ${spec.width} × ${spec.height} · ${validation.valid ? `Ready to build · $${spec.cost}` : rejectionFeedback[validation.reason]} · ${designLabel(ghostDesign)}`;
           polygon(ghostShape, footprint(cell.x, cell.y, spec.width, spec.height), validation.valid ? 0xbfe8c9 : 0xd97962,
             validation.valid ? 0.42 : 0.58, validation.valid ? 0x2f8a5b : 0xb84c43, 0.95);
           if (validation.valid || validation.reason === 'road-required') roadAccessHint(cell.x, cell.y, spec.width, spec.height, validation.valid);
           decor.hideUnder(footprintTiles(cell.x, cell.y, spec.width, spec.height));
-          if (validation.valid) ghostBuilding({ id: 'ghost', kind, x: cell.x, y: cell.y, name: '', createdAt: 0 });
+          if (validation.valid) ghostBuilding({ id: ghostId, kind, x: cell.x, y: cell.y, name: '', createdAt: 0, design: ghostDesign });
         } else if (current.tool === 'move' && current.movingBuildingId) {
           const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
           if (building) {
@@ -1198,7 +1256,10 @@ export default function CityViewport(props: Props) {
           const stats: RendererStats = { fps: Math.round(frames * 1000 / (frameStart - frameWindowStart)),
             frameMs: Math.round(frameCost / frames * 100) / 100, residents: npcs.count,
             visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length,
-            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading' };
+            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading',
+            bakedBuildings: drawStats.baked, vectorBuildings: drawStats.vector, drawnModels: { ...drawStats.models },
+            ...gpuTextureUse(app.renderer),
+            atlasBytes: currentArt()?.textureBytes, atlasPages: currentArt() ? currentArt()!.index.manifest.sheets.length + (currentArt()!.index.manifest.characters?.sheets.length ?? 0) : 0 };
           (window as unknown as { __tinyCityRenderer?: RendererStats }).__tinyCityRenderer = stats;
           frames = 0; frameCost = 0; frameWindowStart = frameStart;
         }

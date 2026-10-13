@@ -71,20 +71,20 @@ describe('baked art manifest (public/art/vw3)', () => {
 describe('art selection rules', () => {
   it('pick the same variant for the same building every time (save/reload and undo safe)', () => {
     for (const kind of BAKED_BUILDING_KINDS) for (let i = 0; i < 30; i += 1) {
-      expect(selectBuildingAsset(index, kind, `b-${i}`, NO_ROAD)).toBe(selectBuildingAsset(index, kind, `b-${i}`, NO_ROAD));
+      expect(selectBuildingAsset(index, { kind: kind, id: `b-${i}` }, NO_ROAD)).toBe(selectBuildingAsset(index, { kind: kind, id: `b-${i}` }, NO_ROAD));
     }
   });
 
   it('vary repeated buildings and face the street', () => {
-    const villas = Array.from({ length: 24 }, (_, i) => selectBuildingAsset(index, 'villa', `villa-seed-${i}`, NO_ROAD)!);
+    const villas = Array.from({ length: 24 }, (_, i) => selectBuildingAsset(index, { kind: 'villa', id: `villa-seed-${i}` }, NO_ROAD)!);
     expect(new Set(villas.map((asset) => asset.variant)).size).toBeGreaterThanOrEqual(3);
-    expect(selectBuildingAsset(index, 'villa', 'x', { ...NO_ROAD, east: true })!.front).toBe('E');
-    expect(selectBuildingAsset(index, 'villa', 'x', { ...NO_ROAD, east: true, south: true })!.front).toBe('S');
-    expect(selectBuildingAsset(index, 'villa', 'x', { ...NO_ROAD, north: true })!.front).toBe('S');
+    expect(selectBuildingAsset(index, { kind: 'villa', id: 'x' }, { ...NO_ROAD, east: true })!.front).toBe('E');
+    expect(selectBuildingAsset(index, { kind: 'villa', id: 'x' }, { ...NO_ROAD, east: true, south: true })!.front).toBe('S');
+    expect(selectBuildingAsset(index, { kind: 'villa', id: 'x' }, { ...NO_ROAD, north: true })!.front).toBe('S');
   });
 
   it('fall back (null) for unknown kinds and decor, so the vector renderer draws them', () => {
-    expect(selectBuildingAsset(index, 'lighthouse', 'id', NO_ROAD)).toBeNull();
+    expect(selectBuildingAsset(index, { kind: 'lighthouse', id: 'id' }, NO_ROAD)).toBeNull();
     expect(selectDecorAsset(index, 'fountain', 0)).toBeNull();
     for (const kind of ['tree', 'accent', 'streetTree', 'palm', 'bush', 'flowers', 'stones', 'grass', 'lamp', 'bench', 'bin', 'bikes', 'planter']) {
       for (let variant = 0; variant < 8; variant += 1) expect(selectDecorAsset(index, kind, variant)?.color, `${kind} ${variant}`).toBeDefined();

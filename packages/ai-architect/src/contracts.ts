@@ -1,7 +1,13 @@
 import type { BuildingType, CityCommand, CityPlan, Position, WorldState } from '@tiny-city/simulation';
+import type { BuildingDesign } from './architecture.js';
 
 export const LIMITS = Object.freeze({ mapTiles: 4096, buildings: 32, operations: 128, candidates: 4096 });
-export interface BuildRequest { buildingType: BuildingType; quantity: number; preferredPosition: Position | null }
+/**
+ * Visual World 3.1: a requested architecture for a build. Either part may name the registry ID or the display name
+ * ("Luxury Minimalist", "Glass Pavilion Villa"); the planner resolves it and never substitutes an unknown model.
+ */
+export interface BuildDesignRequest { collection: string | null; model: string | null }
+export interface BuildRequest { buildingType: BuildingType; quantity: number; preferredPosition: Position | null; design?: BuildDesignRequest | null }
 /** Screen-relative direction in the isometric view: left/right across, back/front up/down the screen. */
 export type TargetRelative = 'left' | 'right' | 'back' | 'front';
 /**
@@ -64,7 +70,9 @@ export interface PlanProposal {
   status: ProposalStatus; summary: string; explanation: string;
   intent: ArchitectIntent; constraints: PlanningConstraints;
   placements: { buildingId: string; buildingType: BuildingType; position: Position;
-    footprint: { width: number; height: number }; operation: 'build' | 'move' }[];
+    footprint: { width: number; height: number }; operation: 'build' | 'move';
+    /** The architectural model a new building gets (null: classic look, or a move). */
+    design: BuildingDesign | null }[];
   roads: { add: Position[]; remove: Position[] };
   projectedPlan: CityPlan; estimatedCost: number; projectedBudget: number;
   validation: { valid: boolean; fulfilled: boolean; operationCount: number };

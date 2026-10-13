@@ -145,3 +145,13 @@ Phase 4.5 (#13) is merged and green. Acceptance: `docs/visual-world-3/acceptance
 - [x] Root cause 2 (run 38380000164, cancelled; same six Life/AI failures on PR #18's first run): the baked player figure (3.0C) re-encoded a PNG every 115 ms in the Character Creator and on every ~100 ms HUD refresh for the Life portrait, on GPU-backed 2D canvases. Under SwiftShader that kept the main thread blocked for ~5 s of every 5 s (M2), several seconds per action on slow runners, so the 4.5 s "Welcome home" toast expired before Playwright could read it, and the suite overran the 35-minute job. Fix: cached figure frames on CPU-backed canvases (0 long tasks with the Creator open), toast lifetime counted from its first frame.
 - [x] Hardening: game-time e2e waits (`e2e/support/gameTime.ts`; game time follows the frame rate), a settled-camera wait, Playwright `globalTimeout` 50 min under a 60-minute job, traces uploaded on cancel.
 - [x] Regression tests: API session test, auth unit tests, `e2e/guest-session.spec.ts`
+
+## Visual World 3.1 premium architecture (branch `feature/visual-world-3-1-architecture`, from `origin/main` @ `01ec34d`)
+
+PR #18 merged; main CI 38409390925 green. Docs: `docs/visual-world-3/architecture-expansion/`.
+
+- [x] M1 registry, persistent `Building.design`, Style Selector, exact preview and construction, compatibility tests
+- [x] M2 six Luxury Minimalist villas; M3 duplexes, townhouses and apartments (4 each); M4 commercial and public models (37 new in total)
+- [x] M5 AI Architect: design intent, validation without substitution, previews of exact models, approval records designs
+- [x] Screenshots (20 required views plus matched before/after against 3.0C), long-session renderer test, phone
+- [ ] M6 performance write-up, acceptance doc, GitHub Actions 3/3

@@ -1,3 +1,6 @@
+import { architectureModel, modelsFor } from '@tiny-city/ai-architect';
+import type { ArchitectureCollectionId } from '@tiny-city/ai-architect';
+import type { BuildingType } from '@tiny-city/simulation';
 import type { BuildingKind } from '../../types';
 import { hashString } from '../npcMotion';
 
@@ -15,6 +18,8 @@ export interface ArtAssetRecord {
   readonly variant: number;
   readonly front: ArtFront;
   readonly footprint: { readonly w: number; readonly d: number };
+  /** Visual World 3.1 architecture model ID (absent on the classic 3.0B buildings, which are found by variant). */
+  readonly model?: string;
   /** Road connection mask (N 1, E 2, S 4, W 8). */
   readonly mask?: number;
   /** Road tile used where all eight neighbours are road (pedestrian plaza). */
@@ -83,40 +88,69 @@ export function validateManifest(value: unknown, footprints?: Readonly<Record<st
 /** Index of assets by role, built once per manifest. */
 export interface ArtIndex {
   readonly manifest: ArtManifest;
+  /** Classic (3.0B) building art by kind, sorted by variant then facing. */
   readonly buildings: ReadonlyMap<string, readonly ArtAssetRecord[]>;
+  /** 3.1 architecture models by model ID (both facings). */
+  readonly models: ReadonlyMap<string, readonly ArtAssetRecord[]>;
   readonly roads: ReadonlyMap<number, ArtAssetRecord>;
   readonly plaza: ArtAssetRecord | null;
   readonly nature: ReadonlyMap<string, ArtAssetRecord>;
 }
 export function indexManifest(manifest: ArtManifest): ArtIndex {
   const buildings = new Map<string, ArtAssetRecord[]>();
+  const models = new Map<string, ArtAssetRecord[]>();
   const roads = new Map<number, ArtAssetRecord>();
   const nature = new Map<string, ArtAssetRecord>();
   let plaza: ArtAssetRecord | null = null;
   for (const [id, asset] of Object.entries(manifest.assets)) {
-    if (asset.category === 'building') buildings.set(asset.kind, [...(buildings.get(asset.kind) ?? []), asset]);
+    if (asset.category === 'building' && asset.model) models.set(asset.model, [...(models.get(asset.model) ?? []), asset]);
+    else if (asset.category === 'building') buildings.set(asset.kind, [...(buildings.get(asset.kind) ?? []), asset]);
     else if (asset.category === 'road' && asset.plaza) plaza = asset;
     else if (asset.category === 'road' && asset.mask !== undefined) roads.set(asset.mask, asset);
     else if (asset.category === 'nature') nature.set(id, asset);
   }
   for (const list of buildings.values()) list.sort((a, b) => a.variant - b.variant || a.front.localeCompare(b.front));
-  return { manifest, buildings, roads, plaza, nature };
+  for (const list of models.values()) list.sort((a, b) => a.front.localeCompare(b.front));
+  return { manifest, buildings, models, roads, plaza, nature };
 }
 
 export interface RoadSidesLike { readonly north: boolean; readonly south: boolean; readonly east: boolean; readonly west: boolean }
+/** What selection needs to know about a building: its stable ID, type and (3.1) saved design. */
+export interface BuildingArtKey { readonly id: string; readonly kind: string; readonly design?: { readonly collection: string; readonly model: string } }
 
-/**
- * Deterministic building look: the variant comes from the stable ID, the facing from the road sides. Only the two
- * camera-facing sides have entrances; a road on the east (and not the south) turns the front east.
- */
-export function selectBuildingAsset(index: ArtIndex, kind: string, id: string, sides: RoadSidesLike): ArtAssetRecord | null {
+const facingOf = (sides: RoadSidesLike): ArtFront => (sides.east && !sides.south ? 'E' : 'S');
+const withFront = (list: readonly ArtAssetRecord[], front: ArtFront) => list.find((asset) => asset.front === front) ?? list[0] ?? null;
+
+/** Classic look: the variant comes from the stable ID (unchanged since 3.0A, so older cities never change). */
+function classicAsset(index: ArtIndex, kind: string, id: string, front: ArtFront, variant?: number): ArtAssetRecord | null {
   const list = index.buildings.get(kind);
   if (!list?.length) return null;
   const variants = [...new Set(list.map((asset) => asset.variant))];
-  const variant = variants[hashString(`vw3:${kind}:${id}`) % variants.length]!;
-  const front: ArtFront = sides.east && !sides.south ? 'E' : 'S';
-  return list.find((asset) => asset.variant === variant && asset.front === front)
-    ?? list.find((asset) => asset.variant === variant) ?? null;
+  const chosen = variant !== undefined && variants.includes(variant) ? variant : variants[hashString(`vw3:${kind}:${id}`) % variants.length]!;
+  return withFront(list.filter((asset) => asset.variant === chosen), front);
+}
+
+/**
+ * Deterministic building look. A saved design shows exactly its model; the facing comes from the road sides (only
+ * the two camera-facing sides have entrances; a road on the east and not the south turns the front east).
+ * Fallbacks, when an asset bundle lacks the model: another model of the same collection (stable per building),
+ * then the classic look. A building without a design keeps the classic variant from its ID.
+ */
+export function selectBuildingAsset(index: ArtIndex, building: BuildingArtKey, sides: RoadSidesLike): ArtAssetRecord | null {
+  const front = facingOf(sides);
+  const design = building.design;
+  if (design) {
+    const exact = index.models.get(design.model);
+    if (exact?.length && exact[0]!.kind === building.kind) return withFront(exact, front);
+    const classic = architectureModel(design.model);
+    if (classic?.collection === 'classic' && classic.buildingType === building.kind) return classicAsset(index, building.kind, building.id, front, classic.classicVariant);
+    if (design.collection !== 'classic') {
+      const siblings = modelsFor(building.kind as BuildingType, design.collection as ArchitectureCollectionId)
+        .map((model) => index.models.get(model.id)).filter((list): list is readonly ArtAssetRecord[] => !!list?.length);
+      if (siblings.length) return withFront(siblings[hashString(`vw31:${building.kind}:${building.id}`) % siblings.length]!, front);
+    }
+  }
+  return classicAsset(index, building.kind, building.id, front);
 }
 
 export function roadMask(has: (x: number, y: number) => boolean, x: number, y: number): number {

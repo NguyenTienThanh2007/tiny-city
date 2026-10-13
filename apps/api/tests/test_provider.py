@@ -2,6 +2,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from pydantic import ValidationError
 import pytest
 from google.genai import errors
 from tiny_city_api.architect_errors import ArchitectError
@@ -117,7 +118,7 @@ def test_provider_grammar_derives_fields_and_requires_complete_objects():
     assert set(schema['properties'])==set(ArchitectIntent.model_fields)
     assert schema['required']==list(ArchitectIntent.model_fields)
     builds=schema['properties']['builds']['items']
-    assert builds['required']==['buildingType','quantity','preferredPosition']
+    assert builds['required']==['buildingType','quantity','preferredPosition','design']
     assert builds['properties']['buildingType']['enum']==ArchitectIntent.model_json_schema()['$defs']['BuildRequest']['properties']['buildingType']['enum']
     encoded=json.dumps(schema)
     for keyword in ('$ref','$defs','default','maxLength','minLength','maximum','maxItems'):
@@ -136,3 +137,22 @@ def test_simplified_provider_grammar_does_not_weaken_backend_validation(monkeypa
         asyncio.run(provider.interpret('Build one park',{}))
     assert failure.value.code=='PROVIDER_INVALID_RESPONSE'
     assert generate.await_count==1
+
+
+def test_architecture_designs_are_validated_and_the_provider_sees_the_generated_catalog():
+    """Visual World 3.1: builds may carry a design; bounds and unknown keys are enforced; the instruction lists the
+    TS-generated architecture catalog (IDs only from catalog.json, never a Python copy)."""
+    from tiny_city_api.architect_models import ArchitectIntent, Placement
+    from tiny_city_api.providers import system_instruction
+    ok = ArchitectIntent.model_validate({'summary': 'x', 'language': 'en', 'builds': [
+        {'buildingType': 'villa', 'quantity': 2, 'design': {'collection': 'luxury-minimalist', 'model': None}}]})
+    assert ok.builds[0].design.collection == 'luxury-minimalist'
+    for bad in ({'collection': 'x', 'model': None, 'style': 'y'}, {'collection': 'x' * 200}, {'collection': 3}):
+        with pytest.raises(ValidationError):
+            ArchitectIntent.model_validate({'summary': 'x', 'language': 'en', 'builds': [{'buildingType': 'villa', 'quantity': 1, 'design': bad}]})
+    placement = Placement.model_validate({'buildingId': 'building-3', 'buildingType': 'villa', 'position': {'x': 1, 'y': 2},
+        'footprint': {'width': 2, 'height': 2}, 'operation': 'build', 'design': {'collection': 'luxury-minimalist', 'model': 'lm.villa.glass-pavilion'}})
+    assert placement.model_dump()['design'] == {'collection': 'luxury-minimalist', 'model': 'lm.villa.glass-pavilion'}
+    text = system_instruction()
+    assert 'lm.villa.glass-pavilion' in text and 'luxury-minimalist' in text
+    assert 'never replace an unknown or unavailable model' in text

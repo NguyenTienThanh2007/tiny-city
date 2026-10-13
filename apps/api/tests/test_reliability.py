@@ -53,7 +53,7 @@ def test_local_rules_interpret_vietnamese_without_any_ai_call() -> None:
         response = client.post('/v1/city/plan', json=request)
         assert response.status_code == 200
         proposal = response.json()['proposal']
-        assert proposal['intent']['language'] == 'vi' and proposal['intent']['builds'] == [{'buildingType': 'villa', 'quantity': 2, 'preferredPosition': None}]
+        assert proposal['intent']['language'] == 'vi' and proposal['intent']['builds'] == [{'buildingType': 'villa', 'quantity': 2, 'preferredPosition': None, 'design': None}]
         assert proposal['status'] == 'VALIDATED' and len(proposal['placements']) == 2
         assert proposal['summary'].startswith('Trình diễn giải ngoại tuyến')
         assert proposal['impact']['buildingsAdded'] == 2 and proposal['clarifications'] == [] and proposal['authorization'] is None

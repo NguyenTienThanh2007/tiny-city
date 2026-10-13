@@ -1,5 +1,6 @@
 import { BUILDING_CATALOG } from '@tiny-city/simulation';
 import type { BuildingType } from '@tiny-city/simulation';
+import type { BuildingDesign } from '@tiny-city/ai-architect';
 
 export const MAP_SIZE = 64;
 
@@ -30,6 +31,12 @@ export interface Building {
   y: number;
   name: string;
   createdAt: number;
+  /**
+   * Visual World 3.1 architectural identity (collection + model). Cosmetic editor metadata like `createdAt`:
+   * never sent to the simulation and never changes cost, capacity or footprint. Absent on buildings from older
+   * saves, which keep their original look (the classic variant from the building ID).
+   */
+  design?: BuildingDesign;
 }
 
 export interface CityState {

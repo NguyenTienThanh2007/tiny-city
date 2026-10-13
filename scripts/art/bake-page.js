@@ -39,6 +39,26 @@ function render(asset, index) {
 // Lossy WebP (q 0.92) keeps edges and alpha clean at a fraction of the PNG size.
 const toUrl = (canvas) => canvas.toDataURL('image/webp', 0.92);
 
+/** Catalog thumbnail (3.1): the color pass over its ground shadow, fitted into a square, from the bake's own passes. */
+const THUMB = 192;
+function thumbnail(passes) {
+  const color = passes.color, shadow = passes.shadow;
+  const sx = shadow ? shadow.canvas.width * 2 : 0, sy = shadow ? shadow.canvas.height * 2 : 0;
+  // Union of the color and (upscaled) shadow rectangles in color-pass pixels.
+  const ox = shadow ? color.anchor.x - shadow.anchor.x * 2 : 0, oy = shadow ? color.anchor.y - shadow.anchor.y * 2 : 0;
+  const minX = Math.min(0, ox), minY = Math.min(0, oy);
+  const maxX = Math.max(color.canvas.width, ox + sx), maxY = Math.max(color.canvas.height, oy + sy);
+  const scale = Math.min((THUMB - 8) / (maxX - minX), (THUMB - 8) / (maxY - minY));
+  const canvas = document.createElement('canvas'); canvas.width = THUMB; canvas.height = THUMB;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.translate((THUMB - (maxX - minX) * scale) / 2 - minX * scale, (THUMB - (maxY - minY) * scale) / 2 - minY * scale);
+  ctx.scale(scale, scale);
+  if (shadow) { ctx.globalAlpha = 0.85; ctx.drawImage(shadow.canvas, ox, oy, sx, sy); ctx.globalAlpha = 1; }
+  ctx.drawImage(color.canvas, 0, 0);
+  return canvas.toDataURL('image/webp', 0.9);
+}
+
 window.TC = {
   /** Character layer atlases (3.0C). */
   bakeCharacters() {
@@ -66,10 +86,13 @@ window.TC = {
     const entries = [];
     const halfEntries = [];
     const manifest = {};
+    const thumbs = {};
     allAssets().forEach((asset, index) => {
       if (filter && !filter.some((prefix) => asset.id.startsWith(prefix))) return;
       const passes = render(asset, index);
       const record = { kind: asset.kind, category: asset.category, variant: asset.variant ?? 0, front: asset.front ?? 'S', footprint: asset.footprint ?? { w: 1, d: 1 } };
+      if (asset.model) record.model = asset.model;
+      if (asset.category === 'building' && (asset.front ?? 'S') === 'S') thumbs[asset.id] = thumbnail(passes);
       if (asset.mask !== undefined) record.mask = asset.mask;
       if (asset.plaza) record.plaza = true;
       if (passes.top !== undefined && asset.category === 'building') record.heightPx = Math.round(passes.top * HEIGHT_PX_PER_UNIT * 10) / 10;
@@ -85,7 +108,7 @@ window.TC = {
     });
     const out = (list, scale, suffix) => (list.length ? pack(list) : []).map((page) => ({ index: page.index, suffix, scale, url: toUrl(page.canvas), width: page.canvas.width, height: page.canvas.height, frames: page.frames }));
     const pages = [...out(entries, RESOLUTION, ''), ...out(halfEntries, RESOLUTION / 2, '-soft')];
-    return { pages, manifest, resolution: RESOLUTION };
+    return { pages, manifest, resolution: RESOLUTION, thumbs };
   },
 };
 window.TC_READY = true;

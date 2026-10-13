@@ -6,6 +6,8 @@ import { mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'nod
 import { dirname, join, resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+// The architecture registry (needs `npm run build:architect`): maps classic bake variants to model IDs for thumbnails.
+import { classicModel } from '@tiny-city/ai-architect';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
@@ -17,6 +19,9 @@ const only = arg('only')?.split(',');
 
 const ATLASES = [
   { name: 'buildings', prefixes: ['villa.', 'duplex.', 'townhouse.', 'apartment.', 'park.', 'clubhouse.', 'pool.', 'mall.', 'office.'] },
+  // Visual World 3.1 architecture collections (asset IDs are the model ID plus the facing).
+  { name: 'luxury', prefixes: ['lm.'] },
+  { name: 'collections', prefixes: ['mc.', 'tc.', 'up.', 'fg.'] },
   { name: 'nature', prefixes: ['tree.', 'prop.'] },
   { name: 'roads', prefixes: ['road.'] },
 ];
@@ -55,7 +60,11 @@ if (preview) {
   mkdirSync(out, { recursive: true });
   // --only=<groups> re-bakes just those atlases and keeps the rest of the manifest.
   const groups = [...ATLASES.map((atlas) => atlas.name), 'characters'].filter((name) => !only || only.includes(name));
-  for (const file of readdirSync(out)) if (!only || groups.some((g) => file.startsWith(`${g}-`))) rmSync(join(out, file));
+  for (const file of readdirSync(out)) {
+    if (!/\.(json|webp|png)$/.test(file) || file === 'manifest.json') continue;
+    if (!only || groups.some((g) => file.startsWith(`${g}-`))) rmSync(join(out, file));
+  }
+  if (!only) rmSync(join(out, 'thumbs'), { recursive: true, force: true });
   let manifest = { version: 1, generator: 'scripts/art/bake.mjs', resolution: 2, tile: { w: 56, h: 28 }, sheets: [], assets: {} };
   if (only) {
     try {
@@ -80,6 +89,13 @@ if (preview) {
         sha256: createHash('sha256').update(image).digest('hex').slice(0, 16) });
     }
     Object.assign(manifest.assets, result.manifest);
+    // Catalog thumbnails, named by architecture model ID (classic bakes map through their 3.0B variant).
+    mkdirSync(join(out, 'thumbs'), { recursive: true });
+    for (const [assetId, url] of Object.entries(result.thumbs ?? {})) {
+      const record = result.manifest[assetId];
+      const model = record.model ?? classicModel(record.kind, record.variant)?.id;
+      if (model) writeFileSync(join(out, 'thumbs', `${model}.webp`), png(url));
+    }
     console.log(`baked ${atlas.name}: ${Object.keys(result.manifest).length} assets, ${result.pages.length} page(s) in ${Date.now() - started} ms`);
   }
   if (!only || only.includes('characters')) {

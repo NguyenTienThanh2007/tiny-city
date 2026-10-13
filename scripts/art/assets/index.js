@@ -10,11 +10,17 @@ import { mallAssets } from './mall.js';
 import { officeAssets } from './office.js';
 import { natureAssets } from './nature.js';
 import { roadAssets } from './roads.js';
+import { lmVillaAssets } from './lm-villas.js';
+import { lmResidentialAssets } from './lm-residential.js';
+import { lmCivicAssets } from './lm-civic.js';
+import { collectionAssets } from './collections.js';
 
 export function allAssets() {
   return [
     ...[...villaAssets(), ...duplexAssets(), ...townhouseAssets(), ...apartmentAssets(), ...parkAssets(),
-      ...clubhouseAssets(), ...poolAssets(), ...mallAssets(), ...officeAssets()].map((asset) => ({ category: 'building', ...asset })),
+      ...clubhouseAssets(), ...poolAssets(), ...mallAssets(), ...officeAssets(),
+      // Visual World 3.1 architecture collections.
+      ...lmVillaAssets(), ...lmResidentialAssets(), ...lmCivicAssets(), ...collectionAssets()].map((asset) => ({ category: 'building', ...asset })),
     ...natureAssets(),
     ...roadAssets(),
   ];
