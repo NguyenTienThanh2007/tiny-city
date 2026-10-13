@@ -16,6 +16,7 @@ const DECOR_TEXTURE_RESOLUTION = 3;
 /** Below this camera scale small decor and decor shadows are skipped. */
 export const LOD_SCALE = 0.32;
 const SMALL_DECOR = new Set<Decor['kind']>(['bush', 'bench', 'bin', 'bikes', 'planter']);
+const SWAY = new Set<Decor['kind']>(['tree', 'accent', 'streetTree', 'palm']);
 export class DecorLayer {
   private readonly contexts = new Map<string, GraphicsContext>();
   private readonly textures = new Map<string, { texture: Texture; anchor: { x: number; y: number } }>();
@@ -30,6 +31,8 @@ export class DecorLayer {
   private tint = 0xffffff;
   /** Small street furniture and shrubs that stop rendering when zoomed far out (level of detail). */
   private readonly small: Container[] = [];
+  /** Trees and palms that sway gently (presentation only; bounded to the visible area). */
+  private readonly swaying: { body: Container; x: number; y: number; phase: number; amount: number }[] = [];
   private detailed = true;
   private glow = 0;
   private items: Decor[] = [];
@@ -53,6 +56,7 @@ export class DecorLayer {
     this.lampGlows.length = 0;
     this.tinted.length = 0;
     this.small.length = 0;
+    this.swaying.length = 0;
     this.hidden = [];
     this.ground.clear();
     for (const sprite of this.flat) sprite.destroy();
@@ -100,10 +104,12 @@ export class DecorLayer {
       if (decor.kind !== 'lamp') body.scale.set(decor.size);
       item.addChild(body);
       this.tinted.push(body);
+      if (SWAY.has(decor.kind)) this.swaying.push({ body, x: p.x, y: p.y, phase: (decor.at.x * 1.7 + decor.at.y * 2.3) % (Math.PI * 2), amount: decor.kind === 'palm' ? 0.045 : 0.025 });
       if (decor.kind === 'lamp') {
         const glow = new Graphics(this.context('lamp-glow', (c) => {
-          c.ellipse(0, 1, 26, 12).fill({ color: 0xffd98a, alpha: 0.18 }).ellipse(0, 1, 14, 6.5).fill({ color: 0xffe3a6, alpha: 0.28 });
-          c.circle(0, -19, 5).fill({ color: 0xfff1c4, alpha: 0.55 }).circle(0, -19, 2.2).fill({ color: 0xffffff, alpha: 0.95 });
+          // Soft pool of light on the pavement: stacked low-alpha ellipses fall off smoothly to the edge.
+          for (let ring = 8; ring >= 1; ring -= 1) c.ellipse(0, 1, 34 * ring / 8, 16 * ring / 8).fill({ color: ring > 4 ? 0xffc977 : 0xffdca0, alpha: 0.055 });
+          c.circle(0, -19, 6).fill({ color: 0xfff1c4, alpha: 0.3 }).circle(0, -19, 3.2).fill({ color: 0xfff6dc, alpha: 0.6 }).circle(0, -19, 1.8).fill({ color: 0xffffff, alpha: 0.95 });
         }));
         glow.alpha = this.glow;
         glow.visible = this.glow > 0.01;
@@ -183,6 +189,22 @@ export class DecorLayer {
     this.detailed = detailed;
     for (const item of this.small) item.renderable = detailed;
     if (this.shadowLayer) this.shadowLayer.renderable = detailed;
+  }
+
+  /**
+   * Gentle foliage motion: a slow skew about each trunk's base, out of phase between neighbours. Only trees inside
+   * `bounds` (world-local px) move, only when zoomed in enough to see it, and never under reduced motion.
+   */
+  sway(timeMs: number, bounds: { left: number; top: number; right: number; bottom: number } | null, reducedMotion: boolean): number {
+    if (reducedMotion || !this.detailed) return 0;
+    const t = timeMs / 1000;
+    let moved = 0;
+    for (const tree of this.swaying) {
+      if (bounds && (tree.x < bounds.left || tree.x > bounds.right || tree.y < bounds.top || tree.y > bounds.bottom)) continue;
+      tree.body.skew.x = Math.sin(t * 0.9 + tree.phase) * tree.amount + Math.sin(t * 2.3 + tree.phase * 1.7) * tree.amount * 0.25;
+      moved += 1;
+    }
+    return moved;
   }
 
   applyLighting(tint: number, glow: number, force = false): void {

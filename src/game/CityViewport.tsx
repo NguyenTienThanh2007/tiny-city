@@ -12,7 +12,8 @@ import { NpcLayer, npcSpriteScale, type LocalBounds } from './npcLayer';
 import { PlayerLayer, type HomeHighlight, type LifeFeedback } from './playerLayer';
 import { DecorLayer } from './decorLayer';
 import { EffectsLayer } from './effectsLayer';
-import { DAYLIGHT, worldLighting, type WorldLighting } from './lighting';
+import { DAYLIGHT, windowsOn, worldLighting, type WorldLighting } from './lighting';
+import { AmbientLayer } from './ambientLayer';
 import { getGameTime } from '@tiny-city/simulation';
 import { buildingDepth } from './npcMotion';
 import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
@@ -577,6 +578,9 @@ export default function CityViewport(props: Props) {
       const buildingShadows = new Container();
       const decorShadows = new Container();
       shadowLayer.addChild(decorShadows, buildingShadows);
+      // Night light pools spilled from buildings sit on the ground, under walkers and buildings.
+      const lightPoolLayer = new Container();
+      lightPoolLayer.eventMode = 'none';
       const groundSprite = new Sprite(Texture.EMPTY);
       groundSprite.eventMode = 'none';
       const groundOverlay = new Container();
@@ -599,7 +603,7 @@ export default function CityViewport(props: Props) {
       nameplate.anchor.set(0.5, 1);
       labels.addChild(nameplateBg, nameplate);
       labels.visible = false;
-      world.addChild(terrain, groundSprite, roads, shadowLayer, groundOverlay, buildings, proposalOverlay, effectsContainer, ghost, labels);
+      world.addChild(terrain, groundSprite, roads, shadowLayer, lightPoolLayer, groundOverlay, buildings, proposalOverlay, effectsContainer, ghost, labels);
       app.stage.addChild(world);
       // Pixi v8 skips listeners on passive containers, including the default stage.
       app.stage.eventMode = 'static';
@@ -616,16 +620,27 @@ export default function CityViewport(props: Props) {
       texturesRef.current = textures;
       redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true, registry, textures, true, buildingShadows);
       redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan, propsRef.current.targetHighlights);
-      const npcs = new NpcLayer(buildings, groundOverlay);
+      // Venue visitors stand where the baked venue art has its lawn, deck or terrace, which depends on its facing.
+      const frontOf = (b: CityPlan['buildings'][number]): 'S' | 'E' => {
+        const art = currentArt();
+        if (!art || !b.type) return 'S';
+        const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
+        const editor: Building = { id: b.id, kind: b.type as BuildingKind, x: b.position.x, y: b.position.y, name: b.name, createdAt: 0 };
+        return selectBuildingAsset(art.index, b.type, b.id, roadSidesFor(editor, roadSet))?.front ?? 'S';
+      };
+      const npcs = new NpcLayer(buildings, groundOverlay, { frontOf });
       const lifeMarkers = new Container();
       world.addChildAt(lifeMarkers, world.getChildIndex(labels));
       const player = new PlayerLayer(buildings, groundOverlay, lifeMarkers, (id) => {
         const building = propsRef.current.city.buildings.find((entry) => entry.id === id);
         return building ? buildingTop(building, propsRef.current.city.roads) : 30;
-      });
+      }, (b) => frontOf(b));
       let lastHighlights: readonly HomeHighlight[] | null | undefined;
       const decor = new DecorLayer(buildings, groundDecor, app.renderer, decorShadows);
       const effects = new EffectsLayer(effectsContainer);
+      const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const ambient = new AmbientLayer(lightPoolLayer, effectsContainer, reducedMotion, buildings);
+      let windowCheck = 0;
 
       // Lighting is applied as cheap tints when it changes, never as a full-screen overlay or filter.
       let lighting: WorldLighting = DAYLIGHT;
@@ -641,6 +656,8 @@ export default function CityViewport(props: Props) {
         groundSprite.tint = next.tint;
         roads.tint = next.tint;
         shadowLayer.alpha = 0.2 + 0.8 * next.sun;
+        ambient.setLighting(next.glow, next.sun);
+        windowCheck = 0;
         decor.applyLighting(next.tint, next.glow, force);
         npcs.setTint(next.tint);
         player.setTint(next.tint);
@@ -662,6 +679,7 @@ export default function CityViewport(props: Props) {
       // Plan diffs drive decor rebuilds and completion feedback (build, move, demolish, roads, AI batches).
       let lastPlan: CityPlan = propsRef.current.world.plan;
       decor.rebuild(lastPlan);
+      ambient.rebuild(lastPlan, frontOf);
       const rebuildGround = () => {
         const bounds = ground.getLocalBounds();
         const previous = groundSprite.texture;
@@ -690,6 +708,7 @@ export default function CityViewport(props: Props) {
             .forEach((tile) => effects.spawn('road', { x: tile.x + 0.5, y: tile.y + 0.5 }));
           if (plan.roads !== lastPlan.roads || plan.buildings !== lastPlan.buildings || plan.blockedTiles !== lastPlan.blockedTiles) {
             decor.rebuild(plan);
+            ambient.rebuild(plan, frontOf);
             groundDirty = true;
           }
           lastPlan = plan;
@@ -707,6 +726,7 @@ export default function CityViewport(props: Props) {
         const current = propsRef.current;
         redrawCity(terrain, roads, buildings, current.city, current.world.plan, current.selectedBuildingId, false, registry, textures, true, buildingShadows);
         decor.rebuild(current.world.plan);
+        ambient.rebuild(current.world.plan, frontOf);
         rebuildGround();
         applyLighting(lighting, true);
         refreshRef.current?.();
@@ -1130,8 +1150,19 @@ export default function CityViewport(props: Props) {
             top: Math.min(a.y, b.y, c.y, d.y), bottom: Math.max(a.y, b.y, c.y, d.y) };
         })() : null;
         npcs.setSelected(current.selectedCitizenId ?? null);
-        const target = live.population ? worldLighting(getGameTime(live.clock).minuteOfDay) : DAYLIGHT;
+        const minuteOfDay = getGameTime(live.clock).minuteOfDay;
+        const target = live.population ? worldLighting(minuteOfDay) : DAYLIGHT;
         applyLighting(target);
+        // Late at night homes go dark one by one and shops close (checked a few times per second, never per frame).
+        if (lighting.glow > 0.01 && live.population && frameStart - windowCheck > 400) {
+          windowCheck = frameStart;
+          const types = new Map(live.plan.buildings.map((b) => [b.id, b.type]));
+          for (const [id, visual] of registry) if (visual.lights) visual.lights.alpha = lighting.glow * windowsOn(types.get(id), id, minuteOfDay);
+        }
+        const detailed = view.scale >= 0.32;
+        ambient.update(frameStart, detailed);
+        const tl = world.toLocal({ x: 0, y: 0 }), br = world.toLocal({ x: app.screen.width, y: app.screen.height });
+        decor.sway(frameStart, { left: tl.x - 60, top: tl.y - 60, right: br.x + 60, bottom: br.y + 120 }, reducedMotion);
         npcs.sync(live, frameStart, view.scale, bounds);
         player.feedback(current.lifeFeedback);
         if (current.homeHighlights !== lastHighlights) { lastHighlights = current.homeHighlights; player.setHomeHighlights(current.homeHighlights ?? null); }
@@ -1174,6 +1205,7 @@ export default function CityViewport(props: Props) {
         npcs.destroy();
         player.destroy();
         decor.destroy();
+        ambient.destroy();
         effects.destroy();
         graveyard.flush();
         textures.destroy();
