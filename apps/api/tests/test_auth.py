@@ -220,6 +220,20 @@ def test_cloud_saves_are_owned_revisioned_and_never_accept_client_user_id(client
     assert client.delete(f"/v1/users/me/cities/{saved['id']}", headers=csrf(client)).status_code == 204
 
 
+def test_cloud_saves_keep_architectural_designs_verbatim(client):
+    """Visual World 3.1: a building's design is editor metadata in the save envelope; cloud saves store and return
+    the envelope unchanged, so the exact model survives a cloud round trip."""
+    register_and_verify(client, 'designs@example.com')
+    assert sign_in(client, 'designs@example.com').status_code == 200
+    snapshot = valid_snapshot()
+    snapshot['buildings'] = [{'id': 'building-1', 'kind': 'villa', 'x': 3, 'y': 4, 'name': 'Villa 01', 'createdAt': 1,
+        'design': {'collection': 'luxury-minimalist', 'model': 'lm.villa.glass-pavilion'}}]
+    created = client.post('/v1/users/me/cities', json={'name': 'Designed', 'snapshot': snapshot}, headers=csrf(client))
+    assert created.status_code == 201
+    loaded = client.get(f"/v1/users/me/cities/{created.json()['id']}").json()['snapshot']
+    assert loaded['buildings'][0]['design'] == {'collection': 'luxury-minimalist', 'model': 'lm.villa.glass-pavilion'}
+
+
 def test_cors_credentials_are_explicit_and_account_deletion_cascades(client):
     cors = client.options('/v1/auth/me', headers={'Origin': ORIGIN, 'Access-Control-Request-Method': 'POST',
         'Access-Control-Request-Headers': 'content-type,x-csrf-token'})

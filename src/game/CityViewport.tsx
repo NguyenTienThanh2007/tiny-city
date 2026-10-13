@@ -32,7 +32,19 @@ export type RendererStats = { fps: number; frameMs: number; residents: number; v
   /** Finished and constructing buildings drawn from baked art vs the vector fallback at the last city redraw (3.1). */
   bakedBuildings?: number; vectorBuildings?: number;
   /** Baked art drawn per model (classic art as `classic:<kind>:v<variant>`), so tests can see exactly what is shown. */
-  drawnModels?: Record<string, number> };
+  drawnModels?: Record<string, number>;
+  /** Estimated GPU bytes of all loaded atlas pages (with mipmaps) and their count. */
+  atlasBytes?: number; atlasPages?: number;
+  /** Measured: bytes of every texture actually uploaded to the GPU (Pixi uploads atlas pages only when drawn). */
+  gpuTextureBytes?: number; gpuTextures?: number };
+/** Bytes of the textures currently uploaded to the GPU (WebGL renderer), with a third more for mip chains. */
+function gpuTextureUse(renderer: unknown): { gpuTextureBytes?: number; gpuTextures?: number } {
+  const sources = (renderer as { texture?: { managedTextures?: readonly { pixelWidth: number; pixelHeight: number; autoGenerateMipmaps?: boolean }[] } }).texture?.managedTextures;
+  if (!sources) return {};
+  let bytes = 0;
+  for (const source of sources) bytes += source.pixelWidth * source.pixelHeight * 4 * (source.autoGenerateMipmaps ? 4 / 3 : 1);
+  return { gpuTextureBytes: Math.round(bytes), gpuTextures: sources.length };
+}
 /** Counters for the last city redraw (read into RendererStats). */
 const drawStats = { baked: 0, vector: 0, models: {} as Record<string, number> };
 /** What a Life Mode click points at, in priority order: the player, a resident, a building, then a tile. */
@@ -1240,7 +1252,9 @@ export default function CityViewport(props: Props) {
             frameMs: Math.round(frameCost / frames * 100) / 100, residents: npcs.count,
             visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length,
             venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading',
-            bakedBuildings: drawStats.baked, vectorBuildings: drawStats.vector, drawnModels: { ...drawStats.models } };
+            bakedBuildings: drawStats.baked, vectorBuildings: drawStats.vector, drawnModels: { ...drawStats.models },
+            ...gpuTextureUse(app.renderer),
+            atlasBytes: currentArt()?.textureBytes, atlasPages: currentArt() ? currentArt()!.index.manifest.sheets.length + (currentArt()!.index.manifest.characters?.sheets.length ?? 0) : 0 };
           (window as unknown as { __tinyCityRenderer?: RendererStats }).__tinyCityRenderer = stats;
           frames = 0; frameCost = 0; frameWindowStart = frameStart;
         }
