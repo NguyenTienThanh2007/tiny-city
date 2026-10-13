@@ -74,6 +74,8 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 
 export const accountApi = {
   me: () => request<{ user: AccountUser }>('/v1/auth/me'),
+  /** Who is signed in. Answers 200 for guests too, so the start-up check never logs a failed request. */
+  session: () => request<{ authenticated: boolean; user: AccountUser | null }>('/v1/auth/session'),
   login: (email: string, password: string) => request<LoginResponse>('/v1/auth/login', json('POST', { email, password })),
   register: (displayName: string, email: string, password: string) => request<{ message: string }>('/v1/auth/register', json('POST', { display_name: displayName, email, password })),
   logout: () => request<void>('/v1/auth/logout', { method: 'POST' }),

@@ -30,6 +30,17 @@ describe('account API transport', () => {
     await expect(accountApi.me()).rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS', message: 'Sign-in failed.' });
   });
 
+  it('checks the session with cookies and no CSRF bootstrap; a guest is a successful answer', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ authenticated: false, user: null }), { status: 200 }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(accountApi.session()).resolves.toEqual({ authenticated: false, user: null });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/v1\/auth\/session$/);
+    expect(request).toMatchObject({ method: 'GET', credentials: 'include' });
+    expect(new Headers(request?.headers).has('X-CSRF-Token')).toBe(false);
+  });
+
   it('rebootstraps the CSRF cookie after password reset clears browser cookies', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: 'a'.repeat(43) }), { status: 200 }))

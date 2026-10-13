@@ -8,7 +8,7 @@ vi.mock('./client', () => ({
   AccountApiError: class AccountApiError extends Error { constructor(readonly status: number, message: string) { super(message); } },
   clearCsrfMemory: vi.fn(),
   accountApi: {
-    me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn(), verifyEmail: vi.fn(),
+    me: vi.fn(), session: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn(), verifyEmail: vi.fn(),
     resendVerification: vi.fn(), forgotPassword: vi.fn(), resetPassword: vi.fn(), updateProfile: vi.fn(),
     changePassword: vi.fn(), deleteAccount: vi.fn(), sessions: vi.fn(), revokeSession: vi.fn(),
     revokeAllSessions: vi.fn(), cities: vi.fn(), city: vi.fn(), createCity: vi.fn(), updateCity: vi.fn(), deleteCity: vi.fn(),
@@ -25,12 +25,22 @@ function renderPortal(path: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(accountApi.me).mockRejectedValue(Object.assign(new Error('Sign in to continue.'), { status: 401 }));
+  vi.mocked(accountApi.session).mockResolvedValue({ authenticated: false, user: null });
   vi.mocked(accountApi.cities).mockResolvedValue({ saves: [] });
   vi.mocked(accountApi.sessions).mockResolvedValue({ sessions: [] });
 });
 
 afterEach(() => {
   window.history.replaceState({}, '', '/');
+});
+
+describe('session start-up', () => {
+  it('checks a guest through the session status endpoint, never the protected /me endpoint', async () => {
+    renderPortal('/login');
+    await waitFor(() => expect(accountApi.session).toHaveBeenCalledTimes(1));
+    expect(accountApi.me).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
 });
 
 describe('account entry flows', () => {
@@ -84,7 +94,7 @@ describe('account entry flows', () => {
   });
 
   it('does not upload or load cloud data until the player chooses an action', async () => {
-    vi.mocked(accountApi.me).mockResolvedValue({ user });
+    vi.mocked(accountApi.session).mockResolvedValue({ authenticated: true, user });
     renderPortal('/account/saves');
     expect(await screen.findByText('Your city collection is ready')).toBeInTheDocument();
     expect(accountApi.cities).toHaveBeenCalledTimes(1);

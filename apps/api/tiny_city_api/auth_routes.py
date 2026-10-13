@@ -100,22 +100,32 @@ def user_view(user: User) -> dict:
     }
 
 
-def require_auth(request: Request, db: Session = Depends(get_db)) -> AuthContext:
+def current_auth(request: Request, db: Session) -> tuple[AuthContext | None, str]:
+    """Resolves the session cookie without raising: (context, '') or (None, reason code)."""
     settings: Settings = request.app.state.settings
     raw = request.cookies.get(session_cookie_name(settings), '')
     if not raw:
-        raise ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.')
+        return None, 'AUTH_REQUIRED'
     auth_session = db.scalar(select(AuthSession).where(
         AuthSession.token_hash == token_hash(raw), AuthSession.revoked_at.is_(None), AuthSession.expires_at > utcnow()))
     if auth_session is None:
-        raise ApiError(401, 'SESSION_EXPIRED', 'Your session has expired. Sign in again.')
+        return None, 'SESSION_EXPIRED'
     user = db.get(User, auth_session.user_id)
     if user is None or user.status != 'active':
-        raise ApiError(401, 'SESSION_EXPIRED', 'Your session has expired. Sign in again.')
+        return None, 'SESSION_EXPIRED'
     if (utcnow() - auth_session.last_seen_at).total_seconds() > 300:
         auth_session.last_seen_at = utcnow()
         db.commit()
-    return AuthContext(user=user, auth_session=auth_session)
+    return AuthContext(user=user, auth_session=auth_session), ''
+
+
+def require_auth(request: Request, db: Session = Depends(get_db)) -> AuthContext:
+    context, reason = current_auth(request, db)
+    if context is None:
+        if reason == 'AUTH_REQUIRED':
+            raise ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue.')
+        raise ApiError(401, 'SESSION_EXPIRED', 'Your session has expired. Sign in again.')
+    return context
 
 
 def require_verified(context: AuthContext = Depends(require_auth)) -> AuthContext:
@@ -270,6 +280,17 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 @router.get('/me')
 def me(context: AuthContext = Depends(require_auth)):
     return {'user': user_view(context.user)}
+
+
+@router.get('/session')
+def session_status(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Who is signed in, if anyone. A guest is a normal state here (200), so the app can check it on every load;
+    `/me` and every account endpoint still require a valid session and answer 401 without one."""
+    response.headers['Cache-Control'] = 'no-store'
+    context, _ = current_auth(request, db)
+    if context is None:
+        return {'authenticated': False, 'user': None}
+    return {'authenticated': True, 'user': user_view(context.user)}
 
 
 @router.post('/forgot-password', status_code=202, dependencies=[Depends(csrf_dependency)])
