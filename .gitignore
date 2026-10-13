@@ -10,3 +10,6 @@ test-results/
 .env
 .env.*
 !.env.example
+
+# Visual World 3.0 art previews, review sheets and local benchmark builds
+tmp-art-preview/

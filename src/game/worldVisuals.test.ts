@@ -4,7 +4,7 @@ import { initialCity } from '../data/initialCity';
 import { createCityWorld, toCityPlan } from '../simulation/cityAdapter';
 import { BUILDINGS, type BuildingKind } from '../types';
 import { buildingVariant, windowLit } from './buildingVariants';
-import { planDecor, MAX_DECOR, TALL_DECOR, tileNoise } from './worldDecor';
+import { planDecor, CURB_DECOR, MAX_DECOR, TALL_DECOR, tileNoise } from './worldDecor';
 import { DAYLIGHT, worldLighting } from './lighting';
 
 const kinds = Object.keys(BUILDINGS) as BuildingKind[];
@@ -57,7 +57,7 @@ describe('deterministic landscaping', () => {
       const tile = `${item.tile.x},${item.tile.y}`;
       expect(blocked.has(tile)).toBe(false);
       expect(occupied.has(tile)).toBe(false);
-      if (item.kind === 'lamp') {
+      if (CURB_DECOR.has(item.kind)) {
         expect(roads.has(tile)).toBe(true);
         // On the curb: well outside the walking lanes around the tile center.
         expect(Math.max(Math.abs(item.at.x - item.tile.x - 0.5), Math.abs(item.at.y - item.tile.y - 0.5))).toBeGreaterThan(0.35);
@@ -70,19 +70,20 @@ describe('deterministic landscaping', () => {
   });
 
   it('clears decorations from tiles once something is built there', () => {
-    const before = planDecor(plan).filter((item) => TALL_DECOR.has(item.kind) && item.kind !== 'lamp');
+    const before = planDecor(plan).filter((item) => TALL_DECOR.has(item.kind) && !CURB_DECOR.has(item.kind));
     const target = before[0]!;
     const world = createCityWorld(initialCity);
     const withRoad = { ...world.plan, roads: [...world.plan.roads, { x: target.tile.x, y: target.tile.y }] };
     const after = planDecor(withRoad);
-    expect(after.some((item) => item.kind !== 'lamp' && item.tile.x === target.tile.x && item.tile.y === target.tile.y)).toBe(false);
-    expect(planDecor(createWorld({ id: 'empty', seed: 's', plan: { ...withRoad, roads: [], buildings: [] } }).plan).every((item) => item.kind !== 'lamp')).toBe(true);
+    expect(after.some((item) => !CURB_DECOR.has(item.kind) && item.tile.x === target.tile.x && item.tile.y === target.tile.y)).toBe(false);
+    expect(planDecor(createWorld({ id: 'empty', seed: 's', plan: { ...withRoad, roads: [], buildings: [] } }).plan).every((item) => !CURB_DECOR.has(item.kind))).toBe(true);
   });
 });
 
 describe('time-of-day lighting', () => {
   it('is neutral by day and glows at night with smooth transitions', () => {
-    expect(worldLighting(12 * 60)).toEqual({ tint: 0xffffff, glow: 0, phase: 'day' });
+    expect(worldLighting(12 * 60)).toEqual({ tint: 0xffffff, glow: 0, sun: 1, phase: 'day' });
+    expect(worldLighting(23 * 60).sun).toBe(0);
     const night = worldLighting(23 * 60);
     expect(night.phase).toBe('night');
     expect(night.glow).toBe(1);

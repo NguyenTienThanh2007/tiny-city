@@ -17,6 +17,9 @@ import { getGameTime } from '@tiny-city/simulation';
 import { buildingDepth } from './npcMotion';
 import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
 import { rejectionFeedback } from '../simulation/feedback';
+import { currentArt, loadArt, type ArtLibrary } from './art/artLibrary';
+import { roadMask, selectBuildingAsset } from './art/artManifest';
+import { drawTerrainArt } from './terrainArt';
 
 export { buildingLift } from './buildingArt';
 
@@ -83,51 +86,35 @@ function tileDiamond(x: number, y: number): Point[] {
   return [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)];
 }
 
-function noise(x: number, y: number): number {
-  const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  return value - Math.floor(value);
-}
-
 function drawTerrain(layer: Container, size: number) {
   const terrain = new Graphics();
-  // Island skirt: soil and cliff faces under the front edges give the map physical depth.
-  const depth = 26;
-  const edgeLeft = [iso(0, size), iso(size, size)];
-  const edgeRight = [iso(size, size), iso(size, 0)];
-  polygon(terrain, [edgeLeft[0], edgeLeft[1], { x: edgeLeft[1].x, y: edgeLeft[1].y + depth }, { x: edgeLeft[0].x, y: edgeLeft[0].y + depth }], 0x6f8f86);
-  polygon(terrain, [edgeRight[0], edgeRight[1], { x: edgeRight[1].x, y: edgeRight[1].y + depth }, { x: edgeRight[0].x, y: edgeRight[0].y + depth }], 0x5f807a);
-  const grass = [0x93ba8b, 0x97be8e, 0x8eb486, 0x9bc392, 0x90b889];
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const coast = x + y;
-      const n = noise(x, y);
-      let color = grass[Math.floor(n * grass.length)]!;
-      if (coast >= size * 2 - 8) color = coast >= size * 2 - 5 ? 0x6fb1b4 : 0x7fbdbb;
-      else if (coast >= size * 2 - 10) color = 0xe6d7a8;
-      else if (coast >= size * 2 - 13) color = n > 0.5 ? 0xd9cd96 : 0xcfd69b;
-      polygon(terrain, tileDiamond(x, y), color, 1, coast >= size * 2 - 8 ? 0x5f9fa1 : 0x7da47a, 0.18);
-    }
-  }
-  // Flat decals: flowers and grass tufts never block placement, and a few wave crests on the water.
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const n = noise(x + 31, y + 17);
-      const coast = x + y;
-      const center = iso(x + 0.5, y + 0.5);
-      if (coast >= size * 2 - 8) {
-        if (n > 0.82) terrain.moveTo(center.x - 8, center.y).quadraticCurveTo(center.x, center.y - 3, center.x + 8, center.y)
-          .stroke({ color: 0xe4f5ef, width: 1.2, alpha: 0.55 });
-      } else if (coast < size * 2 - 13) {
-        if (n > 0.93) terrain.circle(center.x - 4, center.y, 1.3).fill(0xf2d16b).circle(center.x + 3, center.y + 2, 1.2).fill(0xf4efe2);
-        else if (n < 0.05) terrain.circle(center.x, center.y, 1.4).fill(0xe58f7a);
-        else if (n > 0.6 && n < 0.64) terrain.ellipse(center.x, center.y, 7, 3).fill({ color: 0x7ea873, alpha: 0.5 });
-      }
-    }
-  }
+  drawTerrainArt(terrain, size);
   layer.addChild(terrain);
 }
 
+/** Baked road tiles: one sprite per tile, chosen by its connection mask (sharp at every zoom, one batch). */
+function drawRoadSprites(layer: Container, city: CityState, art: ArtLibrary): boolean {
+  const roadSet = new Set(city.roads.map(({ x, y }) => cellKey(x, y)));
+  const has = (x: number, y: number) => roadSet.has(cellKey(x, y));
+  const sprites: Sprite[] = [];
+  for (const { x, y } of city.roads) {
+    const texture = art.frame(art.index.roads.get(roadMask(has, x, y))?.color);
+    if (!texture) { sprites.forEach((sprite) => sprite.destroy()); return false; }
+    const sprite = new Sprite(texture);
+    const at = iso(x, y);
+    sprite.position.set(at.x, at.y);
+    sprite.eventMode = 'none';
+    sprites.push(sprite);
+  }
+  // Back-to-front so each tile's sidewalk lip overlaps the one behind it.
+  sprites.sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const sprite of sprites) layer.addChild(sprite);
+  return true;
+}
+
 function drawRoads(layer: Container, city: CityState) {
+  const art = currentArt();
+  if (art && drawRoadSprites(layer, city, art)) return;
   const roadSet = new Set(city.roads.map(({ x, y }) => cellKey(x, y)));
   const g = new Graphics();
   const has = (x: number, y: number) => roadSet.has(cellKey(x, y));
@@ -182,7 +169,7 @@ function drawRoads(layer: Container, city: CityState) {
 }
 
 /** Display objects per building, so lighting and hover feedback can update without redrawing art. */
-export interface BuildingVisual { readonly item: Container; readonly lights: Graphics | null }
+export interface BuildingVisual { readonly item: Container; readonly lights: Container | null }
 type BuildingRegistry = Map<string, BuildingVisual>;
 
 /**
@@ -236,12 +223,77 @@ function roadSidesFor(building: Building, roadSet: ReadonlySet<string>): RoadSid
   };
 }
 
-function drawBuilding(layer: Container, building: Building, selected: boolean, progress: number, roadSet: ReadonlySet<string>, registry: BuildingRegistry, textures: BuildingTextures) {
+/** Baked sprite path: color sprite (revealed bottom-up while under construction), ground shadow and night glow. */
+function drawBakedBuilding(layer: Container, shadows: Container | null, building: Building, selected: boolean, progress: number,
+  sides: RoadSides, registry: BuildingRegistry, art: ArtLibrary): boolean {
+  const spec = BUILDINGS[building.kind];
+  const asset = selectBuildingAsset(art.index, building.kind, building.id, sides);
+  const texture = art.frame(asset?.color);
+  if (!asset || !texture) return false;
+  const origin = iso(building.x, building.y);
+  const depth = buildingDepth(building.x, building.y, spec.width, spec.height);
   const item = new Container();
   item.label = 'building';
+  const sprite = new Sprite(texture);
+  sprite.position.set(origin.x, origin.y);
+  item.addChild(sprite);
+  if (progress < 1) {
+    // Construction: the finished model rises out of the lot behind a reveal mask, with scaffolding on top.
+    const top = origin.y - texture.height * sprite.anchor.y, height = texture.height;
+    const reveal = 0.18 + progress * 0.82;
+    const mask = new Graphics().rect(origin.x - texture.width, top + height * (1 - reveal), texture.width * 2, height * reveal + 4).fill(0xffffff);
+    item.addChild(mask);
+    sprite.mask = mask;
+    const center = iso(building.x + spec.width / 2, building.y + spec.height / 2);
+    const lift = buildingLift(building, 1) * reveal;
+    const scaffold = new Graphics();
+    scaffold.moveTo(center.x + 14, center.y - lift + 4).lineTo(center.x + 14, center.y - lift - 30)
+      .lineTo(center.x + 43, center.y - lift - 30).stroke({ color: 0xd69f51, width: 2.5, alpha: 0.9 });
+    scaffold.moveTo(center.x + 40, center.y - lift - 30).lineTo(center.x + 40, center.y - lift - 18).stroke({ color: 0x4a4a4a, width: 0.8 });
+    item.addChild(scaffold);
+  }
+  if (selected) {
+    const outline = new Graphics();
+    const ground = footprint(building.x, building.y, spec.width, spec.height);
+    outline.poly(ground.flatMap((point) => [point.x, point.y])).fill({ color: 0xffd36e, alpha: 0.16 }).stroke({ color: 0xffd36e, width: 2.5, alpha: 0.95 });
+    item.addChild(outline);
+  }
+  item.eventMode = 'none';
+  item.zIndex = depth;
+  layer.addChild(item);
+  const shadowTexture = progress >= 1 ? art.frame(asset.shadow) : null;
+  if (shadows && shadowTexture) {
+    const shadow = new Sprite(shadowTexture);
+    shadow.label = 'building-shadow';
+    shadow.position.set(origin.x, origin.y);
+    shadow.eventMode = 'none';
+    shadows.addChild(shadow);
+  }
+  let lights: Container | null = null;
+  const glowTexture = progress >= 1 ? art.frame(asset.emissive) : null;
+  if (glowTexture) {
+    const glow = new Sprite(glowTexture);
+    glow.label = 'building-lights';
+    glow.position.set(origin.x, origin.y);
+    // Straight alpha with a warm colour: reads as lamplight behind glass instead of blown-out white.
+    glow.visible = false;
+    glow.eventMode = 'none';
+    glow.zIndex = depth + 0.0005;
+    layer.addChild(glow);
+    lights = glow;
+  }
+  registry.set(building.id, { item, lights });
+  return true;
+}
+
+function drawBuilding(layer: Container, building: Building, selected: boolean, progress: number, roadSet: ReadonlySet<string>, registry: BuildingRegistry, textures: BuildingTextures, shadows: Container | null = null) {
   const spec = BUILDINGS[building.kind];
-  const ground = footprint(building.x, building.y, spec.width, spec.height);
   const sides = roadSidesFor(building, roadSet);
+  const art = currentArt();
+  if (art && drawBakedBuilding(layer, shadows, building, selected, progress, sides, registry, art)) return;
+  const item = new Container();
+  item.label = 'building';
+  const ground = footprint(building.x, building.y, spec.width, spec.height);
   const windows: Point[][] = [];
   const vector = () => {
     const group = new Container();
@@ -296,7 +348,8 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   registry.set(building.id, { item, lights });
 }
 
-function clearBuildings(buildings: Container, registry: BuildingRegistry) {
+function clearBuildings(buildings: Container, registry: BuildingRegistry, shadows: Container | null = null) {
+  if (shadows) for (const child of shadows.removeChildren()) child.destroy();
   for (const child of [...buildings.children]) {
     if (child.label !== 'building' && child.label !== 'building-lights') continue;
     buildings.removeChild(child);
@@ -306,18 +359,18 @@ function clearBuildings(buildings: Container, registry: BuildingRegistry) {
   registry.clear();
 }
 
-function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, registry: BuildingRegistry, textures: BuildingTextures) {
-  clearBuildings(buildings, registry);
+function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, registry: BuildingRegistry, textures: BuildingTextures, shadows: Container | null = null) {
+  clearBuildings(buildings, registry, shadows);
   const roadSet = new Set(plan.roads.map(({ x, y }) => cellKey(x, y)));
   textures.begin();
   for (const building of getRenderBuildings(city, plan)) {
     const age = Date.now() - building.createdAt;
-    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)), roadSet, registry, textures);
+    drawBuilding(buildings, building, building.id === selectedId, Math.max(0, Math.min(1, age / 5200)), roadSet, registry, textures, shadows);
   }
   textures.end();
 }
 
-function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean, registry: BuildingRegistry, textures: BuildingTextures, includeRoads = true) {
+function redrawCity(terrain: Container, roads: Container, buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, includeTerrain: boolean, registry: BuildingRegistry, textures: BuildingTextures, includeRoads = true, shadows: Container | null = null) {
   if (includeTerrain) {
     terrain.cacheAsTexture(false);
     terrain.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
@@ -329,7 +382,7 @@ function redrawCity(terrain: Container, roads: Container, buildings: Container, 
     roads.removeChildren().forEach((child) => child.destroy({ children: true, context: true }));
     drawRoads(roads, city);
   }
-  redrawBuildings(buildings, city, plan, selectedId, registry, textures);
+  redrawBuildings(buildings, city, plan, selectedId, registry, textures, shadows);
 }
 
 function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null | undefined, sourcePlan: CityPlan, targets: readonly TargetHighlight[] = []) {
@@ -432,6 +485,7 @@ export default function CityViewport(props: Props) {
   const terrainRef = useRef<Container | null>(null);
   const roadsRef = useRef<Container | null>(null);
   const buildingsRef = useRef<Container | null>(null);
+  const shadowsRef = useRef<Container | null>(null);
   const proposalOverlayRef = useRef<Container | null>(null);
   const propsRef = useRef(props);
   const refreshRef = useRef<(() => void) | null>(null);
@@ -488,9 +542,17 @@ export default function CityViewport(props: Props) {
       // Roads and flat landscaping are composed off-stage and shown as one texture, re-rendered only when the
       // plan changes. (A sprite, not cacheAsTexture: destroying children of a cached group corrupts Pixi's batch pool.)
       const ground = new Container();
+      // Roads are live sprites (baked tiles) or vector art; the cached ground texture holds flat landscaping only.
       const roads = new Container();
+      roads.eventMode = 'none';
       const groundDecor = new Container();
-      ground.addChild(roads, groundDecor);
+      ground.addChild(groundDecor);
+      // Baked ground shadows (buildings, trees) sit on the ground under every walker; faded by sun strength.
+      const shadowLayer = new Container();
+      shadowLayer.eventMode = 'none';
+      const buildingShadows = new Container();
+      const decorShadows = new Container();
+      shadowLayer.addChild(decorShadows, buildingShadows);
       const groundSprite = new Sprite(Texture.EMPTY);
       groundSprite.eventMode = 'none';
       const groundOverlay = new Container();
@@ -503,14 +565,17 @@ export default function CityViewport(props: Props) {
       const ghostShape = new Graphics();
       const ghostArt = new Graphics();
       ghostArt.alpha = 0.62;
-      ghost.addChild(ghostShape, ghostArt);
+      const ghostSprite = new Sprite(Texture.EMPTY);
+      ghostSprite.alpha = 0.7;
+      ghostSprite.visible = false;
+      ghost.addChild(ghostShape, ghostArt, ghostSprite);
       const labels = new Container();
       const nameplateBg = new Graphics();
       const nameplate = new Text({ text: '', style: { fontFamily: 'Manrope, Inter, sans-serif', fontSize: 11, fontWeight: '700', fill: '#24382c' } });
       nameplate.anchor.set(0.5, 1);
       labels.addChild(nameplateBg, nameplate);
       labels.visible = false;
-      world.addChild(terrain, groundSprite, groundOverlay, buildings, proposalOverlay, effectsContainer, ghost, labels);
+      world.addChild(terrain, groundSprite, roads, shadowLayer, groundOverlay, buildings, proposalOverlay, effectsContainer, ghost, labels);
       app.stage.addChild(world);
       // Pixi v8 skips listeners on passive containers, including the default stage.
       app.stage.eventMode = 'static';
@@ -519,12 +584,13 @@ export default function CityViewport(props: Props) {
       terrainRef.current = terrain;
       roadsRef.current = roads;
       buildingsRef.current = buildings;
+      shadowsRef.current = buildingShadows;
       proposalOverlayRef.current = proposalOverlay;
       const registry = registryRef.current;
       const graveyard = new DeferredDestroy();
       const textures = new BuildingTextures(app.renderer as Renderer, graveyard);
       texturesRef.current = textures;
-      redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true, registry, textures);
+      redrawCity(terrain, roads, buildings, propsRef.current.city, propsRef.current.world.plan, propsRef.current.selectedBuildingId, true, registry, textures, true, buildingShadows);
       redrawProposalOverlay(proposalOverlay, propsRef.current.proposal, propsRef.current.world.plan, propsRef.current.targetHighlights);
       const npcs = new NpcLayer(buildings, groundOverlay);
       const lifeMarkers = new Container();
@@ -534,7 +600,7 @@ export default function CityViewport(props: Props) {
         return building ? buildingLift(building, 1) + roofCapHeight(building.kind) : 30;
       });
       let lastHighlights: readonly HomeHighlight[] | null | undefined;
-      const decor = new DecorLayer(buildings, groundDecor, app.renderer);
+      const decor = new DecorLayer(buildings, groundDecor, app.renderer, decorShadows);
       const effects = new EffectsLayer(effectsContainer);
 
       // Lighting is applied as cheap tints when it changes, never as a full-screen overlay or filter.
@@ -545,10 +611,12 @@ export default function CityViewport(props: Props) {
         return (channel(16) << 16) | (channel(8) << 8) | channel(0);
       };
       const applyLighting = (next: WorldLighting, force = false) => {
-        if (!force && next.tint === lighting.tint && next.glow === lighting.glow) return;
+        if (!force && next.tint === lighting.tint && next.glow === lighting.glow && next.sun === lighting.sun) return;
         lighting = next;
         terrain.tint = next.tint;
         groundSprite.tint = next.tint;
+        roads.tint = next.tint;
+        shadowLayer.alpha = 0.2 + 0.8 * next.sun;
         decor.applyLighting(next.tint, next.glow, force);
         npcs.setTint(next.tint);
         player.setTint(next.tint);
@@ -606,6 +674,16 @@ export default function CityViewport(props: Props) {
         applyLighting(lighting, true);
       };
       applyLighting(DAYLIGHT, true);
+      // Baked atlases load asynchronously; until then (or if they fail) the vector renderer stays in place.
+      void loadArt().then((art) => {
+        if (!art || disposed || appRef.current !== app) return;
+        const current = propsRef.current;
+        redrawCity(terrain, roads, buildings, current.city, current.world.plan, current.selectedBuildingId, false, registry, textures, true, buildingShadows);
+        decor.rebuild(current.world.plan);
+        rebuildGround();
+        applyLighting(lighting, true);
+        refreshRef.current?.();
+      });
 
       const safeBox = () => {
         const area = propsRef.current.safeArea ?? NO_SAFE_AREA;
@@ -683,7 +761,7 @@ export default function CityViewport(props: Props) {
       };
       const leave = () => {
         endGesture(); hoverPoint = null; hoverBuildingId = null; hoverCitizenId = null; hoverPlayer = false;
-        ghostShape.clear(); ghostArt.clear(); setPreview('');
+        ghostShape.clear(); ghostArt.clear(); ghostSprite.visible = false; setPreview('');
         host.style.cursor = '';
         nameplateRef.current?.();
       };
@@ -825,9 +903,23 @@ export default function CityViewport(props: Props) {
           ghostShape.stroke({ color: 0xb84c43, width: 2.4, alpha: 0.95 });
         }
       };
+      /** Ghost of the real baked model when available; vector art otherwise. */
+      const ghostBuilding = (building: Building) => {
+        const art = currentArt();
+        const roadSet = new Set(propsRef.current.world.plan.roads.map((tile) => cellKey(tile.x, tile.y)));
+        const asset = art ? selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet)) : null;
+        const texture = art?.frame(asset?.color) ?? null;
+        if (!texture) { drawBuildingArt(ghostArt, building, 1); return; }
+        const at = iso(building.x, building.y);
+        ghostSprite.texture = texture;
+        ghostSprite.anchor.copyFrom(texture.defaultAnchor ?? { x: 0, y: 0 });
+        ghostSprite.position.set(at.x, at.y);
+        ghostSprite.visible = true;
+      };
       const refreshPreview = () => {
         ghostShape.clear();
         ghostArt.clear();
+        ghostSprite.visible = false;
         decor.hideUnder(null);
         setDemolishHover(null);
         npcs.setHovered(null);
@@ -854,7 +946,7 @@ export default function CityViewport(props: Props) {
             validation.valid ? 0.42 : 0.58, validation.valid ? 0x2f8a5b : 0xb84c43, 0.95);
           if (validation.valid || validation.reason === 'road-required') roadAccessHint(cell.x, cell.y, spec.width, spec.height, validation.valid);
           decor.hideUnder(footprintTiles(cell.x, cell.y, spec.width, spec.height));
-          if (validation.valid) drawBuildingArt(ghostArt, { id: 'ghost', kind, x: cell.x, y: cell.y, name: '', createdAt: 0 }, 1);
+          if (validation.valid) ghostBuilding({ id: 'ghost', kind, x: cell.x, y: cell.y, name: '', createdAt: 0 });
         } else if (current.tool === 'move' && current.movingBuildingId) {
           const building = current.city.buildings.find((entry) => entry.id === current.movingBuildingId);
           if (building) {
@@ -874,7 +966,7 @@ export default function CityViewport(props: Props) {
             decor.hideUnder(footprintTiles(cell.x, cell.y, spec.width, spec.height));
             if (validation.valid) {
               roadAccessHint(cell.x, cell.y, spec.width, spec.height, true);
-              drawBuildingArt(ghostArt, { ...building, x: cell.x, y: cell.y, createdAt: 0 }, 1);
+              ghostBuilding({ ...building, x: cell.x, y: cell.y, createdAt: 0 });
             }
           }
         } else if (current.tool === 'move' || current.tool === 'bulldoze') {
@@ -990,7 +1082,7 @@ export default function CityViewport(props: Props) {
         const current = propsRef.current;
         const constructing = current.city.buildings.some((building) => now - building.createdAt < 5200);
         if ((constructing && now - lastConstructionDraw >= 100) || (wasConstructing && !constructing)) {
-          redrawBuildings(buildings, current.city, current.world.plan, current.selectedBuildingId, registry, textures);
+          redrawBuildings(buildings, current.city, current.world.plan, current.selectedBuildingId, registry, textures, buildingShadows);
           applyLighting(lighting, true);
           lastConstructionDraw = now;
         }
@@ -1089,6 +1181,7 @@ export default function CityViewport(props: Props) {
       terrainRef.current = null;
       roadsRef.current = null;
       buildingsRef.current = null;
+      shadowsRef.current = null;
       proposalOverlayRef.current = null;
     };
   }, []);
@@ -1101,7 +1194,7 @@ export default function CityViewport(props: Props) {
     if (!terrain || !roads || !buildings) return;
     const roadsChanged = lastRoadsRef.current !== props.city.roads;
     lastRoadsRef.current = props.city.roads;
-    redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false, registryRef.current, texturesRef.current, roadsChanged);
+    redrawCity(terrain, roads, buildings, props.city, props.world.plan, props.selectedBuildingId, false, registryRef.current, texturesRef.current, roadsChanged, shadowsRef.current);
     if (roadsChanged) refreshGroundRef.current?.();
     afterRedrawRef.current?.(props.world.plan);
     if (proposalOverlay) redrawProposalOverlay(proposalOverlay, props.proposal, props.world.plan, props.targetHighlights);

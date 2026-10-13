@@ -1,0 +1,769 @@
+{
+ "version": 1,
+ "generator": "scripts/art/bake.mjs",
+ "resolution": 2,
+ "tile": {
+  "w": 56,
+  "h": 28
+ },
+ "sheets": [
+  {
+   "file": "buildings-0.json",
+   "image": "buildings-0.png",
+   "width": 2048,
+   "height": 2048,
+   "sha256": "4992fa6b0777603a"
+  },
+  {
+   "file": "buildings-1.json",
+   "image": "buildings-1.png",
+   "width": 2048,
+   "height": 1024,
+   "sha256": "31f0e97e92328441"
+  },
+  {
+   "file": "nature-0.json",
+   "image": "nature-0.png",
+   "width": 2048,
+   "height": 128,
+   "sha256": "04aa3d257a5e6f41"
+  },
+  {
+   "file": "roads-0.json",
+   "image": "roads-0.png",
+   "width": 2048,
+   "height": 128,
+   "sha256": "281d0e5897328731"
+  }
+ ],
+ "assets": {
+  "villa.v0.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v0.S#color",
+   "shadow": "villa.v0.S#shadow",
+   "emissive": "villa.v0.S#emissive"
+  },
+  "villa.v0.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v0.E#color",
+   "shadow": "villa.v0.E#shadow",
+   "emissive": "villa.v0.E#emissive"
+  },
+  "villa.v1.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v1.S#color",
+   "shadow": "villa.v1.S#shadow",
+   "emissive": "villa.v1.S#emissive"
+  },
+  "villa.v1.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v1.E#color",
+   "shadow": "villa.v1.E#shadow",
+   "emissive": "villa.v1.E#emissive"
+  },
+  "villa.v2.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v2.S#color",
+   "shadow": "villa.v2.S#shadow",
+   "emissive": "villa.v2.S#emissive"
+  },
+  "villa.v2.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v2.E#color",
+   "shadow": "villa.v2.E#shadow",
+   "emissive": "villa.v2.E#emissive"
+  },
+  "villa.v3.S": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v3.S#color",
+   "shadow": "villa.v3.S#shadow",
+   "emissive": "villa.v3.S#emissive"
+  },
+  "villa.v3.E": {
+   "kind": "villa",
+   "category": "building",
+   "variant": 3,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "color": "villa.v3.E#color",
+   "shadow": "villa.v3.E#shadow",
+   "emissive": "villa.v3.E#emissive"
+  },
+  "townhouse.v0.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "color": "townhouse.v0.S#color",
+   "shadow": "townhouse.v0.S#shadow",
+   "emissive": "townhouse.v0.S#emissive"
+  },
+  "townhouse.v0.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "color": "townhouse.v0.E#color",
+   "shadow": "townhouse.v0.E#shadow",
+   "emissive": "townhouse.v0.E#emissive"
+  },
+  "townhouse.v1.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "color": "townhouse.v1.S#color",
+   "shadow": "townhouse.v1.S#shadow",
+   "emissive": "townhouse.v1.S#emissive"
+  },
+  "townhouse.v1.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "color": "townhouse.v1.E#color",
+   "shadow": "townhouse.v1.E#shadow",
+   "emissive": "townhouse.v1.E#emissive"
+  },
+  "townhouse.v2.S": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "color": "townhouse.v2.S#color",
+   "shadow": "townhouse.v2.S#shadow",
+   "emissive": "townhouse.v2.S#emissive"
+  },
+  "townhouse.v2.E": {
+   "kind": "townhouse",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 3
+   },
+   "color": "townhouse.v2.E#color",
+   "shadow": "townhouse.v2.E#shadow",
+   "emissive": "townhouse.v2.E#emissive"
+  },
+  "apartment.v0.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "apartment.v0.S#color",
+   "shadow": "apartment.v0.S#shadow",
+   "emissive": "apartment.v0.S#emissive"
+  },
+  "apartment.v0.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "apartment.v0.E#color",
+   "shadow": "apartment.v0.E#shadow",
+   "emissive": "apartment.v0.E#emissive"
+  },
+  "apartment.v1.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "apartment.v1.S#color",
+   "shadow": "apartment.v1.S#shadow",
+   "emissive": "apartment.v1.S#emissive"
+  },
+  "apartment.v1.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "apartment.v1.E#color",
+   "shadow": "apartment.v1.E#shadow",
+   "emissive": "apartment.v1.E#emissive"
+  },
+  "apartment.v2.S": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "apartment.v2.S#color",
+   "shadow": "apartment.v2.S#shadow",
+   "emissive": "apartment.v2.S#emissive"
+  },
+  "apartment.v2.E": {
+   "kind": "apartment",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "apartment.v2.E#color",
+   "shadow": "apartment.v2.E#shadow",
+   "emissive": "apartment.v2.E#emissive"
+  },
+  "park.v0.S": {
+   "kind": "park",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "park.v0.S#color",
+   "shadow": "park.v0.S#shadow",
+   "emissive": "park.v0.S#emissive"
+  },
+  "park.v1.S": {
+   "kind": "park",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "park.v1.S#color",
+   "shadow": "park.v1.S#shadow",
+   "emissive": "park.v1.S#emissive"
+  },
+  "park.v2.S": {
+   "kind": "park",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "color": "park.v2.S#color",
+   "shadow": "park.v2.S#shadow",
+   "emissive": "park.v2.S#emissive"
+  },
+  "tree.broadleaf.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.broadleaf.0#color",
+   "shadow": "tree.broadleaf.0#shadow"
+  },
+  "tree.broadleaf.1": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.broadleaf.1#color",
+   "shadow": "tree.broadleaf.1#shadow"
+  },
+  "tree.broadleaf.2": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.broadleaf.2#color",
+   "shadow": "tree.broadleaf.2#shadow"
+  },
+  "tree.blossom.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.blossom.0#color",
+   "shadow": "tree.blossom.0#shadow"
+  },
+  "tree.autumn.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 4,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.autumn.0#color",
+   "shadow": "tree.autumn.0#shadow"
+  },
+  "tree.cypress.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 5,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.cypress.0#color",
+   "shadow": "tree.cypress.0#shadow"
+  },
+  "tree.palm.0": {
+   "kind": "palm",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.palm.0#color",
+   "shadow": "tree.palm.0#shadow"
+  },
+  "tree.palm.1": {
+   "kind": "palm",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.palm.1#color",
+   "shadow": "tree.palm.1#shadow"
+  },
+  "tree.palm.2": {
+   "kind": "palm",
+   "category": "nature",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.palm.2#color",
+   "shadow": "tree.palm.2#shadow"
+  },
+  "tree.shrub.0": {
+   "kind": "bush",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.shrub.0#color",
+   "shadow": "tree.shrub.0#shadow"
+  },
+  "tree.shrub.1": {
+   "kind": "bush",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.shrub.1#color",
+   "shadow": "tree.shrub.1#shadow"
+  },
+  "tree.shrub.2": {
+   "kind": "bush",
+   "category": "nature",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.shrub.2#color",
+   "shadow": "tree.shrub.2#shadow"
+  },
+  "prop.flowers.0": {
+   "kind": "flowers",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.flowers.0#color"
+  },
+  "prop.flowers.1": {
+   "kind": "flowers",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.flowers.1#color"
+  },
+  "prop.flowers.2": {
+   "kind": "flowers",
+   "category": "nature",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.flowers.2#color"
+  },
+  "prop.lamp.0": {
+   "kind": "lamp",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.lamp.0#color",
+   "shadow": "prop.lamp.0#shadow",
+   "emissive": "prop.lamp.0#emissive"
+  },
+  "prop.bench.x": {
+   "kind": "bench",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.bench.x#color",
+   "shadow": "prop.bench.x#shadow"
+  },
+  "prop.bench.z": {
+   "kind": "bench",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.bench.z#color",
+   "shadow": "prop.bench.z#shadow"
+  },
+  "prop.planter.0": {
+   "kind": "planter",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.planter.0#color",
+   "shadow": "prop.planter.0#shadow"
+  },
+  "prop.bed.0": {
+   "kind": "flowerbed",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.bed.0#color"
+  },
+  "road.m0": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 0,
+   "color": "road.m0#color"
+  },
+  "road.m1": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 1,
+   "color": "road.m1#color"
+  },
+  "road.m2": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 2,
+   "color": "road.m2#color"
+  },
+  "road.m3": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 3,
+   "color": "road.m3#color"
+  },
+  "road.m4": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 4,
+   "color": "road.m4#color"
+  },
+  "road.m5": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 5,
+   "color": "road.m5#color"
+  },
+  "road.m6": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 6,
+   "color": "road.m6#color"
+  },
+  "road.m7": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 7,
+   "color": "road.m7#color"
+  },
+  "road.m8": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 8,
+   "color": "road.m8#color"
+  },
+  "road.m9": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 9,
+   "color": "road.m9#color"
+  },
+  "road.m10": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 10,
+   "color": "road.m10#color"
+  },
+  "road.m11": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 11,
+   "color": "road.m11#color"
+  },
+  "road.m12": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 12,
+   "color": "road.m12#color"
+  },
+  "road.m13": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 13,
+   "color": "road.m13#color"
+  },
+  "road.m14": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 14,
+   "color": "road.m14#color"
+  },
+  "road.m15": {
+   "kind": "road",
+   "category": "road",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 15,
+   "color": "road.m15#color"
+  }
+ }
+}
