@@ -9,31 +9,51 @@
  "sheets": [
   {
    "file": "buildings-0.json",
-   "image": "buildings-0.png",
+   "image": "buildings-0.webp",
+   "scale": 2,
    "width": 2048,
-   "height": 2048,
-   "sha256": "4992fa6b0777603a"
+   "height": 1728,
+   "sha256": "304821da3da5016a"
   },
   {
    "file": "buildings-1.json",
-   "image": "buildings-1.png",
+   "image": "buildings-1.webp",
+   "scale": 2,
    "width": 2048,
-   "height": 1024,
-   "sha256": "31f0e97e92328441"
+   "height": 1968,
+   "sha256": "b9833a5d37e9621a"
+  },
+  {
+   "file": "buildings-soft-0.json",
+   "image": "buildings-soft-0.webp",
+   "scale": 1,
+   "width": 2048,
+   "height": 1096,
+   "sha256": "35dde025cd8060bb"
   },
   {
    "file": "nature-0.json",
-   "image": "nature-0.png",
+   "image": "nature-0.webp",
+   "scale": 2,
    "width": 2048,
    "height": 128,
-   "sha256": "04aa3d257a5e6f41"
+   "sha256": "eb849da741a7089a"
+  },
+  {
+   "file": "nature-soft-0.json",
+   "image": "nature-soft-0.webp",
+   "scale": 1,
+   "width": 2048,
+   "height": 64,
+   "sha256": "01e28e3d8f46b940"
   },
   {
    "file": "roads-0.json",
-   "image": "roads-0.png",
+   "image": "roads-0.webp",
+   "scale": 2,
    "width": 2048,
-   "height": 128,
-   "sha256": "281d0e5897328731"
+   "height": 152,
+   "sha256": "d43773dd475ad4f4"
   }
  ],
  "assets": {
@@ -46,6 +66,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v0.S#color",
    "shadow": "villa.v0.S#shadow",
    "emissive": "villa.v0.S#emissive"
@@ -59,6 +80,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v0.E#color",
    "shadow": "villa.v0.E#shadow",
    "emissive": "villa.v0.E#emissive"
@@ -72,6 +94,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v1.S#color",
    "shadow": "villa.v1.S#shadow",
    "emissive": "villa.v1.S#emissive"
@@ -85,6 +108,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v1.E#color",
    "shadow": "villa.v1.E#shadow",
    "emissive": "villa.v1.E#emissive"
@@ -98,6 +122,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v2.S#color",
    "shadow": "villa.v2.S#shadow",
    "emissive": "villa.v2.S#emissive"
@@ -111,6 +136,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v2.E#color",
    "shadow": "villa.v2.E#shadow",
    "emissive": "villa.v2.E#emissive"
@@ -124,6 +150,7 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v3.S#color",
    "shadow": "villa.v3.S#shadow",
    "emissive": "villa.v3.S#emissive"
@@ -137,9 +164,94 @@
     "w": 2,
     "d": 2
    },
+   "heightPx": 51.1,
    "color": "villa.v3.E#color",
    "shadow": "villa.v3.E#shadow",
    "emissive": "villa.v3.E#emissive"
+  },
+  "duplex.v0.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 47.3,
+   "color": "duplex.v0.S#color",
+   "shadow": "duplex.v0.S#shadow",
+   "emissive": "duplex.v0.S#emissive"
+  },
+  "duplex.v0.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 47.3,
+   "color": "duplex.v0.E#color",
+   "shadow": "duplex.v0.E#shadow",
+   "emissive": "duplex.v0.E#emissive"
+  },
+  "duplex.v1.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 47.3,
+   "color": "duplex.v1.S#color",
+   "shadow": "duplex.v1.S#shadow",
+   "emissive": "duplex.v1.S#emissive"
+  },
+  "duplex.v1.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 47.3,
+   "color": "duplex.v1.E#color",
+   "shadow": "duplex.v1.E#shadow",
+   "emissive": "duplex.v1.E#emissive"
+  },
+  "duplex.v2.S": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 47.3,
+   "color": "duplex.v2.S#color",
+   "shadow": "duplex.v2.S#shadow",
+   "emissive": "duplex.v2.S#emissive"
+  },
+  "duplex.v2.E": {
+   "kind": "duplex",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 47.3,
+   "color": "duplex.v2.E#color",
+   "shadow": "duplex.v2.E#shadow",
+   "emissive": "duplex.v2.E#emissive"
   },
   "townhouse.v0.S": {
    "kind": "townhouse",
@@ -150,6 +262,7 @@
     "w": 2,
     "d": 3
    },
+   "heightPx": 59.5,
    "color": "townhouse.v0.S#color",
    "shadow": "townhouse.v0.S#shadow",
    "emissive": "townhouse.v0.S#emissive"
@@ -163,6 +276,7 @@
     "w": 2,
     "d": 3
    },
+   "heightPx": 59.5,
    "color": "townhouse.v0.E#color",
    "shadow": "townhouse.v0.E#shadow",
    "emissive": "townhouse.v0.E#emissive"
@@ -176,6 +290,7 @@
     "w": 2,
     "d": 3
    },
+   "heightPx": 59.5,
    "color": "townhouse.v1.S#color",
    "shadow": "townhouse.v1.S#shadow",
    "emissive": "townhouse.v1.S#emissive"
@@ -189,6 +304,7 @@
     "w": 2,
     "d": 3
    },
+   "heightPx": 59.5,
    "color": "townhouse.v1.E#color",
    "shadow": "townhouse.v1.E#shadow",
    "emissive": "townhouse.v1.E#emissive"
@@ -202,6 +318,7 @@
     "w": 2,
     "d": 3
    },
+   "heightPx": 58.8,
    "color": "townhouse.v2.S#color",
    "shadow": "townhouse.v2.S#shadow",
    "emissive": "townhouse.v2.S#emissive"
@@ -215,6 +332,7 @@
     "w": 2,
     "d": 3
    },
+   "heightPx": 59.5,
    "color": "townhouse.v2.E#color",
    "shadow": "townhouse.v2.E#shadow",
    "emissive": "townhouse.v2.E#emissive"
@@ -228,6 +346,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 109.1,
    "color": "apartment.v0.S#color",
    "shadow": "apartment.v0.S#shadow",
    "emissive": "apartment.v0.S#emissive"
@@ -241,6 +360,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 109.1,
    "color": "apartment.v0.E#color",
    "shadow": "apartment.v0.E#shadow",
    "emissive": "apartment.v0.E#emissive"
@@ -254,6 +374,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 109.2,
    "color": "apartment.v1.S#color",
    "shadow": "apartment.v1.S#shadow",
    "emissive": "apartment.v1.S#emissive"
@@ -267,6 +388,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 109.2,
    "color": "apartment.v1.E#color",
    "shadow": "apartment.v1.E#shadow",
    "emissive": "apartment.v1.E#emissive"
@@ -280,6 +402,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 109.1,
    "color": "apartment.v2.S#color",
    "shadow": "apartment.v2.S#shadow",
    "emissive": "apartment.v2.S#emissive"
@@ -293,6 +416,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 109.1,
    "color": "apartment.v2.E#color",
    "shadow": "apartment.v2.E#shadow",
    "emissive": "apartment.v2.E#emissive"
@@ -306,6 +430,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 51.8,
    "color": "park.v0.S#color",
    "shadow": "park.v0.S#shadow",
    "emissive": "park.v0.S#emissive"
@@ -319,6 +444,7 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 52,
    "color": "park.v1.S#color",
    "shadow": "park.v1.S#shadow",
    "emissive": "park.v1.S#emissive"
@@ -332,9 +458,290 @@
     "w": 4,
     "d": 4
    },
+   "heightPx": 50.8,
    "color": "park.v2.S#color",
    "shadow": "park.v2.S#shadow",
    "emissive": "park.v2.S#emissive"
+  },
+  "clubhouse.v0.S": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 46.5,
+   "color": "clubhouse.v0.S#color",
+   "shadow": "clubhouse.v0.S#shadow",
+   "emissive": "clubhouse.v0.S#emissive"
+  },
+  "clubhouse.v0.E": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 46.5,
+   "color": "clubhouse.v0.E#color",
+   "shadow": "clubhouse.v0.E#shadow",
+   "emissive": "clubhouse.v0.E#emissive"
+  },
+  "clubhouse.v1.S": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 46.5,
+   "color": "clubhouse.v1.S#color",
+   "shadow": "clubhouse.v1.S#shadow",
+   "emissive": "clubhouse.v1.S#emissive"
+  },
+  "clubhouse.v1.E": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 46.5,
+   "color": "clubhouse.v1.E#color",
+   "shadow": "clubhouse.v1.E#shadow",
+   "emissive": "clubhouse.v1.E#emissive"
+  },
+  "clubhouse.v2.S": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 46.4,
+   "color": "clubhouse.v2.S#color",
+   "shadow": "clubhouse.v2.S#shadow",
+   "emissive": "clubhouse.v2.S#emissive"
+  },
+  "clubhouse.v2.E": {
+   "kind": "clubhouse",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 46.4,
+   "color": "clubhouse.v2.E#color",
+   "shadow": "clubhouse.v2.E#shadow",
+   "emissive": "clubhouse.v2.E#emissive"
+  },
+  "pool.v0.S": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "heightPx": 48.1,
+   "color": "pool.v0.S#color",
+   "shadow": "pool.v0.S#shadow",
+   "emissive": "pool.v0.S#emissive"
+  },
+  "pool.v0.E": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "heightPx": 48.1,
+   "color": "pool.v0.E#color",
+   "shadow": "pool.v0.E#shadow",
+   "emissive": "pool.v0.E#emissive"
+  },
+  "pool.v1.S": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "heightPx": 48.1,
+   "color": "pool.v1.S#color",
+   "shadow": "pool.v1.S#shadow",
+   "emissive": "pool.v1.S#emissive"
+  },
+  "pool.v1.E": {
+   "kind": "pool",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 4
+   },
+   "heightPx": 48.1,
+   "color": "pool.v1.E#color",
+   "shadow": "pool.v1.E#shadow",
+   "emissive": "pool.v1.E#emissive"
+  },
+  "mall.v0.S": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "heightPx": 49,
+   "color": "mall.v0.S#color",
+   "shadow": "mall.v0.S#shadow",
+   "emissive": "mall.v0.S#emissive"
+  },
+  "mall.v0.E": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "heightPx": 49,
+   "color": "mall.v0.E#color",
+   "shadow": "mall.v0.E#shadow",
+   "emissive": "mall.v0.E#emissive"
+  },
+  "mall.v1.S": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "heightPx": 49,
+   "color": "mall.v1.S#color",
+   "shadow": "mall.v1.S#shadow",
+   "emissive": "mall.v1.S#emissive"
+  },
+  "mall.v1.E": {
+   "kind": "mall",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "heightPx": 49,
+   "color": "mall.v1.E#color",
+   "shadow": "mall.v1.E#shadow",
+   "emissive": "mall.v1.E#emissive"
+  },
+  "office.v0.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 150.2,
+   "color": "office.v0.S#color",
+   "shadow": "office.v0.S#shadow",
+   "emissive": "office.v0.S#emissive"
+  },
+  "office.v0.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 150.2,
+   "color": "office.v0.E#color",
+   "shadow": "office.v0.E#shadow",
+   "emissive": "office.v0.E#emissive"
+  },
+  "office.v1.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 150.2,
+   "color": "office.v1.S#color",
+   "shadow": "office.v1.S#shadow",
+   "emissive": "office.v1.S#emissive"
+  },
+  "office.v1.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 150.2,
+   "color": "office.v1.E#color",
+   "shadow": "office.v1.E#shadow",
+   "emissive": "office.v1.E#emissive"
+  },
+  "office.v2.S": {
+   "kind": "office",
+   "category": "building",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 150.2,
+   "color": "office.v2.S#color",
+   "shadow": "office.v2.S#shadow",
+   "emissive": "office.v2.S#emissive"
+  },
+  "office.v2.E": {
+   "kind": "office",
+   "category": "building",
+   "variant": 2,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 150.2,
+   "color": "office.v2.E#color",
+   "shadow": "office.v2.E#shadow",
+   "emissive": "office.v2.E#emissive"
   },
   "tree.broadleaf.0": {
    "kind": "tree",
@@ -408,6 +815,54 @@
    "color": "tree.cypress.0#color",
    "shadow": "tree.cypress.0#shadow"
   },
+  "tree.jacaranda.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 6,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.jacaranda.0#color",
+   "shadow": "tree.jacaranda.0#shadow"
+  },
+  "tree.poplar.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 7,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.poplar.0#color",
+   "shadow": "tree.poplar.0#shadow"
+  },
+  "tree.pine.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 8,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.pine.0#color",
+   "shadow": "tree.pine.0#shadow"
+  },
+  "tree.lime.0": {
+   "kind": "tree",
+   "category": "nature",
+   "variant": 9,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.lime.0#color",
+   "shadow": "tree.lime.0#shadow"
+  },
   "tree.palm.0": {
    "kind": "palm",
    "category": "nature",
@@ -443,6 +898,18 @@
    },
    "color": "tree.palm.2#color",
    "shadow": "tree.palm.2#shadow"
+  },
+  "tree.fanpalm.0": {
+   "kind": "palm",
+   "category": "nature",
+   "variant": 3,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "tree.fanpalm.0#color",
+   "shadow": "tree.fanpalm.0#shadow"
   },
   "tree.shrub.0": {
    "kind": "bush",
@@ -525,6 +992,97 @@
    "color": "prop.lamp.0#color",
    "shadow": "prop.lamp.0#shadow",
    "emissive": "prop.lamp.0#emissive"
+  },
+  "prop.rocks.0": {
+   "kind": "stones",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.rocks.0#color"
+  },
+  "prop.rocks.1": {
+   "kind": "stones",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.rocks.1#color"
+  },
+  "prop.rocks.2": {
+   "kind": "stones",
+   "category": "nature",
+   "variant": 2,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.rocks.2#color"
+  },
+  "prop.grass.0": {
+   "kind": "grass",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.grass.0#color"
+  },
+  "prop.grass.1": {
+   "kind": "grass",
+   "category": "nature",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.grass.1#color"
+  },
+  "prop.bin.0": {
+   "kind": "bin",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.bin.0#color",
+   "shadow": "prop.bin.0#shadow"
+  },
+  "prop.bikes.0": {
+   "kind": "bikes",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.bikes.0#color",
+   "shadow": "prop.bikes.0#shadow"
+  },
+  "prop.pot.0": {
+   "kind": "pot",
+   "category": "nature",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "color": "prop.pot.0#color",
+   "shadow": "prop.pot.0#shadow"
   },
   "prop.bench.x": {
    "kind": "bench",
@@ -764,6 +1322,19 @@
    },
    "mask": 15,
    "color": "road.m15#color"
+  },
+  "road.plaza": {
+   "kind": "road",
+   "category": "road",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 1,
+    "d": 1
+   },
+   "mask": 15,
+   "plaza": true,
+   "color": "road.plaza#color"
   }
  }
 }
