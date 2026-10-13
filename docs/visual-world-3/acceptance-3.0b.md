@@ -162,7 +162,7 @@ download 1.63 MB (−42 %) and take about 40 MB of GPU memory (+54 %; +14 MB).
 | API (pytest) | 66 passed |
 | Security scan | 0 findings |
 | Production build | pass |
-| Playwright e2e | see the PR and final report (run on the final code) |
+| Playwright e2e | **42 passed** (full suite on the final code; the determinism test also passed 3/3 on repeat) |
 
 **New regression tests:**
 - Every catalog type ships baked art (both facings except parks), plus all 16 road masks and a plaza tile.
