@@ -123,7 +123,7 @@ building and resident selection after zooming are covered by tests.
 | API (pytest) | 66 passed |
 | Security scan | 0 findings |
 | Production build | pass |
-| Playwright e2e | see §9 (46 tests; 3.0B had 42) |
+| Playwright e2e | **46 passed** (full suite on the final code; 3.0B had 42) |
 
 **New unit tests** (`art/characters.test.ts`, `atmosphere.test.ts`):
 - The atlas has every frame for every appearance combination (150 combinations × facings × poses × frames).
@@ -148,7 +148,7 @@ building and resident selection after zooming are covered by tests.
 - The Character Creator shows the baked preview, updates it with choices, and the map stays the only canvas.
 - Under reduced motion, a paused frame is pixel-stable.
 
-**Changed assertions:** none in existing tests.
+**Changed assertions:** none weakened. `e2e/visual-world.spec.ts` (save/reload determinism) now takes each capture once two consecutive frames match, because under full-suite load the first capture could precede the last draw. It still requires byte-identical pixels after the reload.
 
 ## 9. Known limitations
 
