@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PlayerAppearance } from '@tiny-city/simulation';
 import { currentArt, loadArt, type ArtLibrary } from '../game/art/artLibrary';
 import { characterLayers, frameName, lookFromAppearance, type CharacterPose } from '../game/art/characterLook';
@@ -43,7 +43,9 @@ function useCharacterArt(): ArtLibrary | null {
  * `crop` keeps the head and shoulders for portraits.
  */
 function drawCharacter(canvas: HTMLCanvasElement, art: ArtLibrary, appearance: PlayerAppearance, pose: CharacterPose, frame: number, crop: boolean) {
-  const ctx = canvas.getContext('2d');
+  // CPU-backed: the frame is exported with toDataURL, and a GPU-backed canvas would read it back through the GPU
+  // process (SwiftShader on CI and on machines without a GPU, shared with the map's WebGL) on the main thread.
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
@@ -54,7 +56,7 @@ function drawCharacter(canvas: HTMLCanvasElement, art: ArtLibrary, appearance: P
   const scale = crop ? h / (height * 0.6) : h / (height * 1.4);
   const footX = w / 2, footY = crop ? h * 0.97 + height * 0.52 * scale : h * 0.94;
   const tmp = document.createElement('canvas');
-  const t = tmp.getContext('2d');
+  const t = tmp.getContext('2d', { willReadFrequently: true });
   if (!t) return;
   for (const ref of characterLayers(look, 'front', pose)) {
     const src = art.source(frameName(ref, 'front', pose, frame));
@@ -78,31 +80,48 @@ function drawCharacter(canvas: HTMLCanvasElement, art: ArtLibrary, appearance: P
   }
 }
 
+/** Encoded frames by appearance, size and pose: the creator's walk cycle is drawn once, then only swaps images. */
+const frameCache = new Map<string, string>();
+const FRAME_CACHE_LIMIT = 240;
+let scratch: HTMLCanvasElement | null = null;
+
+function characterFrame(art: ArtLibrary, appearance: PlayerAppearance, appearanceKey: string, width: number, height: number, dpr: number,
+  crop: boolean, pose: CharacterPose, frame: number): string {
+  const key = `${appearanceKey}|${width}x${height}@${dpr}|${crop ? 'crop' : 'full'}|${pose}:${frame}`;
+  const cached = frameCache.get(key);
+  if (cached !== undefined) return cached;
+  scratch ??= document.createElement('canvas');
+  scratch.width = Math.round(width * dpr); scratch.height = Math.round(height * dpr);
+  drawCharacter(scratch, art, appearance, pose, frame, crop);
+  let url = '';
+  try { url = scratch.toDataURL('image/png'); } catch { url = ''; }
+  if (frameCache.size >= FRAME_CACHE_LIMIT) frameCache.delete(frameCache.keys().next().value!);
+  frameCache.set(key, url);
+  return url;
+}
+
 /**
  * Draws offscreen and shows the result as an <img>, so the map stays the page's only <canvas> (tests and tools
- * address it as `canvas`).
+ * address it as `canvas`). Frames are cached, so animation and HUD refreshes cost an image swap, not a redraw.
  */
 function CharacterCanvas({ art, appearance, width, height, crop, animate, className, title }: {
   art: ArtLibrary; appearance: PlayerAppearance; width: number; height: number; crop: boolean; animate: boolean; className: string; title?: string;
 }) {
   const [tick, setTick] = useState(0);
-  const [src, setSrc] = useState('');
-  const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const timer = window.setInterval(() => setTick((value) => value + 1), 115);
     return () => window.clearInterval(timer);
   }, [animate]);
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
-  useEffect(() => {
-    canvas.current ??= document.createElement('canvas');
-    const c = canvas.current;
-    c.width = Math.round(width * dpr); c.height = Math.round(height * dpr);
-    // The creator preview walks in place; portraits stay still.
-    const pose: CharacterPose = animate && tick > 0 ? 'walk' : 'idle';
-    drawCharacter(c, art, appearance, pose, pose === 'walk' ? tick % 8 : 0, crop);
-    try { setSrc(c.toDataURL('image/png')); } catch { setSrc(''); }
-  }, [art, appearance, crop, animate, tick, width, height, dpr]);
+  // Keyed by value: the HUD hands over a fresh appearance object with every world snapshot.
+  const appearanceKey = JSON.stringify(appearance);
+  // The creator preview walks in place; portraits stay still.
+  const pose: CharacterPose = animate && tick > 0 ? 'walk' : 'idle';
+  const frame = pose === 'walk' ? tick % 8 : 0;
+  // `appearance` itself is covered by its value key.
+  const src = useMemo(() => characterFrame(art, appearance, appearanceKey, width, height, dpr, crop, pose, frame),
+    [art, appearanceKey, width, height, dpr, crop, pose, frame]);
   return <img className={className} src={src || undefined} width={width} height={height} alt={title ?? ''} role={title ? 'img' : 'presentation'}
     aria-label={title} aria-hidden={title ? undefined : true} data-art="baked" draggable={false} />;
 }
