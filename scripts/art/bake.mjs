@@ -13,6 +13,7 @@ const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.spli
 const preview = arg('preview');
 const out = resolve(root, arg('out') ?? 'public/art/vw3');
 const previewDir = resolve(root, arg('previewDir') ?? 'tmp-art-preview');
+const only = arg('only')?.split(',');
 
 const ATLASES = [
   { name: 'buildings', prefixes: ['villa.', 'duplex.', 'townhouse.', 'apartment.', 'park.', 'clubhouse.', 'pool.', 'mall.', 'office.'] },
@@ -52,9 +53,19 @@ if (preview) {
   }
 } else {
   mkdirSync(out, { recursive: true });
-  for (const file of readdirSync(out)) rmSync(join(out, file));
-  const manifest = { version: 1, generator: 'scripts/art/bake.mjs', resolution: 2, tile: { w: 56, h: 28 }, sheets: [], assets: {} };
+  // --only=<groups> re-bakes just those atlases and keeps the rest of the manifest.
+  const groups = [...ATLASES.map((atlas) => atlas.name), 'characters'].filter((name) => !only || only.includes(name));
+  for (const file of readdirSync(out)) if (!only || groups.some((g) => file.startsWith(`${g}-`))) rmSync(join(out, file));
+  let manifest = { version: 1, generator: 'scripts/art/bake.mjs', resolution: 2, tile: { w: 56, h: 28 }, sheets: [], assets: {} };
+  if (only) {
+    try {
+      manifest = JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8'));
+      manifest.sheets = manifest.sheets.filter((sheet) => !groups.some((g) => sheet.file.startsWith(`${g}-`)));
+      if (groups.includes('characters')) delete manifest.characters;
+    } catch { /* fresh output directory */ }
+  }
   for (const atlas of ATLASES) {
+    if (only && !only.includes(atlas.name)) continue;
     const started = Date.now();
     const result = await page.evaluate((prefixes) => window.TC.bake(prefixes), atlas.prefixes);
     manifest.resolution = result.resolution;
@@ -70,6 +81,20 @@ if (preview) {
     }
     Object.assign(manifest.assets, result.manifest);
     console.log(`baked ${atlas.name}: ${Object.keys(result.manifest).length} assets, ${result.pages.length} page(s) in ${Date.now() - started} ms`);
+  }
+  if (!only || only.includes('characters')) {
+    const started = Date.now();
+    const result = await page.evaluate(() => window.TC.bakeCharacters());
+    manifest.characters = { ...result.meta, sheets: [] };
+    for (const pageData of result.pages) {
+      const base = `characters-${pageData.index}`;
+      const image = png(pageData.url);
+      writeFileSync(join(out, `${base}.webp`), image);
+      writeFileSync(join(out, `${base}.json`), JSON.stringify({ frames: pageData.frames, meta: { app: 'tiny-city-bake', version: '1', image: `${base}.webp`, format: 'RGBA8888', size: { w: pageData.width, h: pageData.height }, scale: String(pageData.scale) } }));
+      manifest.characters.sheets.push({ file: `${base}.json`, image: `${base}.webp`, scale: pageData.scale, width: pageData.width, height: pageData.height,
+        sha256: createHash('sha256').update(image).digest('hex').slice(0, 16) });
+    }
+    console.log(`baked characters: ${result.meta.frames} frames, ${result.pages.length} page(s) in ${Date.now() - started} ms`);
   }
   writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1));
 }

@@ -4,6 +4,7 @@ import { createStage, trim, pack } from './lib/stage.js';
 import { allAssets } from './assets/index.js';
 import { applyWorldUVs } from './lib/textures.js';
 import { HEIGHT_PX_PER_UNIT } from './lib/projection.js';
+import { bakeCharacters } from './characters/bake-characters.js';
 
 // Three's SimplexNoise (used by GTAO's denoise noise texture) seeds itself from Math.random. A fixed seed makes
 // every bake byte-identical, so atlas diffs in git only ever show real art changes.
@@ -39,6 +40,11 @@ function render(asset, index) {
 const toUrl = (canvas) => canvas.toDataURL('image/webp', 0.92);
 
 window.TC = {
+  /** Character layer atlases (3.0C). */
+  bakeCharacters() {
+    const { pages, meta } = bakeCharacters();
+    return { meta, pages: pages.map((page) => ({ index: page.index, suffix: '', scale: meta.resolution, url: toUrl(page.canvas), width: page.canvas.width, height: page.canvas.height, frames: page.frames })) };
+  },
   ids: () => allAssets().map((asset) => asset.id),
   /** Raw passes for one asset (for art review). */
   preview(id) {
