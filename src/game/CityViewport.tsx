@@ -39,11 +39,16 @@ export type RendererStats = { fps: number; frameMs: number; residents: number; v
   gpuTextureBytes?: number; gpuTextures?: number };
 /** Bytes of the textures currently uploaded to the GPU (WebGL renderer), with a third more for mip chains. */
 function gpuTextureUse(renderer: unknown): { gpuTextureBytes?: number; gpuTextures?: number } {
-  const sources = (renderer as { texture?: { managedTextures?: readonly { pixelWidth: number; pixelHeight: number; autoGenerateMipmaps?: boolean }[] } }).texture?.managedTextures;
+  const sources = (renderer as { texture?: { managedTextures?: readonly ({ pixelWidth: number; pixelHeight: number; autoGenerateMipmaps?: boolean } | null)[] } }).texture?.managedTextures;
   if (!sources) return {};
-  let bytes = 0;
-  for (const source of sources) bytes += source.pixelWidth * source.pixelHeight * 4 * (source.autoGenerateMipmaps ? 4 / 3 : 1);
-  return { gpuTextureBytes: Math.round(bytes), gpuTextures: sources.length };
+  // Pixi leaves null slots for destroyed sources.
+  let bytes = 0, count = 0;
+  for (const source of sources) {
+    if (!source) continue;
+    bytes += source.pixelWidth * source.pixelHeight * 4 * (source.autoGenerateMipmaps ? 4 / 3 : 1);
+    count += 1;
+  }
+  return { gpuTextureBytes: Math.round(bytes), gpuTextures: count };
 }
 /** Counters for the last city redraw (read into RendererStats). */
 const drawStats = { baked: 0, vector: 0, models: {} as Record<string, number> };

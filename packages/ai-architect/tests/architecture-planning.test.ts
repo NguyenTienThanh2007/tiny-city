@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createWorld, Simulation } from '@tiny-city/simulation';
 import { createProposal, interpretLocally, PlanReview, decodeIntent } from '../src/index.js';
-import type { ArchitectIntent, BuildRequest } from '../src/index.js';
+import type { ArchitectIntent, BuildDesignRequest, BuildRequest } from '../src/index.js';
 
 const intent = (builds: BuildRequest[], patch: Partial<ArchitectIntent> = {}): ArchitectIntent => ({ summary: 'Build', language: 'en', style: 'compact', near: 'existing', region: null, budgetLimit: null,
   connectRoads: true, builds, moves: [], demolish: [], roadAdd: [], roadRemove: [], preserveBuildingIds: [], unsupportedRequests: [], ambiguities: [], demolishTargets: [], moveTargets: [], preserveRoads: false, preserveTypes: [], ...patch });
 const world = () => createWorld({ id: 'arch', seed: 7, startingFunds: 20_000, clock: { paused: true },
   plan: { id: 'arch-plan', name: 'Arch', width: 40, height: 40, buildings: [], roads: Array.from({ length: 34 }, (_, i) => ({ x: 3 + i, y: 20 })), blockedTiles: [] } });
-const villas = (design: BuildRequest['design'], quantity = 3): BuildRequest => ({ buildingType: 'villa', quantity, preferredPosition: null, design });
+const villas = (design: BuildDesignRequest | null, quantity = 3): BuildRequest => ({ buildingType: 'villa', quantity, preferredPosition: null, design });
 
 describe('AI Architect architecture requests (Visual World 3.1)', () => {
   it('builds a requested collection with varied models of that collection, and names them in the plan', async () => {
