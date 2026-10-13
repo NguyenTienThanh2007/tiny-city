@@ -283,7 +283,10 @@ export class NpcLayer {
     this.lastFrame = nowMs;
     const alpha = world.clock.accumulatedMs / world.clock.fixedStepMs;
     const spriteScale = npcSpriteScale(viewScale);
-    this.time += dt;
+    // Endless loops (idle breathing, chat gestures) follow world time and freeze while the clock is paused; fades
+    // and walk-ins finish on their own and use real time.
+    const animDt = world.clock.paused ? 0 : dt;
+    this.time += animDt;
     // Baked characters load asynchronously: rebuild every resident once when they arrive.
     const rigs = hasCharacterArt(currentArt());
     if (rigs !== this.artRigs) {

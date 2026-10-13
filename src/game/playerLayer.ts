@@ -69,6 +69,8 @@ export class PlayerLayer {
   private lastBase: Position | null = null;
   private lastFrame = 0;
   private time = 0;
+  /** Pose clock: advances only while simulation time runs (pause freezes the character too). */
+  private poseTime = 0;
   private pulses: Pulse[] = [];
   private lastFeedback = 0;
   private rendered: Position | null = null;
@@ -214,6 +216,7 @@ export class PlayerLayer {
     const dt = this.lastFrame === 0 ? 16 : Math.min(100, Math.max(0, nowMs - this.lastFrame));
     this.lastFrame = nowMs;
     this.time += dt;
+    if (!world.clock.paused) this.poseTime += dt;
     const badgeScale = Math.max(1, 0.8 / Math.max(viewScale, 0.05));
     this.badges.children.forEach((badge, index) => {
       badge.scale.set(badgeScale);
@@ -275,7 +278,7 @@ export class PlayerLayer {
             this.root.scale.set(scale * this.facing, scale);
           }
         }
-        const pose = selectPose({ moving, walkPhase: this.walkPhase, action, seed: 7, timeMs: this.time, reducedMotion: this.reducedMotion });
+        const pose = selectPose({ moving, walkPhase: this.walkPhase, action, seed: 7, timeMs: this.poseTime, reducedMotion: this.reducedMotion });
         this.rig.show(away ? 'back' : 'front', pose.pose, pose.frame);
         this.body.y = 0;
       } else {

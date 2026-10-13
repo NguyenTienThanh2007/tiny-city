@@ -27,7 +27,7 @@ export { buildingLift } from './buildingArt';
 /** `cell` may be fractional (a resident's position). `zoom` multiplies the scale around the visible center. */
 export type CameraRequest = { id: number; cell?: Position; zoom?: number; scale?: number };
 export type SafeArea = { left: number; right: number; top: number; bottom: number };
-export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number };
+export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number; venueVisitors?: number; art?: string };
 /** What a Life Mode click points at, in priority order: the player, a resident, a building, then a tile. */
 export type LifeTarget = { type: 'player' } | { type: 'citizen'; id: string } | { type: 'building'; id: string } | { type: 'tile'; cell: Cell };
 export type { HomeHighlight, LifeFeedback };
@@ -641,6 +641,8 @@ export default function CityViewport(props: Props) {
       const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const ambient = new AmbientLayer(lightPoolLayer, effectsContainer, reducedMotion, buildings);
       let windowCheck = 0;
+      // World animation clock: advances only while simulation time runs, so pausing freezes the whole scene.
+      let ambientTime = 0;
 
       // Lighting is applied as cheap tints when it changes, never as a full-screen overlay or filter.
       let lighting: WorldLighting = DAYLIGHT;
@@ -1159,10 +1161,11 @@ export default function CityViewport(props: Props) {
           const types = new Map(live.plan.buildings.map((b) => [b.id, b.type]));
           for (const [id, visual] of registry) if (visual.lights) visual.lights.alpha = lighting.glow * windowsOn(types.get(id), id, minuteOfDay);
         }
+        if (!live.clock.paused) ambientTime += Math.min(100, app.ticker.deltaMS);
         const detailed = view.scale >= 0.32;
-        ambient.update(frameStart, detailed);
+        ambient.update(ambientTime, detailed);
         const tl = world.toLocal({ x: 0, y: 0 }), br = world.toLocal({ x: app.screen.width, y: app.screen.height });
-        decor.sway(frameStart, { left: tl.x - 60, top: tl.y - 60, right: br.x + 60, bottom: br.y + 120 }, reducedMotion);
+        decor.sway(ambientTime, { left: tl.x - 60, top: tl.y - 60, right: br.x + 60, bottom: br.y + 120 }, reducedMotion);
         npcs.sync(live, frameStart, view.scale, bounds);
         player.feedback(current.lifeFeedback);
         if (current.homeHighlights !== lastHighlights) { lastHighlights = current.homeHighlights; player.setHomeHighlights(current.homeHighlights ?? null); }
@@ -1194,7 +1197,8 @@ export default function CityViewport(props: Props) {
         if (frameStart - frameWindowStart >= 1000) {
           const stats: RendererStats = { fps: Math.round(frames * 1000 / (frameStart - frameWindowStart)),
             frameMs: Math.round(frameCost / frames * 100) / 100, residents: npcs.count,
-            visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length };
+            visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length,
+            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading' };
           (window as unknown as { __tinyCityRenderer?: RendererStats }).__tinyCityRenderer = stats;
           frames = 0; frameCost = 0; frameWindowStart = frameStart;
         }
