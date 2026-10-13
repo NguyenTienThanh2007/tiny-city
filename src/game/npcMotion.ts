@@ -143,6 +143,26 @@ export function citizenDepth(position: Position): number {
   return position.x + position.y;
 }
 
+/**
+ * Sort key of the building whose footprint covers each tile. Since 3.0B every lot is an opaque garden plate, so a
+ * figure standing inside a lot (entrance path, venue walk-in) must draw above that building, not under its plate.
+ */
+export function lotDepths(plan: { readonly buildings: readonly { readonly position: Position; readonly footprint: { readonly width: number; readonly height: number } }[] }): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const b of plan.buildings) {
+    const depth = buildingDepth(b.position.x, b.position.y, b.footprint.width, b.footprint.height);
+    for (let y = b.position.y; y < b.position.y + b.footprint.height; y += 1) for (let x = b.position.x; x < b.position.x + b.footprint.width; x += 1) out.set(`${x},${y}`, depth);
+  }
+  return out;
+}
+
+/** Depth for a figure: its own iso depth, raised just above a lot it stands inside. */
+export function figureDepth(position: Position, lots: ReadonlyMap<string, number>): number {
+  const lot = lots.get(`${Math.floor(position.x)},${Math.floor(position.y)}`);
+  const own = citizenDepth(position);
+  return lot === undefined ? own : Math.max(own, lot + 0.001);
+}
+
 /** A building's sort key sits between the deepest tile behind it and the shallowest tile in front of it. */
 export function buildingDepth(x: number, y: number, width: number, height: number): number {
   return x + y + (width + height) / 2;

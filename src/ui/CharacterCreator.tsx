@@ -96,7 +96,7 @@ export function CharacterCreator({ initial, editing, onCancel, onSubmit }: {
       {!editing && <ol className="creator-steps" aria-label="Steps"><li className="is-current">Look &amp; name</li><li>Choose a home</li></ol>}
       <div className="creator-body">
         <div className="creator-preview" aria-live="polite">
-          <div className="creator-stage"><PlayerFigure appearance={look} size={210} stride={stride} title={`Preview of ${normalizePlayerName(name) ?? 'your character'}`} /></div>
+          <div className="creator-stage"><PlayerFigure appearance={look} size={210} stride={stride} animate title={`Preview of ${normalizePlayerName(name) ?? 'your character'}`} /></div>
           <strong className="creator-name">{normalizePlayerName(name) ?? 'Your name'}</strong>
           <small>This is exactly how you will look in the city.</small>
           <button type="button" className="text-button" onClick={() => { const next = suggestions + 1; setSuggestions(next); setLook(suggest(name, next)); }}>

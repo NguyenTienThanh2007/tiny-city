@@ -2,8 +2,14 @@ import { Container, Graphics } from 'pixi.js';
 import type { PlayerAppearance, PlayerCharacter, Position, WorldState } from '@tiny-city/simulation';
 import { iso } from './mapGeometry';
 import { npcSpriteScale } from './npcLayer';
-import { citizenDepth, screenFacing } from './npcMotion';
+import { figureDepth, lotDepths, screenFacing } from './npcMotion';
 import { FIGURE_ORDER, FIGURE_ORDER_AWAY, playerFigure, type PlayerFigure, type Shape } from './playerLook';
+import { currentArt } from './art/artLibrary';
+import { CharacterRig, hasCharacterArt } from './art/characterRig';
+import { lookFromAppearance, selectPose } from './art/characterLook';
+import { RIG_LOCAL_SCALE } from './npcLayer';
+import { playerVenueSpot } from './venueCrowd';
+import type { Building } from '@tiny-city/simulation';
 
 const WALK_CYCLES_PER_TILE = 2.2;
 const PLAYER_SCALE = 1.12;
@@ -50,6 +56,10 @@ export class PlayerLayer {
   private readonly badges = new Container();
   private badgeList: readonly HomeHighlight[] = [];
   private appearanceKey = '';
+  private lots = new Map<string, number>();
+  private lotsPlan: WorldState['plan'] | null = null;
+  /** 3.0C baked character (null: 2.0 vector figure fallback). */
+  private rig: CharacterRig | null = null;
   private from: Position | null = null;
   private to: Position | null = null;
   private tick = -1;
@@ -68,7 +78,8 @@ export class PlayerLayer {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /** `liftOf` gives a building's roof height in local units, so pins and badges float just above it. */
-  constructor(private readonly scene: Container, groundOverlay: Container, top: Container, private readonly liftOf: (buildingId: string) => number) {
+  constructor(private readonly scene: Container, groundOverlay: Container, top: Container, private readonly liftOf: (buildingId: string) => number,
+    private readonly frontOf: (building: Building) => 'S' | 'E' = () => 'S') {
     this.root.label = 'player';
     this.root.eventMode = 'none';
     this.root.visible = false;
@@ -101,13 +112,28 @@ export class PlayerLayer {
   }
 
   private build(appearance: PlayerAppearance) {
-    const key = JSON.stringify(appearance);
+    const art = currentArt();
+    const rigMode = hasCharacterArt(art);
+    const key = `${rigMode ? 'rig' : 'vector'}:${JSON.stringify(appearance)}`;
     if (key === this.appearanceKey) return;
     this.appearanceKey = key;
     for (const g of this.parts.values()) g.destroy();
     this.parts.clear();
     this.figure.removeChildren();
     this.body.removeChildren();
+    this.rig?.destroy();
+    this.rig = null;
+    if (rigMode) {
+      // The same baked rig as residents, composed from the saved appearance.
+      this.rig = new CharacterRig(art, lookFromAppearance(appearance));
+      this.rig.root.scale.set(RIG_LOCAL_SCALE);
+      const shadow = new Graphics().ellipse(0.6, 0.2, 6.6, 2.9).fill({ color: 0x14221a, alpha: 0.24 }).ellipse(0.3, 0, 4.6, 2).fill({ color: 0x14221a, alpha: 0.3 });
+      this.parts.set('shadow', shadow);
+      this.body.addChild(shadow, this.rig.root);
+      this.body.tint = this.tint;
+      this.figure.addChild(this.ring, this.body);
+      return;
+    }
     this.legLeft.clear(); this.legRight.clear();
     const figure: PlayerFigure = playerFigure(appearance);
     draw(this.legLeft, figure.legLeft);
@@ -126,6 +152,7 @@ export class PlayerLayer {
 
   /** Layer order depends on whether the player faces the camera. */
   private arrange(away: boolean) {
+    if (this.rig) return;
     this.body.removeChildren();
     const order = away ? FIGURE_ORDER_AWAY : FIGURE_ORDER;
     for (const part of order) {
@@ -211,7 +238,9 @@ export class PlayerLayer {
     }
     const alpha = world.clock.paused ? 1 : Math.max(0, Math.min(1, world.clock.accumulatedMs / world.clock.fixedStepMs));
     const from = this.from ?? player.position, to = this.to ?? player.position;
-    const base = { x: from.x + (to.x - from.x) * alpha, y: from.y + (to.y - from.y) * alpha };
+    // Visiting a park, pool or terrace: stand on the lawn or deck, not on the venue's centrepiece.
+    const spot = inside ? playerVenueSpot(inside, this.frontOf) : null;
+    const base = spot ? spot.position : { x: from.x + (to.x - from.x) * alpha, y: from.y + (to.y - from.y) * alpha };
     this.rendered = base;
     const showFigure = !inside || OPEN_AIR.has(inside.type ?? '');
     this.visibleOnMap = showFigure;
@@ -229,13 +258,33 @@ export class PlayerLayer {
       this.arrangeIfNeeded(away);
       const screen = iso(base.x, base.y);
       this.root.position.set(screen.x, screen.y);
-      this.root.zIndex = citizenDepth(base) + 0.0002;
+      if (world.plan !== this.lotsPlan) { this.lots = lotDepths(world.plan); this.lotsPlan = world.plan; }
+      this.root.zIndex = spot ? Math.max(figureDepth(base, this.lots), spot.depth) : figureDepth(base, this.lots) + 0.0002;
       this.root.scale.set(scale * this.facing, scale);
-      const swing = moving ? Math.sin(this.walkPhase) * 0.5 : 0;
-      this.legLeft.rotation = swing;
-      this.legRight.rotation = -swing;
-      const idle = this.reducedMotion ? 0 : Math.sin(this.time / 420) * 0.3;
-      this.body.y = moving ? -Math.abs(Math.sin(this.walkPhase)) * 0.7 : idle;
+      if (this.rig) {
+        const a = player.activity;
+        const performing = a.phase === 'performing';
+        const action = performing && a.kind === 'greet' ? 'wave' : performing && a.kind === 'socialize' ? 'talk'
+          : performing && a.kind === 'visit' && inside ? 'sit' : 'none';
+        if (action === 'wave' || action === 'talk') {
+          // Face the resident being greeted.
+          const other = world.citizens.find((c) => c.id === a.citizenId)?.position;
+          if (other) {
+            const o = screenFacing({ x: Math.sign(Math.round((other.x - base.x) * 4)), y: Math.sign(Math.round((other.y - base.y) * 4)) }, this.facing);
+            this.facing = o.facing;
+            this.root.scale.set(scale * this.facing, scale);
+          }
+        }
+        const pose = selectPose({ moving, walkPhase: this.walkPhase, action, seed: 7, timeMs: this.time, reducedMotion: this.reducedMotion });
+        this.rig.show(away ? 'back' : 'front', pose.pose, pose.frame);
+        this.body.y = 0;
+      } else {
+        const swing = moving ? Math.sin(this.walkPhase) * 0.5 : 0;
+        this.legLeft.rotation = swing;
+        this.legRight.rotation = -swing;
+        const idle = this.reducedMotion ? 0 : Math.sin(this.time / 420) * 0.3;
+        this.body.y = moving ? -Math.abs(Math.sin(this.walkPhase)) * 0.7 : idle;
+      }
       this.marker.y = this.reducedMotion ? 0 : Math.sin(this.time / 320) * 1.2;
       this.marker.scale.x = this.facing;
       this.ring.scale.set(this.reducedMotion ? 1 : 1 + Math.sin(this.time / 300) * 0.06);
@@ -323,6 +372,7 @@ export class PlayerLayer {
   }
 
   destroy() {
+    this.rig?.destroy();
     for (const g of this.parts.values()) g.destroy();
     this.parts.clear();
     this.root.destroy({ children: true });

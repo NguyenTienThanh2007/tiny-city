@@ -27,8 +27,19 @@ export interface ArtAssetRecord {
   readonly emissive?: string;
 }
 export interface ArtSheet { readonly file: string; readonly image: string; readonly width: number; readonly height: number; readonly scale?: number; readonly sha256?: string }
+/** 3.0C character layer atlas (frames `ch:<layer>:<variant>:<side>:<facing>:<pose>:<frame>`). */
+export interface ArtCharacters {
+  readonly resolution: number;
+  readonly height: number;
+  readonly poses: Readonly<Record<string, number>>;
+  readonly facings: readonly string[];
+  readonly layers: Readonly<Record<string, { readonly tint: string | null; readonly front: boolean; readonly variants: readonly string[]; readonly limb: boolean }>>;
+  readonly frames: number;
+  readonly sheets: readonly ArtSheet[];
+}
 export interface ArtManifest {
   readonly version: number;
+  readonly characters?: ArtCharacters;
   readonly resolution: number;
   readonly tile: { readonly w: number; readonly h: number };
   readonly sheets: readonly ArtSheet[];
@@ -51,6 +62,11 @@ export function validateManifest(value: unknown, footprints?: Readonly<Record<st
   for (const sheet of manifest.sheets ?? []) {
     if (!sheet.file?.endsWith('.json') || !/\.(png|webp)$/.test(sheet.image ?? '')) errors.push(`sheet ${sheet.file} needs .json data and a .png or .webp image`);
     if (sheet.width > MAX_ATLAS_SIZE || sheet.height > MAX_ATLAS_SIZE) errors.push(`sheet ${sheet.file} exceeds ${MAX_ATLAS_SIZE}px`);
+  }
+  if (manifest.characters) {
+    const c = manifest.characters;
+    if (!(c.resolution > 0) || !Array.isArray(c.sheets) || c.sheets.length === 0) errors.push('characters need a resolution and at least one sheet');
+    for (const pose of ['walk', 'idle', 'wave', 'talk', 'sit']) if (!(c.poses?.[pose]! > 0)) errors.push(`characters are missing the ${pose} pose`);
   }
   for (const [id, asset] of Object.entries(manifest.assets ?? {})) {
     if (!asset.color) errors.push(`${id} has no color frame`);
