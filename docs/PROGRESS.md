@@ -126,4 +126,15 @@ Phase 4.5 (#13) is merged and green. Acceptance: `docs/visual-world-3/acceptance
 - [x] Vegetation (mature canopies, new species), textured roads, plaza tile, denser landscaping, curb furniture, home framing
 - [x] WebP + skyline packing + half-resolution soft atlas (99 assets, 1.63 MB); alpha-mask picking; art heights; decor LOD
 - [x] Matched 3.0A/3.0B screenshots (`screenshots/3b-*`), benchmarks (`benchmark-3.0b.json`), tests
-- [ ] After review: 3.0C characters and atmosphere on `feature/visual-world-3c`
+- [x] 3.0C shipped on `feature/visual-world-3c` (see below)
+
+## Visual World 3.0C characters, animation & atmosphere (branch `feature/visual-world-3c`, from `origin/main` @ `78c6927`)
+
+3.0B (#15) merged. Acceptance: `docs/visual-world-3/acceptance-3.0c.md`.
+
+- [x] Baked character rig (layered, tintable, 5 poses × 2 facings), deterministic resident looks, saved player appearance
+- [x] Animation: walk by displacement, de-synced idles, greeting/chat poses, real venue visitors (park, pool, terrace)
+- [x] Lot-aware depth; Character Creator and portraits use the baked figure
+- [x] Lighting: smooth cinematic keys, night light pools, window life, foliage sway, shimmer, fireflies; pause and reduced motion freeze
+- [x] Matched 3.0B/3.0C shots and animation sequences, population benchmarks (20–1,000), tests (unit 173, e2e 46)
+- [ ] Next: Camera & Zoom Fix (audit cameraRequest handling), then Phase 5 Economy

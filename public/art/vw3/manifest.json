@@ -1336,5 +1336,220 @@
    "plaza": true,
    "color": "road.plaza#color"
   }
+ },
+ "characters": {
+  "resolution": 4,
+  "height": 0.76,
+  "poses": {
+   "walk": 8,
+   "idle": 4,
+   "wave": 4,
+   "talk": 4,
+   "sit": 2
+  },
+  "facings": [
+   "front",
+   "back"
+  ],
+  "order": {
+   "front": [
+    "backpack",
+    "hairLong",
+    "armSkin:L",
+    "sleeve:L",
+    "legs:L",
+    "shoes:L",
+    "legs:R",
+    "shoes:R",
+    "torso",
+    "overlay",
+    "scarf",
+    "armSkin:R",
+    "sleeve:R",
+    "head",
+    "face",
+    "hair",
+    "cap",
+    "glasses",
+    "sunhat"
+   ],
+   "back": [
+    "armSkin:L",
+    "sleeve:L",
+    "legs:L",
+    "shoes:L",
+    "legs:R",
+    "shoes:R",
+    "torso",
+    "overlay",
+    "armSkin:R",
+    "sleeve:R",
+    "head",
+    "hair",
+    "hairLong",
+    "cap",
+    "scarf",
+    "sunhat",
+    "backpack"
+   ],
+   "sitFront": [
+    "backpack",
+    "hairLong",
+    "armSkin:L",
+    "sleeve:L",
+    "torso",
+    "overlay",
+    "legs:L",
+    "shoes:L",
+    "legs:R",
+    "shoes:R",
+    "scarf",
+    "armSkin:R",
+    "sleeve:R",
+    "head",
+    "face",
+    "hair",
+    "cap",
+    "glasses",
+    "sunhat"
+   ]
+  },
+  "layers": {
+   "armSkin": {
+    "tint": "skin",
+    "front": false,
+    "variants": [
+     "base"
+    ],
+    "limb": true
+   },
+   "sleeve": {
+    "tint": "outfit",
+    "front": false,
+    "variants": [
+     "short",
+     "long"
+    ],
+    "limb": true
+   },
+   "legs": {
+    "tint": "legs",
+    "front": false,
+    "variants": [
+     "pants",
+     "bare"
+    ],
+    "limb": true
+   },
+   "shoes": {
+    "tint": "shoes",
+    "front": false,
+    "variants": [
+     "sneaker"
+    ],
+    "limb": true
+   },
+   "torso": {
+    "tint": "outfit",
+    "front": false,
+    "variants": [
+     "tee",
+     "shirt",
+     "hoodie",
+     "jacket",
+     "dress",
+     "overalls"
+    ],
+    "limb": false
+   },
+   "head": {
+    "tint": "skin",
+    "front": false,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   },
+   "face": {
+    "tint": null,
+    "front": true,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   },
+   "hair": {
+    "tint": "hair",
+    "front": false,
+    "variants": [
+     "short",
+     "long",
+     "bun",
+     "curly",
+     "cap",
+     "buzz"
+    ],
+    "limb": false
+   },
+   "hairLong": {
+    "tint": "hair",
+    "front": false,
+    "variants": [
+     "long"
+    ],
+    "limb": false
+   },
+   "cap": {
+    "tint": "cap",
+    "front": false,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   },
+   "glasses": {
+    "tint": null,
+    "front": true,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   },
+   "sunhat": {
+    "tint": null,
+    "front": false,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   },
+   "scarf": {
+    "tint": "scarf",
+    "front": false,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   },
+   "backpack": {
+    "tint": null,
+    "front": false,
+    "variants": [
+     "base"
+    ],
+    "limb": false
+   }
+  },
+  "frames": 1364,
+  "sheets": [
+   {
+    "file": "characters-0.json",
+    "image": "characters-0.webp",
+    "scale": 4,
+    "width": 2048,
+    "height": 1080,
+    "sha256": "f90fa957e39638f3"
+   }
+  ]
  }
 }

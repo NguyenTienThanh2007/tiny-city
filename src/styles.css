@@ -1018,6 +1018,9 @@ kbd { font-family: var(--font-ui); }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
+/* 3.0C baked portrait: a soft sky behind the composited character. */
+.player-portrait.baked { background: linear-gradient(180deg, #f6e2d7, #e8efe1); }
+
 /* ---------- Account, verification and cloud save portal ---------- */
 .game-layer { position: absolute; inset: 0; }
 .account-portal {

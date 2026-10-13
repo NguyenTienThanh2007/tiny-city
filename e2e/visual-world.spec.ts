@@ -86,20 +86,30 @@ test('contextual HUD: collapsible overview, tool card, placement guidance and in
 // The world area between the HUD panels: only canvas pixels, no DOM overlay text antialiasing.
 const WORLD_CLIP = { x: 300, y: 180, width: 520, height: 520 };
 
+/** A frame once drawing has settled (two consecutive identical captures); a busy CI machine may lag a few frames. */
+async function settledFrame(page: Page) {
+  let previous = await page.screenshot({ clip: WORLD_CLIP });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await page.waitForTimeout(250);
+    const frame = await page.screenshot({ clip: WORLD_CLIP });
+    if (frame.equals(previous)) return frame;
+    previous = frame;
+  }
+  return previous;
+}
+
 test('world visuals are deterministic across save and reload', async ({ page }) => {
   const errors = await openCity(page);
   // Baked atlases load asynchronously; compare only once the final art is on screen.
   await expect(page.locator('.city-viewport')).toHaveAttribute('data-art', /ready|fallback/, { timeout: 15_000 });
   await page.mouse.move(640, 30);
-  await page.waitForTimeout(500);
-  const first = await page.screenshot({ clip: WORLD_CLIP });
+  const first = await settledFrame(page);
   await page.getByRole('button', { name: /^(Save|Saved)$/ }).click();
   await page.reload();
   await expect(page.getByTestId('minimap-building-office')).toBeVisible();
   await expect(page.locator('.city-viewport')).toHaveAttribute('data-art', /ready|fallback/, { timeout: 15_000 });
   await page.mouse.move(640, 30);
-  await page.waitForTimeout(500);
-  const second = await page.screenshot({ clip: WORLD_CLIP });
+  const second = await settledFrame(page);
   expect(second.equals(first)).toBe(true);
   expect(errors).toEqual([]);
 });

@@ -20,6 +20,16 @@ export interface ArtLibrary {
    * no mask exists (e.g. pixel data unavailable), so callers fall back to geometric picking.
    */
   hit(name: string | undefined, x: number, y: number): boolean | null;
+  /** Atlas image and rectangle of a frame (texture px), for drawing outside Pixi (Character Creator canvas). */
+  source(name: string): FrameSource | null;
+}
+export interface FrameSource {
+  readonly image: CanvasImageSource;
+  readonly x: number; readonly y: number; readonly w: number; readonly h: number;
+  /** Anchor in texture px from the frame's top-left. */
+  readonly ax: number; readonly ay: number;
+  /** Texture px per world px. */
+  readonly resolution: number;
 }
 
 export const ART_BASE = `${import.meta.env?.BASE_URL ?? '/'}art/vw3/`;
@@ -46,9 +56,10 @@ async function load(base: string): Promise<ArtLibrary | null> {
   if (errors.length) throw new Error(`invalid art manifest: ${errors.join('; ')}`);
   const frames = new Map<string, Texture>();
   const masks = new Map<string, HitMask>();
+  const sources = new Map<string, FrameSource>();
   const buildingFrames = new Set(Object.values(manifest.assets).filter((asset) => asset.category === 'building' && asset.color).map((asset) => asset.color!));
   let textureBytes = 0;
-  await Promise.all(manifest.sheets.map(async (sheet) => {
+  await Promise.all([...manifest.sheets, ...(manifest.characters?.sheets ?? [])].map(async (sheet) => {
     const [data, image] = await Promise.all([
       fetch(`${base}${sheet.file}`).then((r) => { if (!r.ok) throw new Error(`${sheet.file} ${r.status}`); return r.json() as Promise<SpritesheetData>; }),
       Assets.load<Texture>({ src: `${base}${sheet.image}`, data: { autoGenerateMipmaps: true, scaleMode: 'linear' } }),
@@ -58,6 +69,14 @@ async function load(base: string): Promise<ArtLibrary | null> {
     const spritesheet = new Spritesheet(image, data);
     await spritesheet.parse();
     for (const [name, texture] of Object.entries(spritesheet.textures)) frames.set(name, texture);
+    const resource = image.source.resource as CanvasImageSource | undefined;
+    const pageResolution = Number(data.meta.scale) || 1;
+    if (resource && sheet.file.startsWith('characters-')) {
+      for (const [name, entry] of Object.entries(data.frames)) {
+        const f = entry.frame, anchor = (entry as { anchor?: { x: number; y: number } }).anchor ?? { x: 0, y: 0 };
+        sources.set(name, { image: resource, x: f.x, y: f.y, w: f.w, h: f.h, ax: anchor.x * f.w, ay: anchor.y * f.h, resolution: pageResolution });
+      }
+    }
     const wanted = Object.entries(data.frames).filter(([name]) => buildingFrames.has(name));
     if (wanted.length) {
       const rgba = readPixels(image, sheet.width, sheet.height);
@@ -68,6 +87,7 @@ async function load(base: string): Promise<ArtLibrary | null> {
   }));
   const index = indexManifest(manifest);
   return { index, textureBytes, frame: (name) => (name ? frames.get(name) ?? null : null),
+    source: (name) => sources.get(name) ?? null,
     hit: (name, x, y) => { const mask = name ? masks.get(name) : undefined; return mask ? hitMask(mask, x, y) : null; } };
 }
 

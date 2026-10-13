@@ -11,7 +11,7 @@ import { indexManifest, type ArtManifest } from './artManifest';
 const manifest = JSON.parse(readFileSync(resolve(__dirname, '../../../public/art/vw3/manifest.json'), 'utf8')) as ArtManifest;
 /** A library whose every manifest frame resolves to a shared placeholder texture (no GPU needed). */
 function fakeLibrary(missing: (name: string) => boolean = () => false): ArtLibrary {
-  return { index: indexManifest(manifest), textureBytes: 0, frame: (name) => (name && !missing(name) ? Texture.WHITE : null), hit: () => null };
+  return { index: indexManifest(manifest), textureBytes: 0, frame: (name) => (name && !missing(name) ? Texture.WHITE : null), hit: () => null, source: () => null };
 }
 
 afterEach(() => resetArtForTests(null));

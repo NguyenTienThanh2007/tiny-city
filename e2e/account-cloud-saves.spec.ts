@@ -64,10 +64,11 @@ test('register, verify, sign in, upload/load cloud city, sign out and reset pass
   await page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Load to this device' }).click();
   await expect(page.locator('canvas')).toBeVisible();
+  // Loading a cloud city navigates into the game; a poll that lands mid-navigation just tries again.
   await expect.poll(() => page.evaluate((key) => {
     const value = localStorage.getItem(key);
     return value ? JSON.parse(value).simulation?.schemaVersion : null;
-  }, SAVE_KEY)).toBe(2);
+  }, SAVE_KEY).catch(() => null)).toBe(2);
 
   await page.getByRole('button', { name: /Cloud Builder/ }).click();
   await expect(page.getByRole('heading', { name: 'Profile & security' })).toBeVisible();

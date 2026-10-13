@@ -1,0 +1,587 @@
+{
+ "machine": "Apple M2, macOS 26 (Darwin 25.6), Playwright Chromium; GPU = ANGLE Metal, software = SwiftShader; 1440x900, deviceScaleFactor 1",
+ "builds": {
+  "3.0B": "origin/main @ 78c6927 production build",
+  "3.0C": "feature/visual-world-3c production build"
+ },
+ "runs": [
+  {
+   "label": "3b-vsync",
+   "baseUrl": "http://127.0.0.1:4190/",
+   "uncapped": false,
+   "date": "2026-10-13T07:27:20.407Z",
+   "runs": [
+    {
+     "target": 20,
+     "residents": 20,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.08,
+       "visibleResidents": 3
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.8,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.14,
+       "visibleResidents": 1
+      }
+     ]
+    },
+    {
+     "target": 100,
+     "residents": 100,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.8,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.21,
+       "visibleResidents": 1
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.8,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.23,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 300,
+     "residents": 300,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.8,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.27,
+       "visibleResidents": 80
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.29,
+       "visibleResidents": 7
+      }
+     ]
+    },
+    {
+     "target": 1000,
+     "residents": 1000,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.57,
+       "visibleResidents": 621
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.44,
+       "visibleResidents": 287
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "label": "3c-vsync",
+   "baseUrl": "http://127.0.0.1:4191/",
+   "uncapped": false,
+   "date": "2026-10-13T07:37:25.835Z",
+   "runs": [
+    {
+     "target": 20,
+     "residents": 20,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.8,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.32,
+       "visibleResidents": 3
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.18,
+       "visibleResidents": 1
+      }
+     ]
+    },
+    {
+     "target": 100,
+     "residents": 100,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.22,
+       "visibleResidents": 1
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.8,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.12,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 300,
+     "residents": 300,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.6,
+       "visibleResidents": 80
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 0.47,
+       "visibleResidents": 7
+      }
+     ]
+    },
+    {
+     "target": 1000,
+     "residents": 1000,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 1.54,
+       "visibleResidents": 607
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 16.67,
+       "p95Ms": 16.7,
+       "p99Ms": 16.8,
+       "fps": 60,
+       "rendererCpuMs": 1.02,
+       "visibleResidents": 273
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "label": "3b-uncapped",
+   "baseUrl": "http://127.0.0.1:4190/",
+   "uncapped": true,
+   "date": "2026-10-13T07:29:10.126Z",
+   "runs": [
+    {
+     "target": 20,
+     "residents": 20,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 1.9,
+       "p95Ms": 3.6,
+       "p99Ms": 3.8,
+       "fps": 526,
+       "rendererCpuMs": 0.01,
+       "visibleResidents": 3
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 1.57,
+       "p95Ms": 3,
+       "p99Ms": 3.2,
+       "fps": 637.8,
+       "rendererCpuMs": 0.01,
+       "visibleResidents": 2
+      }
+     ]
+    },
+    {
+     "target": 100,
+     "residents": 100,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 1.99,
+       "p95Ms": 3.8,
+       "p99Ms": 4.6,
+       "fps": 502.1,
+       "rendererCpuMs": 0.08,
+       "visibleResidents": 1
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 1.59,
+       "p95Ms": 3,
+       "p99Ms": 3.3,
+       "fps": 627.5,
+       "rendererCpuMs": 0.02,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 300,
+     "residents": 300,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 2.4,
+       "p95Ms": 4.6,
+       "p99Ms": 5.6,
+       "fps": 417,
+       "rendererCpuMs": 0.09,
+       "visibleResidents": 77
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 1.69,
+       "p95Ms": 3.1,
+       "p99Ms": 3.5,
+       "fps": 593,
+       "rendererCpuMs": 0.05,
+       "visibleResidents": 7
+      }
+     ]
+    },
+    {
+     "target": 1000,
+     "residents": 1000,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 7.36,
+       "p95Ms": 11,
+       "p99Ms": 12.8,
+       "fps": 135.9,
+       "rendererCpuMs": 0.62,
+       "visibleResidents": 631
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 3.5,
+       "p95Ms": 5.5,
+       "p99Ms": 7.3,
+       "fps": 285.9,
+       "rendererCpuMs": 0.35,
+       "visibleResidents": 268
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "label": "3c-uncapped",
+   "baseUrl": "http://127.0.0.1:4191/",
+   "uncapped": true,
+   "date": "2026-10-13T07:39:15.004Z",
+   "runs": [
+    {
+     "target": 20,
+     "residents": 20,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 1.87,
+       "p95Ms": 3.4,
+       "p99Ms": 4,
+       "fps": 534,
+       "rendererCpuMs": 0.03,
+       "visibleResidents": 3
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 1.38,
+       "p95Ms": 2.7,
+       "p99Ms": 2.9,
+       "fps": 724.1,
+       "rendererCpuMs": 0.01,
+       "visibleResidents": 2
+      }
+     ]
+    },
+    {
+     "target": 100,
+     "residents": 100,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 1.86,
+       "p95Ms": 3.5,
+       "p99Ms": 3.8,
+       "fps": 537.5,
+       "rendererCpuMs": 0.05,
+       "visibleResidents": 1
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 1.41,
+       "p95Ms": 2.8,
+       "p99Ms": 2.9,
+       "fps": 708.8,
+       "rendererCpuMs": 0.02,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 300,
+     "residents": 300,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 2.04,
+       "p95Ms": 3.9,
+       "p99Ms": 4.7,
+       "fps": 490.6,
+       "rendererCpuMs": 0.15,
+       "visibleResidents": 80
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 1.46,
+       "p95Ms": 2.8,
+       "p99Ms": 3.2,
+       "fps": 685,
+       "rendererCpuMs": 0.05,
+       "visibleResidents": 3
+      }
+     ]
+    },
+    {
+     "target": 1000,
+     "residents": 1000,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 7.2,
+       "p95Ms": 10.6,
+       "p99Ms": 12.4,
+       "fps": 138.8,
+       "rendererCpuMs": 1.6,
+       "visibleResidents": 627
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 2.95,
+       "p95Ms": 4.7,
+       "p99Ms": 6.6,
+       "fps": 338.5,
+       "rendererCpuMs": 0.38,
+       "visibleResidents": 259
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "label": "3b-software",
+   "baseUrl": "http://127.0.0.1:4190/",
+   "uncapped": false,
+   "software": true,
+   "date": "2026-10-13T07:41:05.866Z",
+   "runs": [
+    {
+     "target": 20,
+     "residents": 20,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 47.06,
+       "p95Ms": 66.6,
+       "p99Ms": 66.7,
+       "fps": 21.3,
+       "rendererCpuMs": 0.04,
+       "visibleResidents": 3
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 28.99,
+       "p95Ms": 33.4,
+       "p99Ms": 50,
+       "fps": 34.5,
+       "rendererCpuMs": 0.03,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 100,
+     "residents": 100,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 51.61,
+       "p95Ms": 66.7,
+       "p99Ms": 83.4,
+       "fps": 19.4,
+       "rendererCpuMs": 0.11,
+       "visibleResidents": 0
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 28.58,
+       "p95Ms": 33.4,
+       "p99Ms": 50,
+       "fps": 35,
+       "rendererCpuMs": 0.1,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 300,
+     "residents": 300,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 81.25,
+       "p95Ms": 116.7,
+       "p99Ms": 116.7,
+       "fps": 12.3,
+       "rendererCpuMs": 0.28,
+       "visibleResidents": 51
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 34.03,
+       "p95Ms": 50.1,
+       "p99Ms": 66.7,
+       "fps": 29.4,
+       "rendererCpuMs": 0.19,
+       "visibleResidents": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "label": "3c-software",
+   "baseUrl": "http://127.0.0.1:4191/",
+   "uncapped": false,
+   "software": true,
+   "date": "2026-10-13T07:42:36.248Z",
+   "runs": [
+    {
+     "target": 20,
+     "residents": 20,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 47.52,
+       "p95Ms": 66.7,
+       "p99Ms": 66.8,
+       "fps": 21,
+       "rendererCpuMs": 0.25,
+       "visibleResidents": 3
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 28.56,
+       "p95Ms": 33.4,
+       "p99Ms": 50,
+       "fps": 35,
+       "rendererCpuMs": 0.05,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 100,
+     "residents": 100,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 50,
+       "p95Ms": 66.7,
+       "p99Ms": 83.4,
+       "fps": 20,
+       "rendererCpuMs": 0.3,
+       "visibleResidents": 0
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 28.49,
+       "p95Ms": 33.4,
+       "p99Ms": 33.4,
+       "fps": 35.1,
+       "rendererCpuMs": 0.08,
+       "visibleResidents": 0
+      }
+     ]
+    },
+    {
+     "target": 300,
+     "residents": 300,
+     "views": [
+      {
+       "view": "gameplay",
+       "avgMs": 65.26,
+       "p95Ms": 83.4,
+       "p99Ms": 83.4,
+       "fps": 15.3,
+       "rendererCpuMs": 0.6,
+       "visibleResidents": 61
+      },
+      {
+       "view": "zoomed-out",
+       "avgMs": 32.55,
+       "p95Ms": 50,
+       "p99Ms": 66.6,
+       "fps": 30.7,
+       "rendererCpuMs": 0.18,
+       "visibleResidents": 3
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
