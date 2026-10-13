@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { untilClock } from './support/gameTime';
 import type { CityState } from '../src/types';
 
 /** Visual World 3.0C: baked characters, real venue visitors, camera stability, reduced motion. */
@@ -25,12 +26,11 @@ async function openCity(page: Page, city: unknown = street) {
   return errors;
 }
 const stats = (page: Page) => page.evaluate(() => (window as unknown as { __tinyCityRenderer?: Stats }).__tinyCityRenderer ?? null);
-const minutes = async (page: Page) => { const [, h, m] = /(\d\d):(\d\d)/.exec((await page.getByLabel('Simulation clock').textContent())!)!; return Number(h) * 60 + Number(m); };
 async function runUntil(page: Page, minute: number) {
   const resume = page.getByRole('button', { name: 'Resume', exact: true });
   if (await resume.isVisible()) await resume.click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();
-  await expect.poll(() => minutes(page), { timeout: 150_000 }).toBeGreaterThanOrEqual(minute);
+  await untilClock(page, minute);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
 }
 async function footprint(page: Page) {

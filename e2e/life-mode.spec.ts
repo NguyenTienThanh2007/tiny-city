@@ -1,8 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { untilClock, untilInGameTime, untilText } from './support/gameTime';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
-// A signed-out visitor's session check (GET /v1/auth/me) answers 401 by design (accounts, PR #16); Chromium logs it.
-const expectedSignedOut = (message: { text(): string; location(): { url: string } }) => /status of 401/.test(message.text()) && /\/v1\/auth\/me(\?|$)/.test(message.location().url);
 
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
 // One street: three homes, a park and an office all touch it; a separate road stub is unreachable on purpose.
@@ -23,7 +22,7 @@ test.slow();
 async function openCity(page: Page, city: unknown = fixture) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text()) && !expectedSignedOut(message)) errors.push(message.text()); });
+  page.on('console', (message) => { if (message.type() === 'error' && !/GL Driver Message/.test(message.text())) errors.push(message.text()); });
   await page.addInitScript(({ key, value }) => {
     if (!sessionStorage.getItem('life-fixture')) { localStorage.setItem(key, JSON.stringify(value)); sessionStorage.setItem('life-fixture', '1'); }
   }, { key: SAVE_KEY, value: city });
@@ -58,10 +57,6 @@ async function clickTile(page: Page, x: number, y: number) {
   const point = await screenPoint(page, x + 0.5, y + 0.5);
   await page.mouse.click(point.x, point.y);
 }
-async function minutes(page: Page) {
-  const [, h, m] = /(\d\d):(\d\d)/.exec((await page.getByLabel('Simulation clock').textContent())!)!;
-  return Number(h) * 60 + Number(m);
-}
 async function save(page: Page): Promise<Saved> {
   await page.getByRole('button', { name: /^(Save|Saved)$/ }).click();
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), SAVE_KEY);
@@ -85,6 +80,9 @@ async function createCharacter(page: Page, name: string, home: RegExp, welcome =
 }
 
 test('complete life: create, choose a home, walk, visit, meet a resident, rest, save and continue after reload', async ({ page }) => {
+  // A whole game day through the real UI. Its waits are in game time, which a slow runner renders slowly; give it
+  // more wall time than the file-wide slow budget so only a stalled clock (not a slow machine) fails it.
+  test.setTimeout(process.env.CI ? 420_000 : 180_000);
   const errors = await openCity(page);
   await page.getByRole('button', { name: 'Life', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Live in your city' })).toBeVisible();
@@ -126,7 +124,7 @@ test('complete life: create, choose a home, walk, visit, meet a resident, rest, 
   await clickTile(page, 30, 20);
   await expect(status(page)).toContainText('Walking to the street at 30, 20');
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect(status(page)).toContainText('Free to explore', { timeout: 30_000 });
+  await untilText(page, status(page), 'Free to explore', { within: 240 });
   expect((await save(page)).simulation.player!.position).toEqual({ x: 30.5, y: 20.5 });
   // Invalid and unreachable destinations explain themselves and change nothing.
   await clickTile(page, 30, 26);
@@ -136,17 +134,17 @@ test('complete life: create, choose a home, walk, visit, meet a resident, rest, 
 
   // Evening: residents walk to the park after work.
   await page.getByRole('button', { name: 'Speed 4x' }).click();
-  await expect.poll(() => minutes(page), { timeout: 90_000 }).toBeGreaterThanOrEqual(17 * 60 + 25);
+  await untilClock(page, 17 * 60 + 25);
   await page.getByRole('button', { name: 'Speed 1x' }).click();
   await page.getByRole('button', { name: /Visit a park/ }).click();
   await expect(status(page)).toContainText('Walking to Sunny Park');
-  await expect(status(page)).toContainText('Enjoying Sunny Park', { timeout: 30_000 });
+  await untilText(page, status(page), 'Enjoying Sunny Park', { within: 240 });
   const nearby = page.getByRole('list', { name: 'Nearby residents' });
   // A resident whose own park visit ends mid-greeting leaves ("they had to go") by design; greet someone else then.
   // The journey still requires one completed greeting.
   let greeted = '';
   for (let attempt = 0; attempt < 3 && !greeted; attempt += 1) {
-    await expect(nearby.getByRole('button').first()).toBeVisible({ timeout: 30_000 });
+    await untilInGameTime(page, 'a nearby resident', () => nearby.getByRole('button').count(), (count) => count > 0, { within: 180 });
     // Read the diary before the resident profile replaces the Life panel.
     const stoppedBefore = ((await diary(page).textContent()) ?? '').split('Greeting stopped').length;
     // The list re-sorts by live distance while the clock runs, so click the resident that was read, not "first" again.
@@ -159,23 +157,23 @@ test('complete life: create, choose a home, walk, visit, meet a resident, rest, 
     expect(residentName).toBe(neighbour);
     await profile.getByRole('region', { name: 'Interact' }).getByRole('button', { name: /^Greet/ }).click();
     await page.getByRole('button', { name: 'Close resident profile' }).click();
-    await expect(diary(page)).toContainText(`You met ${residentName}.`, { timeout: 20_000 });
-    await expect.poll(async () => {
+    await untilText(page, diary(page), `You met ${residentName}.`, { within: 120 });
+    await untilInGameTime(page, `greeting ${residentName}`, async () => {
       const text = (await diary(page).textContent()) ?? '';
       if (text.includes(`Said hello with ${residentName}.`)) return 'greeted';
       return text.split('Greeting stopped').length > stoppedBefore ? 'left' : 'pending';
-    }, { timeout: 20_000 }).not.toBe('pending');
+    }, (result) => result !== 'pending', { within: 120 });
     if (((await diary(page).textContent()) ?? '').includes(`Said hello with ${residentName}.`)) greeted = residentName;
   }
   expect(greeted).not.toBe('');
 
   // Return home and rest.
   await page.getByRole('button', { name: /^Go home/ }).click();
-  await expect(status(page)).toContainText('At home · Lagoon Villa', { timeout: 30_000 });
+  await untilText(page, status(page), 'At home · Lagoon Villa', { within: 240 });
   await page.getByRole('button', { name: /^Rest/ }).click();
   await expect(status(page)).toContainText('Resting at home');
   await page.getByRole('button', { name: 'Speed 4x' }).click();
-  await expect(diary(page)).toContainText('Rested.', { timeout: 30_000 });
+  await untilText(page, diary(page), 'Rested.', { within: 900 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
 
   const before = await save(page);
@@ -228,7 +226,7 @@ test('cancelled actions, AI previews and a demolished home never corrupt Life mo
   await createCharacter(page, 'Linh', /Palm Villa/, false);
   await page.getByRole('button', { name: /^Rest/ }).click();
   await expect(status(page)).toContainText('Resting at home');
-  await expect.poll(async () => (await save(page)).simulation.player!.activity.elapsedMinutes, { timeout: 20_000 }).toBeGreaterThan(2);
+  await untilInGameTime(page, 'two minutes of rest', async () => (await save(page)).simulation.player!.activity.elapsedMinutes, (elapsed) => elapsed > 2, { within: 60 });
   await page.getByRole('button', { name: 'Cancel', exact: true }).first().click();
   await expect(diary(page)).toContainText('Resting cancelled after');
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
@@ -349,7 +347,7 @@ test('housing recovery: all homes full, build a home, the held room survives res
   await clickTile(page, 36, 20);
   await expect(status(page)).toContainText('Walking to the street at 36, 20');
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect(status(page)).toContainText('Free to explore', { timeout: 30_000 });
+  await untilText(page, status(page), 'Free to explore', { within: 240 });
   // City edits keep housing consistent: another villa now fills completely with residents.
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.getByRole('button', { name: 'Build', exact: true }).click();

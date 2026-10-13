@@ -21,6 +21,8 @@ export default defineConfig({
   // SwiftShader canvas captures take 5–8s on hosted Linux runners; complete
   // build/move/history/reload workflows need a larger bounded CI deadline.
   timeout: process.env.CI ? 90_000 : 45_000,
+  // Below the gameplay job's 60-minute limit, so a slow CI run ends with Playwright's report instead of a bare cancel.
+  globalTimeout: process.env.CI ? 50 * 60_000 : 0,
   expect: { timeout: process.env.CI ? 20_000 : 5_000 },
   fullyParallel: false,
   workers: 1,
