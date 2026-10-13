@@ -12,8 +12,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 class RequestBoundary:
-    def __init__(self, app, limit: int):
-        self.app, self.limit = app, limit
+    def __init__(self, app, limit: int, cloud_save_limit: int | None = None):
+        self.app, self.limit, self.cloud_save_limit = app, limit, cloud_save_limit or limit
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -29,14 +29,15 @@ class RequestBoundary:
                 message['headers'].append((b'x-request-id',request_id.encode()))
             await send(message)
         try:
-            if scope['method'] == 'POST' and scope['path'].startswith('/v1/city/'):
+            if scope['method'] in {'POST', 'PUT', 'PATCH', 'DELETE'} and scope['path'].startswith('/v1/'):
+                limit = self.cloud_save_limit if scope['path'].startswith('/v1/users/me/cities') else self.limit
                 body = bytearray()
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body',b''))
-                    if len(body)>self.limit:
+                    if len(body)>limit:
                         response=JSONResponse({'requestId':request_id,'error':{'code':'REQUEST_TOO_LARGE','message':'Request body exceeds the size limit.','retryable':False}},status_code=413)
                         return await response(scope,receive,send_response)
                     if not message.get('more_body',False):
@@ -53,3 +54,25 @@ class RequestBoundary:
                 await self.app(scope,receive,send_response)
         finally:
             logger.info(json.dumps({'event':'http_request','requestId':request_id,'status':status,'durationMs':round((time.monotonic()-started)*1000)}))
+
+
+class SecurityHeaders:
+    def __init__(self, app, secure: bool = False):
+        self.app, self.secure = app, secure
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            return await self.app(scope, receive, send)
+        async def add_headers(message):
+            if message['type'] == 'http.response.start':
+                headers = message.setdefault('headers', [])
+                headers.extend([
+                    (b'x-content-type-options', b'nosniff'),
+                    (b'x-frame-options', b'DENY'),
+                    (b'referrer-policy', b'strict-origin-when-cross-origin'),
+                    (b'permissions-policy', b'camera=(), microphone=(), geolocation=()'),
+                ])
+                if self.secure:
+                    headers.append((b'strict-transport-security', b'max-age=31536000; includeSubDomains'))
+            await send(message)
+        await self.app(scope, receive, add_headers)

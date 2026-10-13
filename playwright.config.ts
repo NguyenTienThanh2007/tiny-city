@@ -1,11 +1,18 @@
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 
 const liveCheck=process.env.TINY_CITY_LIVE_UI==='1';
 if(liveCheck && process.env.CI) throw new Error('Paid Gemini UI checks are forbidden in CI.');
 const backendEnvironment:Record<string,string>={TINY_CITY_PROVIDER_MODE:liveCheck?'gemini':'mock',
-  TINY_CITY_CORS_ORIGINS:'http://127.0.0.1:4173',TINY_CITY_REQUESTS_PER_MINUTE:'120'};
+  TINY_CITY_CORS_ORIGINS:'http://127.0.0.1:4173',TINY_CITY_REQUESTS_PER_MINUTE:'120',
+  APP_ENV:'test',SESSION_COOKIE_SECURE:'false',SESSION_COOKIE_SAMESITE:'lax',
+  DATABASE_URL:`sqlite:///${join(tmpdir(),`tiny-city-e2e-${randomUUID()}.sqlite3`)}`,
+  AUTH_EMAIL_BACKEND:'disabled',DEV_EMAIL_SINK_ENABLED:'false',FRONTEND_BASE_URL:'http://127.0.0.1:4173'};
 if(!liveCheck) backendEnvironment.GEMINI_API_KEY='';
+const accountBackendEnvironment={...backendEnvironment,AUTH_EMAIL_BACKEND:'dev_sink',DEV_EMAIL_SINK_ENABLED:'true'};
 
 export default defineConfig({
   testDir: './e2e',
@@ -37,13 +44,13 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
   }, {
-    command: 'uv run --locked --extra dev uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8012',
+    command: 'uv run --locked --extra dev alembic upgrade head && uv run --locked --extra dev uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8012',
     cwd: fileURLToPath(new URL('./apps/api/', import.meta.url)),
     url: 'http://127.0.0.1:8012/health',
     reuseExistingServer: false,
     timeout: 60_000,
     // Explicit test mode and an empty override prevent paid calls even if a local .env has a key.
-    env: backendEnvironment,
+    env: accountBackendEnvironment,
     gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -54,7 +61,7 @@ export default defineConfig({
     url: 'http://127.0.0.1:8015/health',
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { TINY_CITY_PROVIDER_MODE: 'local', GEMINI_API_KEY: '', TINY_CITY_CORS_ORIGINS: 'http://127.0.0.1:4173', TINY_CITY_REQUESTS_PER_MINUTE: '120' },
+    env: { ...backendEnvironment, TINY_CITY_PROVIDER_MODE: 'local' },
     gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },
     stdout: 'pipe',
     stderr: 'pipe',

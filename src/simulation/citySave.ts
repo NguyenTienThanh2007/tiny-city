@@ -39,11 +39,10 @@ function restoreAppearances(city: CityState): CityState {
 }
 
 /** Keep the original save key and top-level map fields for v1 compatibility. */
-export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
+/** Decode an untrusted save envelope with the same simulation validation as browser local saves. */
+export function loadCitySaveValue(parsed: unknown): LoadedCity {
   let recovery = false;
   try {
-    const saved = (storage ?? localStorage).getItem(SAVE_KEY);
-    const parsed: unknown = saved === null ? null : JSON.parse(saved);
     const version = record(parsed) ? parsed.saveVersion : undefined;
     if (version !== undefined && version !== 1 && version !== 2 && version !== 3) {
       throw new Error('unsupported save envelope');
@@ -78,6 +77,16 @@ export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
   return { city: initialCity, world: createCityWorld(initialCity), ...(recovery ? {
     notice: 'The saved city could not be loaded. Showing the sample city; the original save is unchanged until you save again.',
   } : {}) };
+}
+
+export function loadCitySave(storage?: Pick<Storage, 'getItem'>): LoadedCity {
+  try {
+    const saved = (storage ?? localStorage).getItem(SAVE_KEY);
+    return loadCitySaveValue(saved === null ? null : JSON.parse(saved));
+  } catch {
+    return { city: initialCity, world: createCityWorld(initialCity),
+      notice: 'The saved city could not be loaded. Showing the sample city; the original save is unchanged until you save again.' };
+  }
 }
 
 export function saveCity(storage: Pick<Storage, 'setItem'>, city: CityState, world: WorldState): void {

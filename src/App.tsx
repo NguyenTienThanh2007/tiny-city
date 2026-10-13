@@ -29,6 +29,8 @@ import { loadCitySave, saveCity } from './simulation/citySave';
 import { useCitySimulation } from './simulation/useCitySimulation';
 import { projectCity } from './simulation/cityAdapter';
 import { BUILDINGS, type BuildingKind, type CityState, type Cell, type Tool } from './types';
+import { useAuth } from './auth/AuthProvider';
+import { navigate, usePathname } from './auth/navigation';
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
 type BaseMode = 'build' | 'live' | 'life';
@@ -117,6 +119,8 @@ const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
 ];
 
 function App() {
+  const auth = useAuth();
+  const pathname = usePathname();
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
   const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
@@ -184,6 +188,10 @@ function App() {
     setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, ...(cell ? { cell } : {}) }));
   }, []);
   const noticeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (pathname !== '/' && !getSnapshot().clock.paused) togglePause();
+  }, [pathname, getSnapshot, togglePause]);
 
   const advanceSimulation = useCallback((elapsedMs: number) => {
     const tick = getSnapshot().clock.tick;
@@ -366,6 +374,7 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (window.location.pathname !== '/') return;
       const target = event.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
       const key = event.key.toLowerCase();
@@ -429,6 +438,17 @@ function App() {
       showNotice('Villa Gardens saved on this device');
     } catch {
       showNotice('Could not save this city in browser storage.');
+    }
+  };
+
+  const openCloudSaves = () => {
+    try {
+      // Preserve the live editor state locally before showing account pages; cloud upload remains an explicit choice.
+      saveCity(localStorage, cityRef.current, getSnapshot());
+      setSaved(true);
+      navigate('/account/saves');
+    } catch {
+      showNotice('Save this city on your device before opening cloud saves.', 'warn');
     }
   };
 
@@ -1043,6 +1063,11 @@ function App() {
         <div className="top-actions">
           <button className="icon-button" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!history.length}><Icon name="undo" /></button>
           <button className="icon-button" aria-label="Redo" title="Redo (⌘⇧Z)" onClick={redo} disabled={!redoHistory.length}><Icon name="redo" /></button>
+          {auth.status === 'authenticated' && <button className="cloud-button" onClick={openCloudSaves} title="Manage account cloud cities">Cloud</button>}
+          <button className="account-button" onClick={() => navigate(auth.status === 'authenticated' ? '/account' : '/login')}
+            disabled={auth.status === 'loading'} title={auth.user ? `Account: ${auth.user.displayName}` : 'Sign in or create an account'}>
+            {auth.user ? <><span className="account-avatar-mini">{auth.user.displayName.trim().slice(0, 1).toUpperCase()}</span><span className="account-button-name">{auth.user.displayName}</span></> : 'Sign in'}
+          </button>
           <button className={`save-button ${saved ? 'is-saved' : ''}`} onClick={save}><Icon name="save" size={16} />{saved ? 'Saved' : 'Save'}</button>
         </div>
       </header>
