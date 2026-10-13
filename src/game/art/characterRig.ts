@@ -7,11 +7,15 @@ import { characterLayers, frameName, type CharacterFacing, type CharacterLook, t
  * into a handful of draw calls). Textures only change when the frame changes. Feet are at the container origin;
  * one local unit is one world pixel at scale 1 (the baked figure is about 26 px tall).
  */
+const ZERO = { x: 0, y: 0 };
+
 export class CharacterRig {
   readonly root = new Container();
   private readonly sprites: Sprite[] = [];
   private layers: { front: LayerRef[]; back: LayerRef[]; sitFront: LayerRef[] };
   private key = '';
+  /** Textures per frame key, so a frame change does not rebuild frame names or hit the atlas map. */
+  private frames = new Map<string, (Texture | null)[]>();
 
   constructor(private readonly art: ArtLibrary, look: CharacterLook) {
     this.root.eventMode = 'none';
@@ -25,6 +29,7 @@ export class CharacterRig {
   setLook(look: CharacterLook): void {
     this.layers = CharacterRig.layersFor(look);
     this.key = '';
+    this.frames.clear();
   }
 
   /** Shows one animation frame. Mirroring is done by the caller (the whole resident flips, badges included). */
@@ -33,16 +38,23 @@ export class CharacterRig {
     if (key === this.key) return;
     this.key = key;
     const list = pose === 'sit' && facing === 'front' ? this.layers.sitFront : this.layers[facing];
+    let textures = this.frames.get(key);
+    if (!textures) { textures = list.map((ref) => this.art.frame(frameName(ref, facing, pose, frame))); this.frames.set(key, textures); }
     while (this.sprites.length < list.length) { const sprite = new Sprite(Texture.EMPTY); sprite.eventMode = 'none'; this.sprites.push(sprite); this.root.addChild(sprite); }
     for (let i = 0; i < this.sprites.length; i += 1) {
       const sprite = this.sprites[i]!;
       const ref = list[i];
-      const texture = ref ? this.art.frame(frameName(ref, facing, pose, frame)) : null;
-      if (!ref || !texture) { sprite.visible = false; continue; }
-      sprite.visible = true;
-      sprite.texture = texture;
-      sprite.anchor.copyFrom(texture.defaultAnchor ?? { x: 0, y: 0 });
-      sprite.tint = ref.tint ?? 0xffffff;
+      const texture = ref ? textures[i] ?? null : null;
+      if (!ref || !texture) { if (sprite.visible) sprite.visible = false; continue; }
+      if (!sprite.visible) sprite.visible = true;
+      // Setters invalidate Pixi's batch data, so only touch what changed (hundreds of walkers swap frames per frame).
+      if (sprite.texture !== texture) {
+        sprite.texture = texture;
+        const anchor = texture.defaultAnchor ?? ZERO;
+        if (sprite.anchor.x !== anchor.x || sprite.anchor.y !== anchor.y) sprite.anchor.set(anchor.x, anchor.y);
+      }
+      const tint = ref.tint ?? 0xffffff;
+      if (sprite.tint !== tint) sprite.tint = tint;
     }
   }
 

@@ -8,6 +8,7 @@ import { writeFileSync } from 'node:fs';
 
 const baseUrl = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://127.0.0.1:5181/';
 const uncapped = process.argv.includes('--uncapped');
+const software = process.argv.includes('--software');
 const label = process.argv.find((arg) => arg.startsWith('--label='))?.slice(8) ?? 'run';
 const out = process.argv.find((arg) => arg.startsWith('--out='))?.slice(6);
 const targets = (process.argv.find((arg) => arg.startsWith('--targets='))?.slice(10) ?? '20,100,300,1000').split(',').map(Number);
@@ -27,8 +28,9 @@ function city(target) {
     buildings: order.map(({ kind }, index) => ({ id: `${kind}-${index}`, kind, name: `${kind} ${index}`, x: slots[index].x, y: slots[index].y, createdAt: 0 })) };
 }
 
-const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=metal', '--ignore-gpu-blocklist', ...(uncapped ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : [])] });
-const results = { label, baseUrl, uncapped, date: new Date().toISOString(), runs: [] };
+const gpu = software ? ['--enable-webgl', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--enable-webgl', '--use-angle=metal', '--ignore-gpu-blocklist'];
+const browser = await chromium.launch({ args: [...gpu, ...(uncapped ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : [])] });
+const results = { label, baseUrl, uncapped, software, date: new Date().toISOString(), runs: [] };
 const frames = (page, ms = 5000) => page.evaluate((duration) => new Promise((resolve) => {
   const deltas = []; let last = performance.now(); const end = last + duration;
   const tick = (now) => { deltas.push(now - last); last = now; if (now < end) requestAnimationFrame(tick); else resolve(deltas.slice(5)); };
