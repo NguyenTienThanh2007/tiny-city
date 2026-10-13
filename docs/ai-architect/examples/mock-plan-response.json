@@ -2,8 +2,8 @@
   "requestId": "offline-example",
   "proposal": {
     "contractVersion": 1,
-    "planId": "plan-9b3c8dbd592c98d79f6fea202b218b2251126eff95a783ee9926a51be8c6db81",
-    "digest": "9b3c8dbd592c98d79f6fea202b218b2251126eff95a783ee9926a51be8c6db81",
+    "planId": "plan-967e1c16101b8c5a665f0b70189fdf3381b6399dc726138e10ba93254da9af66",
+    "digest": "967e1c16101b8c5a665f0b70189fdf3381b6399dc726138e10ba93254da9af66",
     "sourceWorldId": "villa-gardens-world",
     "sourceRevision": 0,
     "sourceFingerprint": "eb08251710142bd3d0217d62b5cb3ac9ce1e202ad9eb1002efc979f26119ee76",
@@ -25,12 +25,14 @@
         {
           "buildingType": "villa",
           "quantity": 2,
-          "preferredPosition": null
+          "preferredPosition": null,
+          "design": null
         },
         {
           "buildingType": "park",
           "quantity": 1,
-          "preferredPosition": null
+          "preferredPosition": null,
+          "design": null
         }
       ],
       "moves": [],
@@ -64,7 +66,8 @@
           "width": 2,
           "height": 2
         },
-        "operation": "build"
+        "operation": "build",
+        "design": null
       },
       {
         "buildingId": "building-2",
@@ -77,7 +80,8 @@
           "width": 2,
           "height": 2
         },
-        "operation": "build"
+        "operation": "build",
+        "design": null
       },
       {
         "buildingId": "building-3",
@@ -90,7 +94,8 @@
           "width": 4,
           "height": 4
         },
-        "operation": "build"
+        "operation": "build",
+        "design": null
       }
     ],
     "roads": {

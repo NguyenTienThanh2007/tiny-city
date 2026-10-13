@@ -6,7 +6,8 @@ import type { Building as SimBuilding, CityCommand, CitySnapshot } from '@tiny-c
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { BuildingDesign, PlanProposal, PlanningConstraints, PlanningHost, PlanningResponse, ValidationRequest } from '@tiny-city/ai-architect';
 import { applyCollectionToAll, DEFAULT_CHOICE, readDesignChoices, resolveChoice, writeDesignChoices, type DesignChoices } from './game/architecture';
-import { architectureCollection } from '@tiny-city/ai-architect';
+import { architectureCollection, architectureModel } from '@tiny-city/ai-architect';
+import { ModelThumb } from './ui/ArchitecturePicker';
 import CityViewport from './game/CityViewport';
 import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea, TargetHighlight } from './game/CityViewport';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
@@ -184,7 +185,9 @@ function App() {
   const gestureRef = useRef<{ active: boolean; recorded: boolean }>({ active: false, recorded: false });
   const architectHostRef = useRef<PlanningHost | null>(null);
   const latestSnapshotReaderRef = useRef(getSnapshot);
-  const latestCommitRef = useRef<(commands: readonly CityCommand[]) => ReturnType<typeof executeBatch>>(() => {
+  /** Designs of the AI plan being applied (3.1), read by the commit boundary while the approved batch runs. */
+  const architectDesignsRef = useRef<{ byId: Map<string, BuildingDesign | null>; byOrder: (BuildingDesign | null)[] } | null>(null);
+  const latestCommitRef = useRef<(commands: readonly CityCommand[], designFor?: (building: SimBuilding, index: number) => BuildingDesign | undefined) => ReturnType<typeof executeBatch>>(() => {
     throw new Error('The city commit boundary is not ready.');
   });
   const activeReviewRef = useRef<PlanReview | null>(null);
@@ -272,7 +275,11 @@ function App() {
   if (architectHostRef.current === null) {
     architectHostRef.current = {
       getState: () => latestSnapshotReaderRef.current(),
-      executeBatch: (commands: readonly CityCommand[]) => latestCommitRef.current(commands),
+      // An approved AI plan records the architectural design of each building it creates (by predicted ID, then order).
+      executeBatch: (commands: readonly CityCommand[]) => latestCommitRef.current(commands, (building, index) => {
+        const planned = architectDesignsRef.current;
+        return planned ? (planned.byId.get(building.id) ?? planned.byOrder[index]) ?? undefined : undefined;
+      }),
     };
   }
 
@@ -732,7 +739,10 @@ function App() {
     setDestructiveConfirmation(false);
     try {
       review.approve(proposal.planId, destructive ? { allowDestructive: true } : {});
-      const result = await review.apply();
+      const builds = proposal.placements.filter((placement) => placement.operation === 'build');
+      architectDesignsRef.current = { byId: new Map(builds.map((placement) => [placement.buildingId, placement.design ?? null])), byOrder: builds.map((placement) => placement.design ?? null) };
+      let result;
+      try { result = await review.apply(); } finally { architectDesignsRef.current = null; }
       if (!result.applied) throw new PlanError('PLAN_REJECTED', 'The simulation did not apply this proposal.');
       activeReviewRef.current = null;
       setArchitectPanelOpen(false);
@@ -1024,6 +1034,12 @@ function App() {
     .filter((placement) => placement.operation === 'build')
     .reduce<Record<string, number>>((counts, placement) => ({ ...counts, [placement.buildingType]: (counts[placement.buildingType] ?? 0) + 1 }), {}))
     .map(([type, count]) => ({ type: type as BuildingKind, count, cost: count * BUILDINGS[type as BuildingKind].cost })) : [];
+  /** 3.1: the architecture the plan gives its new buildings, by model (shown before approval). */
+  const proposalDesigns = (() => {
+    const counts = new Map<string, number>();
+    for (const placement of currentProposal?.placements ?? []) if (placement.operation === 'build' && placement.design) counts.set(placement.design.model, (counts.get(placement.design.model) ?? 0) + 1);
+    return [...counts];
+  })();
   const toolHint = tool === 'select' ? (populationEnabled ? 'Click a resident or building to inspect it' : 'Click a building to inspect it')
     : tool === 'road' ? 'Click or drag to pave road tiles · $8 each'
     : tool === 'move' ? (movingBuildingId ? 'Choose an open destination for the building' : 'Click a building to move it')
@@ -1245,6 +1261,10 @@ function App() {
               {proposalBreakdown.map((line) => <li key={line.type}><BuildingThumb kind={line.type} /><span>{line.count} × {BUILDINGS[line.type].label}</span><b>${line.cost.toLocaleString()}</b></li>)}
               {currentProposal.roads.add.length > 0 && <li><span className="road-swatch" /><span>{currentProposal.roads.add.length} × Road tile</span><b>${(currentProposal.roads.add.length * CONSTRUCTION_COSTS.road).toLocaleString()}</b></li>}
             </ul>}
+            {currentProposal.status !== 'REJECTED' && proposalDesigns.length > 0 && <ul className="impact-list proposal-designs" aria-label="Plan architecture">
+              {proposalDesigns.map(([model, count]) => <li key={model}><ModelThumb model={architectureModel(model) ?? null} kind={architectureModel(model)?.buildingType ?? 'villa'} size={28} />
+                {count} × {architectureModel(model)?.name ?? model}<small>{architectureCollection(architectureModel(model)?.collection ?? '')?.name}</small></li>)}
+            </ul>}
             {currentProposal.status !== 'REJECTED' && <ul className="impact-list" aria-label="Plan impact">
               {currentProposal.impact.buildingsRemoved > 0 && <li className="is-remove"><Icon name="bulldoze" size={13} />Removes {currentProposal.impact.buildingsRemoved} building{currentProposal.impact.buildingsRemoved === 1 ? '' : 's'}{currentProposal.impact.roomsRemoved ? ` (${currentProposal.impact.roomsRemoved} rooms)` : ''}</li>}
               {currentProposal.impact.residentsRemoved > 0 && <li className="is-remove"><Icon name="people" size={13} />{currentProposal.impact.residentsRemoved} resident{currentProposal.impact.residentsRemoved === 1 ? '' : 's'} will leave the city (no free room)</li>}
@@ -1262,7 +1282,7 @@ function App() {
             </div>
             {currentProposal.placements.length > 0 && <ul className="proposal-placements" aria-label="Proposed building locations">
               {currentProposal.placements.map((placement) => <li key={`${placement.operation}-${placement.buildingId}`}>
-                <span>{placement.operation === 'move' ? 'Move' : 'Build'} {toolLabels[placement.buildingType]}</span>
+                <span>{placement.operation === 'move' ? 'Move' : 'Build'} {toolLabels[placement.buildingType]}{placement.design ? ` · ${architectureModel(placement.design.model)?.name ?? placement.design.model}` : ''}</span>
                 <small>{placement.position.x}, {placement.position.y} · {placement.footprint.width} × {placement.footprint.height}</small>
               </li>)}
             </ul>}

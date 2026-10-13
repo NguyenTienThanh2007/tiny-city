@@ -28,7 +28,13 @@ export { buildingLift } from './buildingArt';
 /** `cell` may be fractional (a resident's position). `zoom` multiplies the scale around the visible center. */
 export type CameraRequest = { id: number; cell?: Position; zoom?: number; scale?: number };
 export type SafeArea = { left: number; right: number; top: number; bottom: number };
-export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number; venueVisitors?: number; art?: string };
+export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number; venueVisitors?: number; art?: string;
+  /** Finished and constructing buildings drawn from baked art vs the vector fallback at the last city redraw (3.1). */
+  bakedBuildings?: number; vectorBuildings?: number;
+  /** Baked art drawn per model (classic art as `classic:<kind>:v<variant>`), so tests can see exactly what is shown. */
+  drawnModels?: Record<string, number> };
+/** Counters for the last city redraw (read into RendererStats). */
+const drawStats = { baked: 0, vector: 0, models: {} as Record<string, number> };
 /** What a Life Mode click points at, in priority order: the player, a resident, a building, then a tile. */
 export type LifeTarget = { type: 'player' } | { type: 'citizen'; id: string } | { type: 'building'; id: string } | { type: 'tile'; cell: Cell };
 export type { HomeHighlight, LifeFeedback };
@@ -234,6 +240,8 @@ function drawBakedBuilding(layer: Container, shadows: Container | null, building
   const asset = selectBuildingAsset(art.index, building, sides);
   const texture = art.frame(asset?.color);
   if (!asset || !texture) return false;
+  const shown = asset.model ?? `classic:${asset.kind}:v${asset.variant}`;
+  drawStats.models[shown] = (drawStats.models[shown] ?? 0) + 1;
   const origin = iso(building.x, building.y);
   const depth = buildingDepth(building.x, building.y, spec.width, spec.height);
   const item = new Container();
@@ -294,7 +302,8 @@ function drawBuilding(layer: Container, building: Building, selected: boolean, p
   const spec = BUILDINGS[building.kind];
   const sides = roadSidesFor(building, roadSet);
   const art = currentArt();
-  if (art && drawBakedBuilding(layer, shadows, building, selected, progress, sides, registry, art)) return;
+  if (art && drawBakedBuilding(layer, shadows, building, selected, progress, sides, registry, art)) { drawStats.baked += 1; return; }
+  drawStats.vector += 1;
   const item = new Container();
   item.label = 'building';
   const ground = footprint(building.x, building.y, spec.width, spec.height);
@@ -365,6 +374,7 @@ function clearBuildings(buildings: Container, registry: BuildingRegistry, shadow
 
 function redrawBuildings(buildings: Container, city: CityState, plan: CityPlan, selectedId: string | null, registry: BuildingRegistry, textures: BuildingTextures, shadows: Container | null = null) {
   clearBuildings(buildings, registry, shadows);
+  drawStats.baked = 0; drawStats.vector = 0; drawStats.models = {};
   const roadSet = new Set(plan.roads.map(({ x, y }) => cellKey(x, y)));
   textures.begin();
   for (const building of getRenderBuildings(city, plan)) {
@@ -439,6 +449,30 @@ function redrawProposalOverlay(layer: Container, proposal: PlanProposal | null |
     buildings.stroke({ color: 0xffffff, width: 1.6, alpha: 0.9 });
   }
   layer.addChild(buildings);
+  // 3.1: each planned building shows its exact architectural model as a translucent blueprint sprite (the classic
+  // look its ID will get when the plan names no design), facing the roads of the projected plan.
+  const art = currentArt();
+  if (!art) return;
+  const roadSet = new Set(proposal.projectedPlan.roads.map((tile) => cellKey(tile.x, tile.y)));
+  const ghosts = new Container();
+  ghosts.sortableChildren = true;
+  for (const placement of proposal.placements) {
+    if (placement.operation !== 'build') continue;
+    const kind = placement.buildingType as BuildingKind;
+    const editor: Building = { id: placement.buildingId, kind, x: placement.position.x, y: placement.position.y, name: '', createdAt: 0,
+      design: placement.design ?? resolveChoice(kind, undefined, placement.buildingId) };
+    const asset = selectBuildingAsset(art.index, editor, roadSidesFor(editor, roadSet));
+    const texture = art.frame(asset?.color);
+    if (!texture) continue;
+    const sprite = new Sprite(texture);
+    const at = iso(editor.x, editor.y);
+    sprite.anchor.copyFrom(texture.defaultAnchor ?? { x: 0, y: 0 });
+    sprite.position.set(at.x, at.y);
+    sprite.alpha = 0.78;
+    sprite.zIndex = buildingDepth(editor.x, editor.y, BUILDINGS[kind].width, BUILDINGS[kind].height);
+    ghosts.addChild(sprite);
+  }
+  layer.addChild(ghosts);
 }
 
 function buildingAt(city: CityState, x: number, y: number): Building | undefined {
@@ -1205,7 +1239,8 @@ export default function CityViewport(props: Props) {
           const stats: RendererStats = { fps: Math.round(frames * 1000 / (frameStart - frameWindowStart)),
             frameMs: Math.round(frameCost / frames * 100) / 100, residents: npcs.count,
             visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length,
-            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading' };
+            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading',
+            bakedBuildings: drawStats.baked, vectorBuildings: drawStats.vector, drawnModels: { ...drawStats.models } };
           (window as unknown as { __tinyCityRenderer?: RendererStats }).__tinyCityRenderer = stats;
           frames = 0; frameCost = 0; frameWindowStart = frameStart;
         }

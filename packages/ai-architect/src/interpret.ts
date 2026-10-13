@@ -1,5 +1,8 @@
 import type { BuildingType, Position } from '@tiny-city/simulation';
-import type { ArchitectIntent, MoveTarget, TargetRelative, TargetSelector } from './contracts.js';
+import type { ArchitectIntent, BuildDesignRequest, MoveTarget, TargetRelative, TargetSelector } from './contracts.js';
+import { architectureCollection, architectureModel, findArchitectureMentions } from './architecture.js';
+
+const GENERIC_MODERN = /(hiện đại|đương đại)|\b(modern|contemporary)\b/u;
 
 /**
  * Deterministic offline interpreter for common Vietnamese and English city commands. Used by the explicit
@@ -137,12 +140,35 @@ export function interpretLocally(prompt: string, context: InterpretContext = {})
       quantity: typeof quantity === 'number' ? Math.max(1, Math.min(32, quantity)) : 1,
     });
     if (verb === 'build') {
-      for (const m of mentions) {
+      // Visual World 3.1: named collections and models in this clause. A model applies to builds of its type, a
+      // collection to every build; a generic "modern"/"hiện đại" means the Luxury Minimalist collection (said so in
+      // the summary). The planner validates everything and refuses, never substitutes, unknown models.
+      const arch = findArchitectureMentions(raw);
+      const models = arch.filter((a) => a.model);
+      const style = arch.find((a) => !a.model)?.collection ?? (!arch.length && GENERIC_MODERN.test(raw) ? 'luxury-minimalist' : null);
+      if (style && !arch.length) summary.push(vi ? 'phong cách hiện đại = Luxury Minimalist' : 'modern style = Luxury Minimalist');
+      const designFor = (type: BuildingType): BuildDesignRequest | null => {
+        const model = models.find((a) => a.model!.buildingType === type)?.model;
+        return model ? { collection: model.collection, model: model.id } : style ? { collection: style, model: null } : null;
+      };
+      // "three Glass Pavilion Villas" / "5 Luxury Minimalist villas": the count stands before the style phrase that
+      // contains or directly precedes the building word.
+      const countOf = (m: typeof mentions[number]) => {
+        if (m.quantity !== null) return m.quantity;
+        const phrase = arch.find((a) => a.at <= m.at && a.at + a.phrase.length >= m.at - 1);
+        return phrase ? quantityBefore(clause, phrase.at) : null;
+      };
+      const builds: { type: BuildingType; quantity: number | 'all' | null; design: BuildDesignRequest | null }[] = mentions.map((m) => ({ type: m.type, quantity: countOf(m), design: designFor(m.type) }));
+      // A model named without its building word ("a Premium Glass Residence") is a build of that model's type.
+      for (const a of models) if (!mentions.some((m) => m.type === a.model!.buildingType)) builds.push({ type: a.model!.buildingType, quantity: quantityBefore(raw, a.at), design: { collection: a.model!.collection, model: a.model!.id } });
+      if (arch.length && !builds.length) intent.ambiguities.push(vi ? 'Hãy nêu số lượng và loại công trình cho phong cách đã chọn (ví dụ “xây 3 biệt thự Luxury Minimalist”).' : 'Name how many of which buildings to build in that style (e.g. “build 3 Luxury Minimalist villas”).');
+      for (const m of builds) {
         if (m.quantity === 'all') { intent.ambiguities.push(vi ? 'Không rõ cần xây bao nhiêu công trình.' : 'It is unclear how many buildings to build.'); continue; }
         const quantity = m.quantity ?? 1;
-        intent.builds.push({ buildingType: m.type, quantity: Math.min(32, quantity), preferredPosition: null });
+        intent.builds.push({ buildingType: m.type, quantity: Math.min(32, quantity), preferredPosition: null, ...(m.design ? { design: m.design } : {}) });
         if (quantity > 32) intent.unsupportedRequests.push(vi ? 'Mỗi kế hoạch xây tối đa 32 công trình.' : 'A plan can build at most 32 buildings.');
-        summary.push(`${vi ? 'xây' : 'build'} ${quantity} ${label(m.type, quantity)}`);
+        const look = m.design?.model ? architectureModel(m.design.model)!.name : m.design?.collection ? architectureCollection(m.design.collection)!.name : null;
+        summary.push(`${vi ? 'xây' : 'build'} ${quantity} ${label(m.type, quantity)}${look ? ` (${look})` : ''}`);
       }
     } else if (verb === 'demolish') {
       if (named.length) { intent.demolishTargets.push(selector(null, null, false, named)); summary.push(`${vi ? 'phá' : 'demolish'} ${named.join(', ')}`); }

@@ -25,10 +25,17 @@ class Region(Point):
     width: int = Field(ge=1, le=2**53-1)
     height: int = Field(ge=1, le=2**53-1)
 
+class BuildDesign(WireModel):
+    """Visual World 3.1: a requested architecture (registry ID or display name). The TS planner resolves it and
+    refuses unknown or unavailable models; geometry, prices and rules never depend on it."""
+    collection: Annotated[str, Field(min_length=1, max_length=96)] | None = None
+    model: Annotated[str, Field(min_length=1, max_length=96)] | None = None
+
 class BuildRequest(WireModel):
     buildingType: BuildingType
     quantity: int = Field(ge=1, le=32)
     preferredPosition: Point | None = None
+    design: BuildDesign | None = None
 
 class MoveRequest(WireModel):
     buildingId: str = Field(min_length=1, max_length=128)
@@ -108,12 +115,17 @@ class Footprint(WireModel):
     width: int
     height: int
 
+class PlacementDesign(WireModel):
+    collection: str = Field(min_length=1, max_length=48)
+    model: str = Field(min_length=1, max_length=96)
+
 class Placement(WireModel):
     buildingId: str
     buildingType: BuildingType
     position: Point
     footprint: Footprint
     operation: Literal['build','move']
+    design: PlacementDesign | None = None
 
 class Roads(WireModel):
     add: list[Point]

@@ -1228,3 +1228,6 @@ kbd { font-family: var(--font-ui); }
   .model-preview { grid-template-columns: 72px 1fr; }
   .model-preview .model-thumb { width: 72px; height: 72px; }
 }
+.proposal-designs li { display: flex; align-items: center; gap: 8px; }
+.proposal-designs li .model-thumb { flex: 0 0 auto; border-radius: 6px; background: var(--sand-100); }
+.proposal-designs li small { margin-left: auto; color: var(--muted); font-size: 10.5px; font-weight: 700; }

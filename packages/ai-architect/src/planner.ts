@@ -2,7 +2,9 @@ import { applyCityCommandBatch, BUILDING_CATALOG, CONSTRUCTION_COSTS, deserializ
   footprintTiles, isBuildingType, OccupancyGrid, RoadGraph, tileKey, validateBuildingMove, validateBuildingPlacement } from '@tiny-city/simulation';
 import type { Building, BuildingType, CityCommand, Position, WorldState } from '@tiny-city/simulation';
 import { DEFAULT_CONSTRAINTS, LIMITS, PlanError } from './contracts.js';
-import type { ArchitectIntent, PlanAuthorization, PlanClarification, PlanImpact, PlanProposal, PlanningConstraints, PlanWarning } from './contracts.js';
+import type { ArchitectIntent, BuildRequest, PlanAuthorization, PlanClarification, PlanImpact, PlanProposal, PlanningConstraints, PlanWarning } from './contracts.js';
+import { ARCHITECTURE_COLLECTIONS, ARCHITECTURE_MODELS, architectureCollection, architectureModel, collectionModelAt, designOf, modelsFor } from './architecture.js';
+import type { BuildingDesign } from './architecture.js';
 import { cityFingerprint, digestPayload, hash } from './integrity.js';
 import { resolveTarget, targetLabel, validSelector } from './targets.js';
 
@@ -11,6 +13,31 @@ const record = (v: unknown): v is Record<string, unknown> => v !== null && typeo
 const ids = (v: unknown) => Array.isArray(v) && v.length <= 128 && v.every(x => typeof x === 'string' && x.trim().length > 0 && x.length <= 128);
 const point = (v: unknown) => record(v) && typeof v.x === 'number' && typeof v.y === 'number' && Number.isSafeInteger(v.x) && Number.isSafeInteger(v.y);
 const points = (v: unknown) => Array.isArray(v) && v.length <= LIMITS.operations && v.every(point);
+const label = (v: unknown) => v === null || (typeof v === 'string' && v.trim().length > 0 && v.length <= 96);
+/** An optional build design: null, or {collection, model} where each is null or a short ID or display name. */
+const designRequest = (v: unknown) => v === undefined || v === null ||
+  (record(v) && Object.keys(v).every(k => k === 'collection' || k === 'model') && label(v.collection ?? null) && label(v.model ?? null));
+
+/** Resolves a build's requested architecture to models, or explains why it cannot be honoured (never substitutes). */
+function resolveDesign(type: BuildingType, request: BuildRequest['design']): { pick: (n: number) => BuildingDesign | null } | { error: string } {
+  if (!request || (!request.collection && !request.model)) return { pick: () => null };
+  const norm = (text: string) => text.trim().toLowerCase();
+  const findCollection = (text: string) => architectureCollection(text) ?? ARCHITECTURE_COLLECTIONS.find(c => norm(c.name) === norm(text) || c.aliases.includes(norm(text)));
+  const findModel = (text: string) => architectureModel(text) ?? ARCHITECTURE_MODELS.find(m => norm(m.name) === norm(text) || (m.aliases ?? []).includes(norm(text)));
+  const collection = request.collection ? findCollection(request.collection) : undefined;
+  if (request.collection && !collection) return { error: `The architectural style “${request.collection}” is not in the catalog.` };
+  if (request.model) {
+    const model = findModel(request.model);
+    if (!model) return { error: `The building model “${request.model}” is not in the catalog.` };
+    if (model.buildingType !== type) return { error: `${model.name} is a ${model.buildingType} model, not a ${type}.` };
+    if (model.status !== 'available') return { error: `${model.name} is planned but not available yet.` };
+    if (collection && collection.id !== model.collection) return { error: `${model.name} belongs to ${architectureCollection(model.collection)!.name}, not ${collection.name}.` };
+    return { pick: () => designOf(model) };
+  }
+  const models = modelsFor(type, collection!.id, true);
+  if (!models.length) return { error: `${collection!.name} has no ${type} models yet.` };
+  return { pick: (n) => designOf(collectionModelAt(type, collection!.id, n)!) };
+}
 
 export function decodeIntent(value: unknown): ArchitectIntent {
   if (!record(value) || Object.keys(value).some(k => !['summary','language','style','near','region','budgetLimit','connectRoads','builds','moves','demolish','roadAdd','roadRemove','preserveBuildingIds','unsupportedRequests','ambiguities','demolishTargets','moveTargets','preserveRoads','preserveTypes'].includes(k)) ||
@@ -23,7 +50,7 @@ export function decodeIntent(value: unknown): ArchitectIntent {
     !['compact','coastal','mixed'].includes(String(value.style)) || !['existing','park','road','center'].includes(String(value.near)) ||
     typeof value.connectRoads !== 'boolean' || !(value.budgetLimit === null || integer(value.budgetLimit)) ||
     !(value.region === null || (point(value.region) && record(value.region) && integer(value.region.width) && Number(value.region.width) > 0 && integer(value.region.height) && Number(value.region.height) > 0)) ||
-    !Array.isArray(value.builds) || value.builds.length > 32 || !value.builds.every(b => record(b) && isBuildingType(b.buildingType) && integer(b.quantity) && Number(b.quantity) > 0 && Number(b.quantity) <= 32 && (b.preferredPosition === null || point(b.preferredPosition))) ||
+    !Array.isArray(value.builds) || value.builds.length > 32 || !value.builds.every(b => record(b) && isBuildingType(b.buildingType) && integer(b.quantity) && Number(b.quantity) > 0 && Number(b.quantity) <= 32 && (b.preferredPosition === null || point(b.preferredPosition)) && designRequest(b.design)) ||
     !Array.isArray(value.moves) || value.moves.length > 32 || !value.moves.every(m => record(m) && ids([m.buildingId]) && point(m.position)) ||
     !ids(value.demolish) || !ids(value.preserveBuildingIds) || !points(value.roadAdd) || !points(value.roadRemove) ||
     !Array.isArray(value.unsupportedRequests) || !value.unsupportedRequests.every(s => typeof s === 'string' && s.length <= 256) || value.unsupportedRequests.length > 32 ||
@@ -32,6 +59,8 @@ export function decodeIntent(value: unknown): ArchitectIntent {
   }
   // Older (Phase 2) intents omit the 2.0 fields; normalize so planning and digests are identical either way.
   const intent = { demolishTargets: [], moveTargets: [], preserveRoads: false, preserveTypes: [], ...JSON.parse(JSON.stringify(value)) } as ArchitectIntent;
+  // Architecture (3.1) is optional on the wire; an absent design is the same as none, so digests never depend on it.
+  intent.builds = intent.builds.map((build) => ({ ...build, design: build.design ?? null }));
   if (intent.builds.reduce((sum,b) => sum + b.quantity,0) > LIMITS.buildings) throw new PlanError('CONTEXT_LIMIT', 'At most 32 buildings may be requested.');
   return intent;
 }
@@ -253,9 +282,13 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
     if(fatal) break;
   }
   const buildRequests=intent.near==='park' ? [...intent.builds].sort((a,b)=>Number(b.buildingType==='park')-Number(a.buildingType==='park')) : intent.builds;
+  // The architecture of each new building, in build order (moves build nothing), matched to built events below.
+  const buildDesigns:(BuildingDesign|null)[]=[];
   if (!fatal) for(const request of buildRequests) {
+    const design=resolveDesign(request.buildingType,request.design);
+    if('error' in design) { failed('UNSUPPORTED_DESIGN',design.error); if(fatal) break; continue; }
     let count=0;
-    for(;count<request.quantity;count++) if(!place(request.buildingType,request.preferredPosition)) break;
+    for(;count<request.quantity;count++) { if(!place(request.buildingType,request.preferredPosition)) break; buildDesigns.push(design.pick(count)); }
     if(count<request.quantity) failed('QUANTITY_UNFULFILLED',`Requested ${request.quantity} ${request.buildingType}; found ${count} affordable legal placements.`);
     if(fatal) break;
   }
@@ -287,11 +320,12 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
   const full=applyCityCommandBatch(world,commands);
   if(commands.length && !full.applied) throw new PlanError('PLAN_REJECTED','Final atomic validation failed.');
   const placements:PlanProposal['placements']=[];
+  let built=0;
   for(const event of full.events) {
-    if(event.type==='city.building-built' && event.building.type) placements.push({buildingId:event.building.id,buildingType:event.building.type,position:event.building.position,footprint:event.building.footprint,operation:'build'});
+    if(event.type==='city.building-built' && event.building.type) placements.push({buildingId:event.building.id,buildingType:event.building.type,position:event.building.position,footprint:event.building.footprint,operation:'build',design:buildDesigns[built++] ?? null});
     if(event.type==='city.building-moved') {
       const b=full.state.plan.buildings.find(b=>b.id===event.buildingId)!;
-      if(b.type) placements.push({buildingId:b.id,buildingType:b.type,position:b.position,footprint:b.footprint,operation:'move'});
+      if(b.type) placements.push({buildingId:b.id,buildingType:b.type,position:b.position,footprint:b.footprint,operation:'move',design:null});
     }
   }
   const edits=commands.filter(c=>c.type==='city.edit-roads');
@@ -302,6 +336,10 @@ export async function createProposal(rawWorld: unknown, sourceRevision: number, 
     const parts:string[]=[];
     const built=commands.filter(c=>c.type==='city.build').length, removed=commands.filter(c=>c.type==='city.demolish').length, moved=commands.filter(c=>c.type==='city.move-building').length;
     if(built) parts.push(`${built} new building${built===1?'':'s'} on legal ${intent.style} lots, preferring lots that already touch a road`);
+    // Name the architecture every new building will get, so the preview states exactly what is built.
+    const designed=new Map<string,number>();
+    for(const p of placements) if(p.design) designed.set(p.design.model,(designed.get(p.design.model) ?? 0)+1);
+    if(designed.size) parts.push(`designs: ${[...designed].map(([id,n])=>`${n} × ${architectureModel(id)?.name ?? id}`).join(', ')}`);
     if(moved) parts.push(`${moved} building${moved===1?'':'s'} moved to the nearest legal lot`);
     if(removed) parts.push(`exactly ${removed} resolved building${removed===1?'':'s'} removed`);
     const roadTiles=edits.reduce((n,c)=>n+c.add.length,0);
