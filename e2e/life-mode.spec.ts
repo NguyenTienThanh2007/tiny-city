@@ -140,19 +140,32 @@ test('complete life: create, choose a home, walk, visit, meet a resident, rest, 
   await expect(status(page)).toContainText('Walking to Sunny Park');
   await expect(status(page)).toContainText('Enjoying Sunny Park', { timeout: 30_000 });
   const nearby = page.getByRole('list', { name: 'Nearby residents' });
-  await expect(nearby.getByRole('button').first()).toBeVisible({ timeout: 30_000 });
-  // The list re-sorts by live distance while the clock runs, so click the resident that was read, not "first" again.
-  const neighbour = (await nearby.getByRole('button').first().evaluate((el) => el.querySelector('span')?.firstChild?.textContent ?? ''));
-  expect(neighbour).not.toBe('');
-  await nearby.getByRole('button', { name: new RegExp(`^${neighbour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`) }).click();
-  const profile = page.locator('.citizen-inspector');
-  await expect(profile).toBeVisible();
-  const residentName = (await profile.getByRole('heading').first().textContent())!;
-  expect(residentName).toBe(neighbour);
-  await profile.getByRole('region', { name: 'Interact' }).getByRole('button', { name: /^Greet/ }).click();
-  await page.getByRole('button', { name: 'Close resident profile' }).click();
-  await expect(diary(page)).toContainText(`You met ${residentName}.`, { timeout: 20_000 });
-  await expect(diary(page)).toContainText(`Said hello with ${residentName}.`, { timeout: 20_000 });
+  // A resident whose own park visit ends mid-greeting leaves ("they had to go") by design; greet someone else then.
+  // The journey still requires one completed greeting.
+  let greeted = '';
+  for (let attempt = 0; attempt < 3 && !greeted; attempt += 1) {
+    await expect(nearby.getByRole('button').first()).toBeVisible({ timeout: 30_000 });
+    // Read the diary before the resident profile replaces the Life panel.
+    const stoppedBefore = ((await diary(page).textContent()) ?? '').split('Greeting stopped').length;
+    // The list re-sorts by live distance while the clock runs, so click the resident that was read, not "first" again.
+    const neighbour = (await nearby.getByRole('button').first().evaluate((el) => el.querySelector('span')?.firstChild?.textContent ?? ''));
+    expect(neighbour).not.toBe('');
+    await nearby.getByRole('button', { name: new RegExp(`^${neighbour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`) }).click();
+    const profile = page.locator('.citizen-inspector');
+    await expect(profile).toBeVisible();
+    const residentName = (await profile.getByRole('heading').first().textContent())!;
+    expect(residentName).toBe(neighbour);
+    await profile.getByRole('region', { name: 'Interact' }).getByRole('button', { name: /^Greet/ }).click();
+    await page.getByRole('button', { name: 'Close resident profile' }).click();
+    await expect(diary(page)).toContainText(`You met ${residentName}.`, { timeout: 20_000 });
+    await expect.poll(async () => {
+      const text = (await diary(page).textContent()) ?? '';
+      if (text.includes(`Said hello with ${residentName}.`)) return 'greeted';
+      return text.split('Greeting stopped').length > stoppedBefore ? 'left' : 'pending';
+    }, { timeout: 20_000 }).not.toBe('pending');
+    if (((await diary(page).textContent()) ?? '').includes(`Said hello with ${residentName}.`)) greeted = residentName;
+  }
+  expect(greeted).not.toBe('');
 
   // Return home and rest.
   await page.getByRole('button', { name: /^Go home/ }).click();
