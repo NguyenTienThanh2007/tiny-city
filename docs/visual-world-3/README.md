@@ -7,7 +7,7 @@ and PR.
 |---|---|---|
 | **3.0A Graphics foundation** (`feature/visual-world-3a`) | Art pipeline, renderer foundation, terrain, lighting, playable vertical slice (villa, townhouse, apartment, park, streets, sidewalks, lamps, trees, gardens) | See `acceptance-3.0a.md` |
 | **3.0B Buildings & environment** (`feature/visual-world-3b`) | All nine building types redesigned, material textures, vegetation, roads and plazas, city density, camera framing, alpha picking | See `acceptance-3.0b.md` |
-| 3.0C Characters & atmosphere | Residents and player redesign, living-city visuals, night atmosphere | Not started; waits for 3.0B approval |
+| **3.0C Characters & atmosphere** (`feature/visual-world-3c`) | Baked animated characters, real venue visitors, cinematic lighting, night light, ambient motion | See `acceptance-3.0c.md` |
 
 ## Documents
 
@@ -17,6 +17,9 @@ and PR.
 - [asset-licensing.md](asset-licensing.md): where every asset comes from
 - [acceptance-3.0a.md](acceptance-3.0a.md): what was implemented, before/after screenshots, benchmarks, tests,
   known limitations
+- [acceptance-3.0c.md](acceptance-3.0c.md), [character-art-direction.md](character-art-direction.md),
+  [animation-system.md](animation-system.md), [lighting-and-atmosphere.md](lighting-and-atmosphere.md),
+  [performance-3.0c.md](performance-3.0c.md): the 3.0C characters, animation and atmosphere
 - [acceptance-3.0b.md](acceptance-3.0b.md): the 3.0B overhaul, 14 matched before/after shots against 3.0A,
   benchmarks and tests
 - `screenshots/before`, `screenshots/after`: 3.0A matched camera positions (`node scripts/capture_vw3.mjs [url] [dir]`)
