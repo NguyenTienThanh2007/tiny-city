@@ -1,0 +1,861 @@
+{
+ "machine": "Apple M2, macOS 26 (Darwin 25.6), Playwright Chromium; GPU runs ANGLE Metal, software runs SwiftShader; deviceScaleFactor 1",
+ "builds": {
+  "3.0A": "origin/main @ e5923c3 production build",
+  "3.0B": "feature/visual-world-3b production build (decor LOD, no culler)"
+ },
+ "runs": [
+  {
+   "label": "3a-vsync",
+   "baseUrl": "http://127.0.0.1:4190/",
+   "uncapped": false,
+   "software": false,
+   "viewport": "1440x900",
+   "date": "2026-10-13T03:38:27.871Z",
+   "scenarios": [
+    {
+     "name": "slice-gameplay",
+     "interactiveMs": 2400,
+     "artLoadedAtMs": 2479,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.05,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      72.7,
+      31.5,
+      32.6,
+      32.1,
+      33.2,
+      32.8
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "slice-close-zoom",
+     "interactiveMs": 414,
+     "artLoadedAtMs": 506,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.03,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      19.4,
+      32.5,
+      33.3,
+      33.1,
+      33.5,
+      32.9
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "sample-city",
+     "interactiveMs": 561,
+     "artLoadedAtMs": 643,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.04,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      78.5,
+      32.6,
+      32.5,
+      32.8,
+      33.8,
+      32.8
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-dense",
+     "interactiveMs": 472,
+     "artLoadedAtMs": 673,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.06,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      63.2,
+      32.1,
+      32.4,
+      33.1,
+      30.2,
+      32.4
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-close",
+     "interactiveMs": 465,
+     "artLoadedAtMs": 593,
+     "frames": 357,
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.02,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      19.1,
+      32.3,
+      31.8,
+      35.3,
+      31.6,
+      32.9
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "commute-300-zoomed-out",
+     "interactiveMs": 696,
+     "artLoadedAtMs": 797,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.31,
+     "residents": 300,
+     "visibleResidents": 64,
+     "zoomLatencyMs": [
+      30.6,
+      32,
+      33.4,
+      32.3,
+      32.2,
+      32.1
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    }
+   ]
+  },
+  {
+   "label": "3b-vsync",
+   "baseUrl": "http://127.0.0.1:4191/",
+   "uncapped": false,
+   "software": false,
+   "viewport": "1440x900",
+   "date": "2026-10-13T03:55:39.479Z",
+   "scenarios": [
+    {
+     "name": "slice-gameplay",
+     "interactiveMs": 658,
+     "artLoadedAtMs": 738,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.02,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      85,
+      32.5,
+      32.8,
+      32.9,
+      32.8,
+      31.7
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "slice-close-zoom",
+     "interactiveMs": 2087,
+     "artLoadedAtMs": 2125,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.03,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      12.9,
+      34.1,
+      31.2,
+      31.7,
+      32.2,
+      32.6
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "sample-city",
+     "interactiveMs": 464,
+     "artLoadedAtMs": 543,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.04,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      78.6,
+      32.8,
+      33,
+      33.1,
+      33.6,
+      32.5
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-dense",
+     "interactiveMs": 484,
+     "artLoadedAtMs": 550,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.04,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      61.1,
+      32.8,
+      32.7,
+      32.3,
+      32.9,
+      31.6
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-close",
+     "interactiveMs": 396,
+     "artLoadedAtMs": 509,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.7,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.06,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      24.9,
+      32.4,
+      32.5,
+      32.3,
+      33,
+      33.7
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "commute-300-zoomed-out",
+     "interactiveMs": 444,
+     "artLoadedAtMs": 533,
+     "frames": 356,
+     "avgMs": 16.67,
+     "p95Ms": 16.8,
+     "p99Ms": 16.8,
+     "fps": 60,
+     "rendererCpuMs": 0.25,
+     "residents": 300,
+     "visibleResidents": 48,
+     "zoomLatencyMs": [
+      29.6,
+      32.7,
+      31.7,
+      33.2,
+      33.7,
+      32.3
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    }
+   ]
+  },
+  {
+   "label": "3a-uncapped-1440p",
+   "baseUrl": "http://127.0.0.1:4190/",
+   "uncapped": true,
+   "software": false,
+   "viewport": "2560x1440",
+   "date": "2026-10-13T03:40:59.785Z",
+   "scenarios": [
+    {
+     "name": "slice-gameplay",
+     "interactiveMs": 955,
+     "artLoadedAtMs": 672,
+     "frames": 2340,
+     "avgMs": 2.56,
+     "p95Ms": 3.6,
+     "p99Ms": 4,
+     "fps": 390.4,
+     "rendererCpuMs": 0,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      14,
+      3.3,
+      3.8,
+      6.7,
+      5.6,
+      5.6
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "slice-close-zoom",
+     "interactiveMs": 473,
+     "artLoadedAtMs": 588,
+     "frames": 2495,
+     "avgMs": 2.4,
+     "p95Ms": 2.8,
+     "p99Ms": 3.4,
+     "fps": 416.2,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      5.2,
+      2.9,
+      5.9,
+      5.5,
+      4.8,
+      5.5
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "sample-city",
+     "interactiveMs": 1511,
+     "artLoadedAtMs": 1679,
+     "frames": 2393,
+     "avgMs": 2.5,
+     "p95Ms": 3.4,
+     "p99Ms": 3.8,
+     "fps": 399.4,
+     "rendererCpuMs": 0,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      4.9,
+      4.5,
+      2.2,
+      2.2,
+      4.8,
+      4.8
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-dense",
+     "interactiveMs": 428,
+     "artLoadedAtMs": 578,
+     "frames": 2269,
+     "avgMs": 2.64,
+     "p95Ms": 3.6,
+     "p99Ms": 4.1,
+     "fps": 378.6,
+     "rendererCpuMs": 0,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      12.8,
+      4.3,
+      4.1,
+      3.1,
+      10.3,
+      7
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-close",
+     "interactiveMs": 533,
+     "artLoadedAtMs": 668,
+     "frames": 2430,
+     "avgMs": 2.47,
+     "p95Ms": 3.1,
+     "p99Ms": 3.7,
+     "fps": 405.5,
+     "rendererCpuMs": 0,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      8.3,
+      8.7,
+      5.6,
+      5.1,
+      4.7,
+      4.2
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "commute-300-zoomed-out",
+     "interactiveMs": 484,
+     "artLoadedAtMs": 576,
+     "frames": 1589,
+     "avgMs": 3.77,
+     "p95Ms": 7.3,
+     "p99Ms": 8.6,
+     "fps": 265.5,
+     "rendererCpuMs": 0.13,
+     "residents": 300,
+     "visibleResidents": 45,
+     "zoomLatencyMs": [
+      9.7,
+      7.3,
+      6.3,
+      9.6,
+      8.4,
+      9.7
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    }
+   ]
+  },
+  {
+   "label": "3b-uncapped-1440p",
+   "baseUrl": "http://127.0.0.1:4191/",
+   "uncapped": true,
+   "software": false,
+   "viewport": "2560x1440",
+   "date": "2026-10-13T03:56:50.686Z",
+   "scenarios": [
+    {
+     "name": "slice-gameplay",
+     "interactiveMs": 516,
+     "artLoadedAtMs": 601,
+     "frames": 2284,
+     "avgMs": 2.62,
+     "p95Ms": 3.6,
+     "p99Ms": 4.5,
+     "fps": 381,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      15.6,
+      7.1,
+      5.5,
+      6.4,
+      3.2,
+      2.1
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "slice-close-zoom",
+     "interactiveMs": 422,
+     "artLoadedAtMs": 598,
+     "frames": 2466,
+     "avgMs": 2.43,
+     "p95Ms": 3.4,
+     "p99Ms": 3.7,
+     "fps": 411.6,
+     "rendererCpuMs": 0,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      9.3,
+      4.4,
+      3.3,
+      3.8,
+      2.4,
+      4.4
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "sample-city",
+     "interactiveMs": 463,
+     "artLoadedAtMs": 618,
+     "frames": 2251,
+     "avgMs": 2.66,
+     "p95Ms": 3.6,
+     "p99Ms": 4.4,
+     "fps": 375.6,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      4.9,
+      4.7,
+      3.1,
+      3.4,
+      2.8,
+      2.1
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-dense",
+     "interactiveMs": 405,
+     "artLoadedAtMs": 546,
+     "frames": 2276,
+     "avgMs": 2.63,
+     "p95Ms": 3.5,
+     "p99Ms": 4.2,
+     "fps": 379.7,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      23.9,
+      10.4,
+      5.9,
+      6.2,
+      5.3,
+      3.8
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "coral-bay-close",
+     "interactiveMs": 415,
+     "artLoadedAtMs": 591,
+     "frames": 2266,
+     "avgMs": 2.64,
+     "p95Ms": 3.6,
+     "p99Ms": 4.6,
+     "fps": 378.1,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      4.8,
+      10.3,
+      5.2,
+      5.5,
+      3.6,
+      4.7
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    },
+    {
+     "name": "commute-300-zoomed-out",
+     "interactiveMs": 405,
+     "artLoadedAtMs": 553,
+     "frames": 1561,
+     "avgMs": 3.84,
+     "p95Ms": 7.6,
+     "p99Ms": 9.7,
+     "fps": 260.4,
+     "rendererCpuMs": 0.17,
+     "residents": 300,
+     "visibleResidents": 45,
+     "zoomLatencyMs": [
+      8.9,
+      5.1,
+      10,
+      6,
+      7.1,
+      8.2
+     ],
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+    }
+   ]
+  },
+  {
+   "label": "3a-software",
+   "baseUrl": "http://127.0.0.1:4190/",
+   "uncapped": false,
+   "software": true,
+   "viewport": "1440x900",
+   "date": "2026-10-13T03:43:38.898Z",
+   "scenarios": [
+    {
+     "name": "slice-gameplay",
+     "interactiveMs": 5480,
+     "artLoadedAtMs": 6447,
+     "frames": 88,
+     "avgMs": 64.77,
+     "p95Ms": 66.8,
+     "p99Ms": 100.1,
+     "fps": 15.4,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      158.8,
+      267.9,
+      144.7,
+      146.2,
+      141,
+      175.5
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "slice-close-zoom",
+     "interactiveMs": 1174,
+     "artLoadedAtMs": 2146,
+     "frames": 73,
+     "avgMs": 77.85,
+     "p95Ms": 100,
+     "p99Ms": 116.6,
+     "fps": 12.8,
+     "rendererCpuMs": 0.04,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      135.4,
+      148.2,
+      154.2,
+      160.4,
+      155.1,
+      177
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "sample-city",
+     "interactiveMs": 2673,
+     "artLoadedAtMs": 2512,
+     "frames": 90,
+     "avgMs": 63.52,
+     "p95Ms": 66.8,
+     "p99Ms": 83.4,
+     "fps": 15.7,
+     "rendererCpuMs": 0.04,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      175.9,
+      190.7,
+      131.7,
+      135.4,
+      138.3,
+      126.9
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "coral-bay-dense",
+     "interactiveMs": 858,
+     "artLoadedAtMs": 599,
+     "frames": 84,
+     "avgMs": 68.05,
+     "p95Ms": 83.3,
+     "p99Ms": 166.6,
+     "fps": 14.7,
+     "rendererCpuMs": 0.03,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      130.2,
+      184.4,
+      170.1,
+      191,
+      150.1,
+      191.9
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "coral-bay-close",
+     "interactiveMs": 1115,
+     "artLoadedAtMs": 819,
+     "frames": 65,
+     "avgMs": 85.38,
+     "p95Ms": 100,
+     "p99Ms": 100.1,
+     "fps": 11.7,
+     "rendererCpuMs": 0.05,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      192,
+      303.8,
+      185,
+      232.3,
+      191,
+      237.4
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "commute-300-zoomed-out",
+     "interactiveMs": 928,
+     "artLoadedAtMs": 667,
+     "frames": 113,
+     "avgMs": 50.29,
+     "p95Ms": 83.3,
+     "p99Ms": 100.1,
+     "fps": 19.9,
+     "rendererCpuMs": 0.27,
+     "residents": 300,
+     "visibleResidents": 29,
+     "zoomLatencyMs": [
+      67.5,
+      104.6,
+      90.3,
+      124.8,
+      104.3,
+      137.5
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    }
+   ]
+  },
+  {
+   "label": "3b-software",
+   "baseUrl": "http://127.0.0.1:4191/",
+   "uncapped": false,
+   "software": true,
+   "viewport": "1440x900",
+   "date": "2026-10-13T03:58:01.385Z",
+   "scenarios": [
+    {
+     "name": "slice-gameplay",
+     "interactiveMs": 5868,
+     "artLoadedAtMs": 4839,
+     "frames": 70,
+     "avgMs": 82.14,
+     "p95Ms": 116.6,
+     "p99Ms": 250,
+     "fps": 12.2,
+     "rendererCpuMs": 0.06,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      205.3,
+      146.6,
+      169.6,
+      164.2,
+      176.4,
+      198.5
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "slice-close-zoom",
+     "interactiveMs": 1227,
+     "artLoadedAtMs": 2202,
+     "frames": 69,
+     "avgMs": 82.36,
+     "p95Ms": 100,
+     "p99Ms": 100.1,
+     "fps": 12.1,
+     "rendererCpuMs": 0.02,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      145.2,
+      195,
+      164.2,
+      177.9,
+      180.6,
+      166.2
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "sample-city",
+     "interactiveMs": 834,
+     "artLoadedAtMs": 617,
+     "frames": 78,
+     "avgMs": 73.07,
+     "p95Ms": 83.4,
+     "p99Ms": 183.4,
+     "fps": 13.7,
+     "rendererCpuMs": 0.02,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      168.7,
+      175.3,
+      145.5,
+      138.6,
+      151.5,
+      188.7
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "coral-bay-dense",
+     "interactiveMs": 1038,
+     "artLoadedAtMs": 630,
+     "frames": 75,
+     "avgMs": 76.44,
+     "p95Ms": 100,
+     "p99Ms": 116.6,
+     "fps": 13.1,
+     "rendererCpuMs": 0.01,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      180.4,
+      150.3,
+      172.5,
+      407.8,
+      331.2,
+      201
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "coral-bay-close",
+     "interactiveMs": 1724,
+     "artLoadedAtMs": 797,
+     "frames": 60,
+     "avgMs": 92.22,
+     "p95Ms": 116.7,
+     "p99Ms": 183.3,
+     "fps": 10.8,
+     "rendererCpuMs": 0.02,
+     "residents": 0,
+     "visibleResidents": 0,
+     "zoomLatencyMs": [
+      148.9,
+      166.9,
+      179.1,
+      186.6,
+      181.6,
+      184.1
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+     "name": "commute-300-zoomed-out",
+     "interactiveMs": 838,
+     "artLoadedAtMs": 591,
+     "frames": 124,
+     "avgMs": 46.5,
+     "p95Ms": 66.7,
+     "p99Ms": 66.8,
+     "fps": 21.5,
+     "rendererCpuMs": 0.27,
+     "residents": 300,
+     "visibleResidents": 39,
+     "zoomLatencyMs": [
+      66,
+      79.9,
+      89.6,
+      118.4,
+      119,
+      87.7
+     ],
+     "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+    }
+   ]
+  }
+ ]
+}

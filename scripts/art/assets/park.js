@@ -1,14 +1,15 @@
 // Park (4×4): a landscaped neighbourhood park — curving paths, lawn, mixed trees, flowerbeds, benches, lamps and
 // a centrepiece (fountain, pond with a bridge, or pavilion). Flat lot; trees rise above the clickable cap.
 import * as THREE from 'three';
-import { PALETTE as P, mat, box, plate, cylinder, sphere, path, flowerbed, shrub, broadleaf, palm, cypress, bench, streetLamp, hedge, rng } from '../lib/kit.js';
+import { PALETTE as P, mat, box, plate, cylinder, sphere, path, flowerbed, shrub, broadleaf, palm, cypress, bench, streetLamp, hedge, rng, pine, poplar, grassTuft, rock, pavingMat, stoneMat, waterMat } from '../lib/kit.js';
+import { picnicTable, playground, kiosk, bin, pottedPlant } from '../lib/props.js';
 
 export const PARK_VARIANTS = ['fountain', 'pond', 'pavilion'];
 
 /** Curved path as a chain of short paved slabs following a quadratic curve. */
 function curve(group, a, c, b, width, color = P.paving) {
   const steps = 26;
-  const m = mat(color, { rough: 0.95 });
+  const m = pavingMat(color);
   for (let i = 0; i < steps; i += 1) {
     const t = (i + 0.5) / steps;
     const x = (1 - t) ** 2 * a[0] + 2 * (1 - t) * t * c[0] + t * t * b[0];
@@ -30,7 +31,7 @@ function curve(group, a, c, b, width, color = P.paving) {
 
 function fountain(group, x, z) {
   cylinder(group, x, 0, z, 0.42, 0.44, 0.06, mat(P.stone, { rough: 0.7 }), 32);
-  const water = new THREE.MeshPhysicalMaterial({ color: 0x4fbac6, roughness: 0.05, clearcoat: 1, envMapIntensity: 1.6 });
+  const water = waterMat(0x4fbac6);
   cylinder(group, x, 0.02, z, 0.38, 0.38, 0.05, water, 32);
   cylinder(group, x, 0, z, 0.08, 0.1, 0.22, mat(P.ivory, { rough: 0.6 }), 16);
   cylinder(group, x, 0.22, z, 0.18, 0.12, 0.04, mat(P.ivory, { rough: 0.6 }), 24);
@@ -56,7 +57,7 @@ function pond(group, x, z, random) {
   ring.holes.push(new THREE.Path(shape.getPoints()));
   const rim = new THREE.Mesh(new THREE.ExtrudeGeometry(ring, { depth: 0.03, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.01, bevelSegments: 2 }), mat(0xc9bfa8, { rough: 0.9 }));
   rim.rotation.x = Math.PI / 2; rim.position.set(x, 0.03, z); rim.receiveShadow = true; group.add(rim);
-  const water = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshPhysicalMaterial({ color: 0x3fa9b8, roughness: 0.04, clearcoat: 1, envMapIntensity: 1.5, side: THREE.DoubleSide }));
+  const water = new THREE.Mesh(new THREE.ShapeGeometry(shape), waterMat(0x3fa9b8));
   // Same orientation as the rim (shape y → +z), seen from above thanks to DoubleSide.
   water.rotation.x = Math.PI / 2; water.position.set(x, 0.02, z); water.receiveShadow = true; group.add(water);
   for (let i = 0; i < 5; i += 1) { // lily pads
@@ -99,22 +100,32 @@ export function buildPark(group, variantIndex, seed) {
   if (feature === 'fountain') fountain(group, c[0], c[1]);
   else if (feature === 'pond') pond(group, c[0], c[1], random);
   else pavilion(group, c[0], c[1]);
-  // Benches facing the plaza and lamps along the paths.
-  bench(group, 1.2, 2.55, 'x'); bench(group, 2.75, 1.35, 'x'); bench(group, 2.6, 2.75, 'z');
-  streetLamp(group, 1.05, 1.85, { height: 0.5 }); streetLamp(group, 3.0, 2.25, { height: 0.5 }); streetLamp(group, 2.35, 3.3, { height: 0.5 });
-  // Flowerbeds.
-  flowerbed(group, 0.3, 2.6, 0.6, 0.32, random);
-  flowerbed(group, 3.0, 3.2, 0.62, 0.3, random, [P.coral, P.gold, P.ivory]);
-  flowerbed(group, 2.5, 0.35, 0.5, 0.3, random, [0xb9a3e3, 0xf4a6b8, P.ivory]);
-  // Trees: a mixed grove at the back, feature trees at the front corners.
-  const grove = [[0.45, 0.5, 'round', 1.15], [1.15, 0.35, 'deep', 1.0], [0.35, 1.25, 'olive', 0.95], [3.45, 0.55, 'round', 1.1], [3.6, 1.35, 'deep', 0.95]];
+  // Benches around the plaza, lamps along the paths, bins.
+  bench(group, 1.2, 2.55, 'x'); bench(group, 2.75, 1.35, 'x'); bench(group, 2.6, 2.75, 'z'); bench(group, 1.38, 1.4, 'z');
+  bin(group, 1.42, 2.6); bin(group, 2.9, 1.42);
+  streetLamp(group, 1.05, 1.85, { height: 0.5 }); streetLamp(group, 3.0, 2.25, { height: 0.5 }); streetLamp(group, 2.35, 3.3, { height: 0.5 }); streetLamp(group, 1.7, 0.7, { height: 0.5 });
+  // A secondary feature per variant: playground, picnic lawn or kiosk with tables.
+  if (feature === 'fountain') playground(group, 0.25, 0.35, random);
+  else if (feature === 'pond') { picnicTable(group, 0.6, 0.7); picnicTable(group, 1.05, 0.5); picnicTable(group, 0.55, 1.2); }
+  else { kiosk(group, 0.35, 0.45, random); for (const [tx, tz] of [[0.95, 0.6], [0.9, 1.0]]) { cylinder(group, tx, 0, tz, 0.006, 0.006, 0.1, mat(P.charcoal), 6); cylinder(group, tx, 0.1, tz, 0.06, 0.06, 0.01, mat(P.ivory), 12); } }
+  // Flower meadows and beds.
+  flowerbed(group, 0.25, 2.55, 0.65, 0.34, random);
+  flowerbed(group, 2.95, 3.15, 0.7, 0.34, random, [P.coral, P.gold, P.ivory]);
+  flowerbed(group, 2.45, 0.3, 0.6, 0.34, random, [0xb9a3e3, 0xf4a6b8, P.ivory]);
+  flowerbed(group, 2.35, 2.35, 0.32, 0.22, random, [0xd94f8a, P.gold]);
+  for (let i = 0; i < 26; i += 1) { const gx = 0.15 + random() * 3.7, gz = 0.15 + random() * 3.7; if (Math.hypot(gx - 2, gz - 2) > 0.85) grassTuft(group, gx, gz, random, { scale: 1.1 }); }
+  for (let i = 0; i < 5; i += 1) rock(group, 0.2 + random() * 3.6, 0.2 + random() * 3.6, random, { scale: 0.9 });
+  // Mature trees: a mixed grove at the back, feature trees around the edges.
+  const grove = [[0.45, 0.45, 'round', 1.45], [1.25, 0.25, 'lime', 1.3], [3.45, 0.5, 'round', 1.5], [3.65, 1.4, 'deep', 1.3], [0.3, 1.7, 'olive', 1.2]];
   for (const [x, z, leaves, scale] of grove) broadleaf(group, x, z, random, { scale, leaves });
-  broadleaf(group, 0.5, 3.45, random, { scale: 1.0, leaves: 'blossom' });
-  palm(group, 3.55, 3.5, random, { scale: 1.1 });
-  cypress(group, 1.55, 3.6, random, { scale: 0.9 }); cypress(group, 1.3, 3.75, random, { scale: 0.8 });
-  for (const [x, z] of [[0.95, 1.05], [3.1, 1.75], [1.6, 2.9], [3.7, 2.8], [0.2, 3.0]]) shrub(group, x, z, random, { scale: 1.15, flowers: random() < 0.5 ? P.coral : null });
-  hedge(group, 0.05, 0.05, 1.6, 'x', { h: 0.08, w: 0.07 });
-  hedge(group, 2.4, 0.05, 1.55, 'x', { h: 0.08, w: 0.07 });
+  pine(group, 2.85, 0.25, random, { scale: 1.2 });
+  broadleaf(group, 0.5, 3.5, random, { scale: 1.2, leaves: feature === 'pavilion' ? 'jacaranda' : 'blossom' });
+  palm(group, 3.6, 3.55, random, { scale: 1.35 }); palm(group, 3.3, 3.75, random, { scale: 1.1 });
+  cypress(group, 1.55, 3.65, random, { scale: 1.2 }); cypress(group, 1.3, 3.8, random, { scale: 1.0 });
+  poplar(group, 3.8, 2.2, random, { scale: 1.1 });
+  for (const [x, z] of [[0.95, 1.05], [3.1, 1.75], [1.6, 2.9], [3.7, 2.8], [0.2, 3.0], [2.2, 0.15]]) shrub(group, x, z, random, { scale: 1.4, flowers: random() < 0.5 ? 0xd94f8a : null });
+  hedge(group, 0.05, 0.05, 1.6, 'x', { h: 0.1, w: 0.08 });
+  hedge(group, 2.4, 0.05, 1.55, 'x', { h: 0.1, w: 0.08 });
   return group;
 }
 

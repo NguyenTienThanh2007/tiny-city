@@ -6,6 +6,7 @@
 // machine; compare runs made with the same browser flags only.
 import { chromium } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
+import { coralBay } from './vw3b_city.mjs';
 
 const baseUrl = process.argv.find((arg) => arg.startsWith('http')) ?? 'http://127.0.0.1:5181/';
 const label = process.argv.find((arg) => arg.startsWith('--label='))?.slice(8) ?? 'run';
@@ -121,6 +122,11 @@ await scenario('slice-close-zoom', slice(), async (page) => {
   for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Zoom in' }).click();
 });
 await scenario('sample-city', null, null);
+await scenario('coral-bay-dense', coralBay(), async (page) => { await page.getByRole('button', { name: 'Center neighborhood' }).click(); });
+await scenario('coral-bay-close', coralBay(), async (page) => {
+  await page.getByRole('button', { name: 'Center neighborhood' }).click();
+  for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Zoom in' }).click();
+});
 await scenario('commute-300-zoomed-out', commuteCity(300), async (page) => {
   await welcome(page);
   for (let i = 0; i < 4; i += 1) await page.getByRole('button', { name: 'Zoom out' }).click();

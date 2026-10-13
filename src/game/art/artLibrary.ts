@@ -2,6 +2,7 @@ import { Assets, Spritesheet, Texture } from 'pixi.js';
 import type { SpritesheetData } from 'pixi.js';
 import { BUILDINGS } from '../../types';
 import { indexManifest, validateManifest, type ArtAssetRecord, type ArtIndex, type ArtManifest } from './artManifest';
+import { buildHitMask, hitMask, type HitMask } from './hitMask';
 
 /**
  * Loads the baked Visual World 3.0 atlases once per page. Textures get mipmaps so the art stays clean when the
@@ -14,6 +15,11 @@ export interface ArtLibrary {
   frame(name: string | undefined): Texture | null;
   /** Approximate GPU bytes of the atlas pages (with mipmaps). */
   readonly textureBytes: number;
+  /**
+   * Alpha hit test for a building colour frame at a world-px offset from the frame's top-left. Returns null when
+   * no mask exists (e.g. pixel data unavailable), so callers fall back to geometric picking.
+   */
+  hit(name: string | undefined, x: number, y: number): boolean | null;
 }
 
 export const ART_BASE = `${import.meta.env?.BASE_URL ?? '/'}art/vw3/`;
@@ -39,6 +45,8 @@ async function load(base: string): Promise<ArtLibrary | null> {
   const errors = validateManifest(manifest, footprints);
   if (errors.length) throw new Error(`invalid art manifest: ${errors.join('; ')}`);
   const frames = new Map<string, Texture>();
+  const masks = new Map<string, HitMask>();
+  const buildingFrames = new Set(Object.values(manifest.assets).filter((asset) => asset.category === 'building' && asset.color).map((asset) => asset.color!));
   let textureBytes = 0;
   await Promise.all(manifest.sheets.map(async (sheet) => {
     const [data, image] = await Promise.all([
@@ -50,10 +58,33 @@ async function load(base: string): Promise<ArtLibrary | null> {
     const spritesheet = new Spritesheet(image, data);
     await spritesheet.parse();
     for (const [name, texture] of Object.entries(spritesheet.textures)) frames.set(name, texture);
+    const wanted = Object.entries(data.frames).filter(([name]) => buildingFrames.has(name));
+    if (wanted.length) {
+      const rgba = readPixels(image, sheet.width, sheet.height);
+      const resolution = Number(data.meta.scale) || 1;
+      if (rgba) for (const [name, entry] of wanted) masks.set(name, buildHitMask(rgba, sheet.width, entry.frame, resolution));
+    }
     textureBytes += Math.round(sheet.width * sheet.height * 4 * 4 / 3);
   }));
   const index = indexManifest(manifest);
-  return { index, textureBytes, frame: (name) => (name ? frames.get(name) ?? null : null) };
+  return { index, textureBytes, frame: (name) => (name ? frames.get(name) ?? null : null),
+    hit: (name, x, y) => { const mask = name ? masks.get(name) : undefined; return mask ? hitMask(mask, x, y) : null; } };
+}
+
+/** RGBA pixels of a loaded atlas image (once per page); null where the platform cannot read them back. */
+function readPixels(image: Texture, width: number, height: number): Uint8ClampedArray | null {
+  try {
+    const resource = image.source.resource as CanvasImageSource | undefined;
+    if (!resource || typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(resource, 0, 0);
+    return ctx.getImageData(0, 0, width, height).data;
+  } catch {
+    return null;
+  }
 }
 
 /** Test seam: forget the cached library (only used by unit tests). */

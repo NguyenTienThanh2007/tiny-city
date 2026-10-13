@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BUILDINGS, type BuildingKind } from '../../types';
-import { buildingLift, roofCapHeight } from '../buildingArt';
-import { BAKED_BUILDING_KINDS, indexManifest, roadMask, selectBuildingAsset, selectDecorAsset, validateManifest, type ArtManifest } from './artManifest';
+import { buildingLift } from '../buildingArt';
+import { BAKED_BUILDING_KINDS, indexManifest, roadMask, selectBuildingAsset, selectDecorAsset, selectRoadAsset, validateManifest, type ArtManifest } from './artManifest';
+import { buildHitMask, hitMask } from './hitMask';
 
 const dir = resolve(__dirname, '../../../public/art/vw3');
 const manifest = JSON.parse(readFileSync(resolve(dir, 'manifest.json'), 'utf8')) as ArtManifest;
@@ -21,8 +22,12 @@ describe('baked art manifest (public/art/vw3)', () => {
     for (const sheet of manifest.sheets) {
       const data = JSON.parse(readFileSync(resolve(dir, sheet.file), 'utf8'));
       expect(data.meta.image).toBe(sheet.image);
-      expect(Number(data.meta.scale)).toBe(manifest.resolution);
-      for (const [name, frame] of Object.entries(data.frames)) frames.set(name, frame as never);
+      // Full-resolution sheets hold colour frames; half-resolution "soft" sheets hold shadows and night glow.
+      expect(Number(data.meta.scale)).toBe(sheet.scale ?? manifest.resolution);
+      for (const [name, frame] of Object.entries(data.frames)) {
+        frames.set(name, frame as never);
+        if (name.endsWith('#color')) expect(Number(data.meta.scale), name).toBe(manifest.resolution);
+      }
     }
     for (const [id, asset] of Object.entries(manifest.assets)) {
       for (const pass of ['color', 'shadow', 'emissive'] as const) {
@@ -41,26 +46,24 @@ describe('baked art manifest (public/art/vw3)', () => {
     }
   });
 
-  it('ships every slice building in both facings and all 16 road masks', () => {
+  it('ships every catalog building type (both facings except parks), all 16 road masks and a plaza tile', () => {
+    expect([...BAKED_BUILDING_KINDS].sort()).toEqual(Object.keys(BUILDINGS).sort());
     for (const kind of BAKED_BUILDING_KINDS) {
       const list = index.buildings.get(kind) ?? [];
-      expect(list.length, kind).toBeGreaterThanOrEqual(3);
+      expect(list.length, kind).toBeGreaterThanOrEqual(kind === 'pool' || kind === 'mall' ? 2 : 3);
       if (kind !== 'park') expect(new Set(list.map((asset) => asset.front))).toEqual(new Set(['S', 'E']));
     }
     for (let mask = 0; mask < 16; mask += 1) expect(index.roads.get(mask)?.color).toBeDefined();
+    expect(index.plaza?.color).toBeDefined();
   });
 
-  it('keeps baked building art within the clickable roof height used for hit testing', () => {
-    // Color frames are in texture px at `resolution`; the part above the footprint's north corner is the height.
-    const frames = new Map<string, { frame: { h: number }; anchor: { y: number } }>();
-    for (const sheet of manifest.sheets) for (const [name, frame] of Object.entries(JSON.parse(readFileSync(resolve(dir, sheet.file), 'utf8')).frames)) frames.set(name, frame as never);
+  it('records each building art height for labels and markers, at least its legacy clickable height', () => {
     for (const [id, asset] of Object.entries(manifest.assets)) {
-      if (asset.category !== 'building' || asset.kind === 'park') continue;
-      const frame = frames.get(asset.color!)!;
-      const above = frame.anchor.y * frame.frame.h / manifest.resolution; // world px above the north corner
-      // Nothing may rise above the clickable cap at the footprint's north corner (the highest point of its hit box).
-      const kind = asset.kind as BuildingKind;
-      expect(above, id).toBeLessThanOrEqual(buildingLift({ kind }, 1) + roofCapHeight(kind));
+      if (asset.category !== 'building') continue;
+      expect(asset.heightPx, id).toBeGreaterThan(0);
+      // Tall art is clickable through alpha picking; heights stay in a sane range for the camera framing.
+      expect(asset.heightPx!, id).toBeLessThan(220);
+      if (asset.kind !== 'park' && asset.kind !== 'pool') expect(asset.heightPx!, id).toBeGreaterThanOrEqual(buildingLift({ kind: asset.kind as BuildingKind }, 1) * 0.6);
     }
   });
 });
@@ -80,12 +83,34 @@ describe('art selection rules', () => {
     expect(selectBuildingAsset(index, 'villa', 'x', { ...NO_ROAD, north: true })!.front).toBe('S');
   });
 
-  it('fall back (null) for kinds without baked art, so the vector renderer draws them', () => {
-    const vectorOnly = (Object.keys(BUILDINGS) as BuildingKind[]).filter((kind) => !BAKED_BUILDING_KINDS.includes(kind));
-    expect(vectorOnly.length).toBeGreaterThan(0);
-    for (const kind of vectorOnly) expect(selectBuildingAsset(index, kind, 'id', NO_ROAD)).toBeNull();
-    expect(selectDecorAsset(index, 'stones', 0)).toBeNull();
-    expect(selectDecorAsset(index, 'tree', 3)?.color).toBeDefined();
+  it('fall back (null) for unknown kinds and decor, so the vector renderer draws them', () => {
+    expect(selectBuildingAsset(index, 'lighthouse', 'id', NO_ROAD)).toBeNull();
+    expect(selectDecorAsset(index, 'fountain', 0)).toBeNull();
+    for (const kind of ['tree', 'accent', 'streetTree', 'palm', 'bush', 'flowers', 'stones', 'grass', 'lamp', 'bench', 'bin', 'bikes', 'planter']) {
+      for (let variant = 0; variant < 8; variant += 1) expect(selectDecorAsset(index, kind, variant)?.color, `${kind} ${variant}`).toBeDefined();
+    }
+  });
+
+  it('uses the plaza tile only where the road widens into an area', () => {
+    const block = new Set<string>();
+    for (let y = 0; y < 3; y += 1) for (let x = 0; x < 3; x += 1) block.add(`${x},${y}`);
+    const has = (x: number, y: number) => block.has(`${x},${y}`);
+    expect(selectRoadAsset(index, has, 1, 1)).toBe(index.plaza);
+    expect(selectRoadAsset(index, has, 0, 1)).toBe(index.roads.get(roadMask(has, 0, 1)));
+    const cross = new Set(['5,4', '6,5', '5,6', '4,5', '5,5']);
+    expect(selectRoadAsset(index, (x, y) => cross.has(`${x},${y}`), 5, 5)).toBe(index.roads.get(15));
+  });
+
+  it('builds world-pixel hit masks from atlas alpha and tests them', () => {
+    // A 4×4 texture-px frame at (2, 1) on an 8-px-wide page, resolution 2: only its top-left texel block is solid.
+    const page = new Uint8ClampedArray(8 * 6 * 4);
+    page[(1 * 8 + 2) * 4 + 3] = 255;
+    const mask = buildHitMask(page, 8, { x: 2, y: 1, w: 4, h: 4 }, 2);
+    expect([mask.width, mask.height]).toEqual([2, 2]);
+    expect(hitMask(mask, 0.5, 0.5)).toBe(true);
+    expect(hitMask(mask, 1.5, 0.5)).toBe(false);
+    expect(hitMask(mask, -1, 0)).toBe(false);
+    expect(hitMask(mask, 5, 5)).toBe(false);
   });
 
   it('computes road masks from the four neighbours', () => {

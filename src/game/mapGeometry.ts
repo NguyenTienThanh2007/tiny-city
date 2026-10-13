@@ -7,6 +7,8 @@ export const TILE_W = 56;
 export const TILE_H = 28;
 export const MIN_SCALE = 0.08;
 export const MAX_SCALE = 1.55;
+/** Closest zoom the home view uses (3.0B frames the built city more prominently than 2.0's 0.86). */
+export const HOME_MAX_SCALE = 1.0;
 const HALF_W = TILE_W / 2;
 const HALF_H = TILE_H / 2;
 const MAP_OFFSET_X = 32 * TILE_W;
@@ -79,8 +81,8 @@ export function cityView(city: CityState, width: number, height: number): { cent
   const top = Math.min(...ys) - 100, bottom = Math.max(...ys);
   return { center: { x: (left + right) / 2, y: (top + bottom) / 2 },
     // Callers pass the visible (HUD-free) area, so only a small breathing margin is reserved here.
-    scale: Math.max(MIN_SCALE, Math.min(0.86, Math.max(100, width - Math.min(120, width * 0.1)) / (right - left),
-      Math.max(100, height - Math.min(80, height * 0.12)) / (bottom - top))) };
+    scale: Math.max(MIN_SCALE, Math.min(HOME_MAX_SCALE, Math.max(100, width - Math.min(90, width * 0.08)) / (right - left),
+      Math.max(100, height - Math.min(60, height * 0.09)) / (bottom - top))) };
 }
 
 /** Fill skipped pointer samples with an orthogonally connected tile stroke. */

@@ -2,7 +2,7 @@ import { Container, Graphics, GraphicsContext, Sprite, Texture } from 'pixi.js';
 import type { Renderer } from 'pixi.js';
 import type { CityPlan } from '@tiny-city/simulation';
 import { iso } from './mapGeometry';
-import { planDecor, TALL_DECOR, type Decor } from './worldDecor';
+import { FLAT_DECOR, planDecor, TALL_DECOR, type Decor } from './worldDecor';
 import { tree } from './buildingArt';
 import { currentArt } from './art/artLibrary';
 import { selectDecorAsset } from './art/artManifest';
@@ -13,6 +13,9 @@ import { selectDecorAsset } from './art/artManifest';
  * items are baked into the ground layer. The whole layer is rebuilt only when roads or buildings change.
  */
 const DECOR_TEXTURE_RESOLUTION = 3;
+/** Below this camera scale small decor and decor shadows are skipped. */
+export const LOD_SCALE = 0.32;
+const SMALL_DECOR = new Set<Decor['kind']>(['bush', 'bench', 'bin', 'bikes', 'planter']);
 export class DecorLayer {
   private readonly contexts = new Map<string, GraphicsContext>();
   private readonly textures = new Map<string, { texture: Texture; anchor: { x: number; y: number } }>();
@@ -25,6 +28,9 @@ export class DecorLayer {
   private readonly shadowSprites: Sprite[] = [];
   private hidden: Container[] = [];
   private tint = 0xffffff;
+  /** Small street furniture and shrubs that stop rendering when zoomed far out (level of detail). */
+  private readonly small: Container[] = [];
+  private detailed = true;
   private glow = 0;
   private items: Decor[] = [];
 
@@ -46,6 +52,7 @@ export class DecorLayer {
     this.tall.clear();
     this.lampGlows.length = 0;
     this.tinted.length = 0;
+    this.small.length = 0;
     this.hidden = [];
     this.ground.clear();
     for (const sprite of this.flat) sprite.destroy();
@@ -70,7 +77,7 @@ export class DecorLayer {
         this.shadowLayer.addChild(shadow);
         this.shadowSprites.push(shadow);
       }
-      const flatTexture = decor.kind === 'flowers' && baked ? art!.frame(baked.color) : null;
+      const flatTexture = FLAT_DECOR.has(decor.kind) && baked ? art!.frame(baked.color) : null;
       if (flatTexture) {
         const sprite = new Sprite(flatTexture);
         sprite.position.set(p.x, p.y);
@@ -80,7 +87,7 @@ export class DecorLayer {
         const colors = [[0xf2c14e, 0xf4efe2], [0xe58f7a, 0xf2c14e], [0xb9a3d6, 0xf4efe2]][decor.variant]!;
         g.ellipse(p.x, p.y, 7, 3.2).fill({ color: 0x6f9a62, alpha: 0.55 });
         for (const [dx, dy, c] of [[-3, 0, 0], [2, -1, 1], [0, 1.5, 0], [4, 1, 1], [-1, -1.6, 1]] as const) g.circle(p.x + dx, p.y + dy, 1.2).fill(colors[c]);
-      } else if (decor.kind === 'stones') {
+      } else if (decor.kind === 'stones' || decor.kind === 'grass') {
         g.ellipse(p.x, p.y, 3.2, 1.8).fill(0xb7b2a2).ellipse(p.x + 3.5, p.y + 1, 2.2, 1.3).fill(0xcbc6b6).ellipse(p.x - 0.5, p.y - 0.6, 1.4, 0.7).fill({ color: 0xffffff, alpha: 0.4 });
       }
       if (!TALL_DECOR.has(decor.kind)) continue;
@@ -105,6 +112,7 @@ export class DecorLayer {
         this.lampGlows.push(glow);
       }
       this.scene.addChild(item);
+      if (SMALL_DECOR.has(decor.kind)) { item.renderable = this.detailed; this.small.push(item); }
       const key = `${decor.tile.x},${decor.tile.y}`;
       this.tall.set(key, [...(this.tall.get(key) ?? []), item]);
     }
@@ -144,6 +152,10 @@ export class DecorLayer {
       c.ellipse(2, 1, 7, 2.6).fill({ color: 0x1f3324, alpha: 0.2 });
       c.circle(-2.5, -3, 3.8).fill(tones[0]).circle(2.5, -3.5, 4.2).fill(tones[0]).circle(0, -5.5, 3.6).fill(tones[1]);
       if (decor.variant === 1) c.circle(-1, -6, 0.9).fill(0xe58f7a).circle(2.5, -4.5, 0.9).fill(0xf2c14e);
+    } else if (decor.kind === 'bench' || decor.kind === 'bin' || decor.kind === 'bikes' || decor.kind === 'planter') {
+      // Vector fallback for street furniture: a small dark block on the curb.
+      c.ellipse(1, 0.5, 4, 1.6).fill({ color: 0x1f3324, alpha: 0.2 });
+      c.roundRect(-3.5, -4, 7, 4, 1).fill(decor.kind === 'planter' ? 0x6f9a62 : 0x6b5a48);
     } else if (decor.kind === 'lamp') {
       c.ellipse(1.5, 0.6, 3, 1.3).fill({ color: 0x1f3324, alpha: 0.25 });
       c.rect(-0.7, -19, 1.4, 19).fill(0x3c4a44);
@@ -159,6 +171,18 @@ export class DecorLayer {
     this.hidden = [];
     if (!tiles) return;
     for (const tile of tiles) for (const item of this.tall.get(tile) ?? []) { item.visible = false; this.hidden.push(item); }
+  }
+
+  /**
+   * Level of detail: far out, decor shadows and small furniture are sub-pixel noise that costs fill rate, so they
+   * stop rendering (renderable, so placement-preview hiding via `visible` is unaffected).
+   */
+  setDetail(scale: number): void {
+    const detailed = scale >= LOD_SCALE;
+    if (detailed === this.detailed) return;
+    this.detailed = detailed;
+    for (const item of this.small) item.renderable = detailed;
+    if (this.shadowLayer) this.shadowLayer.renderable = detailed;
   }
 
   applyLighting(tint: number, glow: number, force = false): void {
