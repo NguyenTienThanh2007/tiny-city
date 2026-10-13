@@ -18,7 +18,7 @@ import { buildingDepth } from './npcMotion';
 import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
 import { rejectionFeedback } from '../simulation/feedback';
 import { currentArt, loadArt, type ArtLibrary } from './art/artLibrary';
-import { roadMask, selectBuildingAsset } from './art/artManifest';
+import { selectBuildingAsset, selectRoadAsset } from './art/artManifest';
 import { drawTerrainArt } from './terrainArt';
 
 export { buildingLift } from './buildingArt';
@@ -98,7 +98,7 @@ function drawRoadSprites(layer: Container, city: CityState, art: ArtLibrary): bo
   const has = (x: number, y: number) => roadSet.has(cellKey(x, y));
   const sprites: Sprite[] = [];
   for (const { x, y } of city.roads) {
-    const texture = art.frame(art.index.roads.get(roadMask(has, x, y))?.color);
+    const texture = art.frame(selectRoadAsset(art.index, has, x, y)?.color);
     if (!texture) { sprites.forEach((sprite) => sprite.destroy()); return false; }
     const sprite = new Sprite(texture);
     const at = iso(x, y);
@@ -454,7 +454,29 @@ function containsPoint(point: Point, polygonPoints: Point[]): boolean {
   return inside;
 }
 
+/** Height of a building's drawn art above its footprint centre (world px): baked height or the vector lift + cap. */
+export function buildingTop(building: Building, roads: CityState['roads'] = []): number {
+  const legacy = buildingLift(building, 1) + roofCapHeight(building.kind);
+  const art = currentArt();
+  if (!art) return legacy;
+  const roadSet = new Set(roads.map(({ x, y }) => cellKey(x, y)));
+  const height = selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet))?.heightPx;
+  return height ? Math.max(legacy, height) : legacy;
+}
+
+/** Pixel test against the building's baked sprite (null when no art or no mask is available). */
+function bakedArtHit(building: Building, point: Point, roadSet: ReadonlySet<string>, art: ArtLibrary): boolean | null {
+  const asset = selectBuildingAsset(art.index, building.kind, building.id, roadSidesFor(building, roadSet));
+  const texture = art.frame(asset?.color);
+  if (!asset || !texture) return null;
+  const origin = iso(building.x, building.y);
+  const anchor = texture.defaultAnchor ?? { x: 0, y: 0 };
+  return art.hit(asset.color, point.x - (origin.x - anchor.x * texture.width), point.y - (origin.y - anchor.y * texture.height));
+}
+
 export function buildingAtPoint(city: CityState, point: Point): Building | undefined {
+  const art = currentArt();
+  const roadSet = art ? new Set(city.roads.map(({ x, y }) => cellKey(x, y))) : null;
   const byDrawOrder = [...city.buildings].sort((a, b) => {
     const sa = BUILDINGS[a.kind], sb = BUILDINGS[b.kind];
     return buildingDepth(a.x, a.y, sa.width, sa.height) - buildingDepth(b.x, b.y, sb.width, sb.height);
@@ -473,6 +495,8 @@ export function buildingAtPoint(city: CityState, point: Point): Building | undef
       [ground[0]!, ground[1]!, top[1]!, top[0]!],
       ground,
     ];
+    // Baked art can rise above the legacy box (towers, roofs, trees); its opaque pixels are clickable too.
+    if (art && roadSet && bakedArtHit(building, point, roadSet, art)) return building;
     if (visibleFaces.some((face) => containsPoint(point, face))) return building;
   }
   const cell = toCell(point);
@@ -597,7 +621,7 @@ export default function CityViewport(props: Props) {
       world.addChildAt(lifeMarkers, world.getChildIndex(labels));
       const player = new PlayerLayer(buildings, groundOverlay, lifeMarkers, (id) => {
         const building = propsRef.current.city.buildings.find((entry) => entry.id === id);
-        return building ? buildingLift(building, 1) + roofCapHeight(building.kind) : 30;
+        return building ? buildingTop(building, propsRef.current.city.roads) : 30;
       });
       let lastHighlights: readonly HomeHighlight[] | null | undefined;
       const decor = new DecorLayer(buildings, groundDecor, app.renderer, decorShadows);
@@ -676,7 +700,10 @@ export default function CityViewport(props: Props) {
       applyLighting(DAYLIGHT, true);
       // Baked atlases load asynchronously; until then (or if they fail) the vector renderer stays in place.
       void loadArt().then((art) => {
-        if (!art || disposed || appRef.current !== app) return;
+        if (disposed || appRef.current !== app) return;
+        // Tells tests and tooling the world is drawn with its final art ('fallback' = vector art only).
+        host.dataset.art = art ? 'ready' : 'fallback';
+        if (!art) return;
         const current = propsRef.current;
         redrawCity(terrain, roads, buildings, current.city, current.world.plan, current.selectedBuildingId, false, registry, textures, true, buildingShadows);
         decor.rebuild(current.world.plan);
@@ -699,6 +726,7 @@ export default function CityViewport(props: Props) {
       const updateCamera = (throttle = false) => {
         const box = safeBox();
         world.scale.set(view.scale);
+        decor.setDetail(view.scale);
         world.position.set(box.cx - center.x * view.scale + view.x, box.cy - center.y * view.scale + view.y);
         const now = performance.now();
         if (throttle && now - lastFootprint < 120) return;
@@ -811,7 +839,7 @@ export default function CityViewport(props: Props) {
             const spec = BUILDINGS[building.kind];
             const point = iso(building.x + spec.width / 2, building.y + spec.height / 2);
             text = building.name;
-            anchor = { x: point.x, y: point.y - buildingLift(building, 1) - roofCapHeight(building.kind) - 10 };
+            anchor = { x: point.x, y: point.y - buildingTop(building, current.city.roads) - 10 };
           }
         }
         if (!text || !anchor) { labels.visible = false; return; }

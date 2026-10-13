@@ -88,12 +88,15 @@ const WORLD_CLIP = { x: 300, y: 180, width: 520, height: 520 };
 
 test('world visuals are deterministic across save and reload', async ({ page }) => {
   const errors = await openCity(page);
+  // Baked atlases load asynchronously; compare only once the final art is on screen.
+  await expect(page.locator('.city-viewport')).toHaveAttribute('data-art', /ready|fallback/, { timeout: 15_000 });
   await page.mouse.move(640, 30);
   await page.waitForTimeout(500);
   const first = await page.screenshot({ clip: WORLD_CLIP });
   await page.getByRole('button', { name: /^(Save|Saved)$/ }).click();
   await page.reload();
   await expect(page.getByTestId('minimap-building-office')).toBeVisible();
+  await expect(page.locator('.city-viewport')).toHaveAttribute('data-art', /ready|fallback/, { timeout: 15_000 });
   await page.mouse.move(640, 30);
   await page.waitForTimeout(500);
   const second = await page.screenshot({ clip: WORLD_CLIP });

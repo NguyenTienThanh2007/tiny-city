@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cityView, footprint, iso, proposalOverlayGeometry, tileStroke, toCell, toGrid } from './mapGeometry';
+import { cityView, footprint, HOME_MAX_SCALE, iso, proposalOverlayGeometry, tileStroke, toCell, toGrid } from './mapGeometry';
 import type { PlanProposal } from '@tiny-city/ai-architect';
 
 describe('map coordinates and recovery', () => {
@@ -19,7 +19,7 @@ describe('map coordinates and recovery', () => {
     const center = toGrid(view.center);
     expect(center.x).toBeGreaterThan(45);
     expect(center.y).toBeGreaterThan(45);
-    expect(view.scale).toBe(0.86);
+    expect(view.scale).toBe(HOME_MAX_SCALE);
   });
   it('fits widely separated lots instead of centering an empty patch between offscreen buildings', () => {
     const city = { size: 64, funds: 0, roads: [], buildings: [
