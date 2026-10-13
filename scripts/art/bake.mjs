@@ -15,7 +15,7 @@ const out = resolve(root, arg('out') ?? 'public/art/vw3');
 const previewDir = resolve(root, arg('previewDir') ?? 'tmp-art-preview');
 
 const ATLASES = [
-  { name: 'buildings', prefixes: ['villa.', 'townhouse.', 'apartment.', 'park.'] },
+  { name: 'buildings', prefixes: ['villa.', 'duplex.', 'townhouse.', 'apartment.', 'park.', 'clubhouse.', 'pool.', 'mall.', 'office.'] },
   { name: 'nature', prefixes: ['tree.', 'prop.'] },
   { name: 'roads', prefixes: ['road.'] },
 ];
@@ -59,13 +59,13 @@ if (preview) {
     const result = await page.evaluate((prefixes) => window.TC.bake(prefixes), atlas.prefixes);
     manifest.resolution = result.resolution;
     for (const pageData of result.pages) {
-      const base = `${atlas.name}-${pageData.index}`;
+      const base = `${atlas.name}${pageData.suffix}-${pageData.index}`;
       const image = png(pageData.url);
-      writeFileSync(join(out, `${base}.png`), image);
-      const sheet = { frames: pageData.frames, meta: { app: 'tiny-city-bake', version: '1', image: `${base}.png`, format: 'RGBA8888',
-        size: { w: pageData.width, h: pageData.height }, scale: String(result.resolution) } };
+      writeFileSync(join(out, `${base}.webp`), image);
+      const sheet = { frames: pageData.frames, meta: { app: 'tiny-city-bake', version: '1', image: `${base}.webp`, format: 'RGBA8888',
+        size: { w: pageData.width, h: pageData.height }, scale: String(pageData.scale) } };
       writeFileSync(join(out, `${base}.json`), JSON.stringify(sheet));
-      manifest.sheets.push({ file: `${base}.json`, image: `${base}.png`, width: pageData.width, height: pageData.height,
+      manifest.sheets.push({ file: `${base}.json`, image: `${base}.webp`, scale: pageData.scale, width: pageData.width, height: pageData.height,
         sha256: createHash('sha256').update(image).digest('hex').slice(0, 16) });
     }
     Object.assign(manifest.assets, result.manifest);

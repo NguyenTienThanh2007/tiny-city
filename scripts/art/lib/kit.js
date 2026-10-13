@@ -3,6 +3,7 @@
 // +X/+Z, so only the south (+Z) and east (+X) faces and the roofs are ever visible; detail goes there.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { detailTexture, TEXTURE_SCALE } from './textures.js';
 
 export const PALETTE = {
   ivory: 0xfaf3e6, cream: 0xf3e6cf, sand: 0xe9d8b8, linen: 0xefe4d2,
@@ -16,15 +17,36 @@ export const PALETTE = {
 
 const cache = new Map();
 /** Matte painted material; cached by color and options so the GPU shares programs. */
-export function mat(color, { rough = 0.82, metal = 0, emissive = 0, flat = false } = {}) {
-  const key = `${color}:${rough}:${metal}:${emissive}:${flat}`;
+export function mat(color, { rough = 0.82, metal = 0, emissive = 0, flat = false, tex = null, texScale = 1, side = THREE.FrontSide } = {}) {
+  const key = `${color}:${rough}:${metal}:${emissive}:${flat}:${tex}:${texScale}:${side}`;
   if (!cache.has(key)) {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, flatShading: flat });
+    const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, flatShading: flat, side });
     if (emissive) m.emissive = new THREE.Color(emissive);
+    if (tex) { m.map = detailTexture(tex); m.userData.texScale = TEXTURE_SCALE[tex] * texScale; }
     cache.set(key, m);
   }
   return cache.get(key);
 }
+/** Pool / pond water: glossy, with a soft ripple detail map. */
+export function waterMat(color = 0x3fb6c4) {
+  const key = `water:${color}`;
+  if (!cache.has(key)) {
+    const m = new THREE.MeshPhysicalMaterial({ color, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.6, side: THREE.DoubleSide });
+    m.map = detailTexture('water'); m.userData.texScale = TEXTURE_SCALE.water;
+    cache.set(key, m);
+  }
+  return cache.get(key);
+}
+/** Common surfaces with their detail maps. */
+export const wallMat = (color) => mat(color, { rough: 0.9, tex: 'plaster' });
+export const renderMat = (color) => mat(color, { rough: 0.85, tex: 'render' });
+export const stoneMat = (color = PALETTE.stone) => mat(color, { rough: 0.92, tex: 'stone' });
+export const brickMat = (color = 0xc9785a) => mat(color, { rough: 0.9, tex: 'brick' });
+export const woodMat = (color = PALETTE.timber) => mat(color, { rough: 0.8, tex: 'planks' });
+export const pavingMat = (color = PALETTE.paving) => mat(color, { rough: 0.95, tex: 'paving' });
+export const lawnMat = (color = 0x86ad70) => mat(color, { rough: 1, tex: 'grass' });
+export const leafMat = (color) => mat(color, { rough: 0.95, tex: 'leaves' });
+export const concreteMat = (color = 0xd8d4cb) => mat(color, { rough: 0.9, tex: 'concrete' });
 /** Glass: glossy, slightly tinted, reflects the studio environment. Tagged so the night pass can light it. */
 export function glass(tint = 0x9cc9d3) {
   const key = `glass:${tint}`;
@@ -73,17 +95,28 @@ export function sphere(parent, x, y, z, radius, material, detail = 2) {
   return mesh;
 }
 
+/** Flat roof: a gravel/membrane deck at y plus a ring parapet of height h around it (never a solid lid). */
+export function flatRoof(parent, x0, z0, x1, z1, y, { h = 0.07, t = 0.05, color = PALETTE.ivory, deck = 0xb8b6b0 } = {}) {
+  box(parent, x0, y, z0, x1 - x0, 0.02, z1 - z0, mat(deck, { rough: 1, tex: 'concrete', texScale: 0.5 }));
+  const m = mat(color, { rough: 0.7 });
+  box(parent, x0 - 0.02, y, z0 - 0.02, x1 - x0 + 0.04, h, t, m);
+  box(parent, x0 - 0.02, y, z1 - t + 0.02, x1 - x0 + 0.04, h, t, m);
+  box(parent, x0 - 0.02, y, z0 - 0.02, t, h, z1 - z0 + 0.04, m);
+  box(parent, x1 - t + 0.02, y, z0 - 0.02, t, h, z1 - z0 + 0.04, m);
+}
+
 /** Lot plate: a thin slab that fills the footprint exactly (opaque, so it hides the shadow pass underneath). */
 export function plate(parent, w, d, color, h = 0.04) {
   // Top face at y = 0 so paths, beds and decals placed at y >= 0 always sit on top of it.
-  return box(parent, 0, -h, 0, w, h, d, mat(color, { rough: 0.95 }));
+  // Lawns render a touch lighter than the wild terrain under the warm key light; pull them back so lots blend.
+  return box(parent, 0, -h, 0, w, h, d, lawnMat(new THREE.Color(color).multiplyScalar(0.93).getHex()));
 }
 
 /**
  * Pitched roof with real thickness and overhang. `ridge` 'x' runs the ridge along X. `hip` slopes all four sides.
  * Built from the eave rectangle (x0, z0)–(x1, z1) at height y, rising by `rise`.
  */
-export function roof(parent, { x0, z0, x1, z1, y, rise, color, ridge = 'x', hip = false, thickness = 0.05, gableColor }) {
+export function roof(parent, { x0, z0, x1, z1, y, rise, color, ridge = 'x', hip = false, thickness = 0.05, gableColor, tex = 'roofTile' }) {
   const group = new THREE.Group();
   const ridgeX = ridge === 'x';
   const half = ridgeX ? (z1 - z0) / 2 : (x1 - x0) / 2;
@@ -104,10 +137,9 @@ export function roof(parent, { x0, z0, x1, z1, y, rise, color, ridge = 'x', hip 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
-  const roofMat = mat(color, { rough: 0.7, flat: true });
+  const roofMat = mat(color, { rough: 0.75, flat: true, tex, side: THREE.DoubleSide });
   const surface = enable(new THREE.Mesh(geometry, roofMat));
-  surface.material = roofMat;
-  surface.material.side = THREE.DoubleSide;
+  surface.userData.uvSlope = true;
   group.add(surface);
   // Fascia band gives the eave a visible edge thickness.
   const fascia = mat(0xf7efe0, { rough: 0.8 });
@@ -115,9 +147,9 @@ export function roof(parent, { x0, z0, x1, z1, y, rise, color, ridge = 'x', hip 
   box(group, x0, y - thickness, z1 - 0.03, x1 - x0, thickness, 0.03, fascia);
   box(group, x0, y - thickness, z0, 0.03, thickness, z1 - z0, fascia);
   box(group, x1 - 0.03, y - thickness, z0, 0.03, thickness, z1 - z0, fascia);
-  // Tile courses: shallow ribs parallel to the eave on the two visible slopes.
+  // Tile courses now come from the roof texture; ribs remain only on untextured roofs.
   const rib = mat(new THREE.Color(color).multiplyScalar(0.82).getHex(), { rough: 0.75 });
-  for (let i = 1; i < 4; i += 1) {
+  for (let i = 1; i < (tex ? 1 : 4); i += 1) {
     const t = i / 4;
     const lerp = (a, b) => a.clone().lerp(b, t);
     const pairs = ridgeX ? [[lerp(c01, r1), lerp(c11, r2)]] : [[lerp(c10, r1), lerp(c11, r2)]];
@@ -282,8 +314,8 @@ export function planter(parent, x, z, w, d, random, { box: boxColor = PALETTE.ti
 
 /** Trimmed hedge segment along X or Z. */
 export function hedge(parent, x, z, length, axis, { h = 0.12, w = 0.1, color = PALETTE.forest } = {}) {
-  if (axis === 'x') box(parent, x, 0, z, length, h, w, mat(color, { rough: 0.95 }), 0.035);
-  else box(parent, x, 0, z, w, h, length, mat(color, { rough: 0.95 }), 0.035);
+  if (axis === 'x') box(parent, x, 0, z, length, h, w, leafMat(color), 0.035);
+  else box(parent, x, 0, z, w, h, length, leafMat(color), 0.035);
 }
 
 /** Soft organic blob (jittered icosphere) for canopies and shrubs. */
@@ -303,40 +335,136 @@ function blob(radius, random, detail = 2, squash = 1) {
 }
 
 const LEAF_SETS = {
-  round: [0x5f9654, 0x6fa95e, 0x83b86a],
-  deep: [0x3f7550, 0x4f8a5c, 0x63a06c],
-  autumn: [0xd98b4b, 0xe7a957, 0xc76f3e],
-  blossom: [0xef9fb0, 0xf6b9c4, 0xe58ba0],
-  olive: [0x7d9a5b, 0x93ad6b, 0xa8bf7e],
+  round: [0x5a9150, 0x6ea85c, 0x86bb6a, 0x4a7f47],
+  deep: [0x3f7550, 0x4f8a5c, 0x63a06c, 0x356548],
+  autumn: [0xd98b4b, 0xe7a957, 0xc76f3e, 0xb85d36],
+  blossom: [0xef9fb0, 0xf6b9c4, 0xe58ba0, 0xf9cdd5],
+  olive: [0x7d9a5b, 0x93ad6b, 0xa8bf7e, 0x6c8a50],
+  jacaranda: [0x9b84d6, 0xb39ae6, 0x8670c4, 0xc8b5f0],
+  lime: [0x7fb04f, 0x95c25c, 0xa9d06a, 0x6a9a45],
 };
 
-/** Deciduous / flowering tree. `scale` ~1 is a mature street tree (about 0.9 tiles tall). */
-export function broadleaf(parent, x, z, random, { scale = 1, leaves = 'round' } = {}) {
+/**
+ * Mature broadleaf / flowering tree: a trunk with two branches and a full canopy of leaf-textured clusters on an
+ * ellipsoid shell around a darker core, so it reads as a volume with depth instead of a few balls.
+ * `scale` 1 is about 1.1 tiles tall with a canopy about 0.75 tiles wide.
+ */
+export function broadleaf(parent, x, z, random, { scale = 1, leaves = 'round', spread = 1 } = {}) {
   const g = new THREE.Group();
-  const trunkH = 0.32 * scale;
-  cylinder(g, 0, 0, 0, 0.028 * scale, 0.04 * scale, trunkH + 0.12 * scale, mat(PALETTE.walnut), 8);
+  const bark = mat(0x7a5638, { rough: 0.95, tex: 'bark' });
+  const trunkH = 0.38 * scale;
+  cylinder(g, 0, 0, 0, 0.03 * scale, 0.05 * scale, trunkH + 0.1 * scale, bark, 9);
+  for (const dir of [0.6, 2.6]) {
+    const branch = enable(new THREE.Mesh(new THREE.CylinderGeometry(0.014 * scale, 0.024 * scale, 0.22 * scale, 7), bark));
+    branch.position.set(Math.cos(dir) * 0.05 * scale, trunkH + 0.06 * scale, Math.sin(dir) * 0.05 * scale);
+    branch.rotation.set(Math.sin(dir) * 0.7, 0, -Math.cos(dir) * 0.7);
+    g.add(branch);
+  }
   const colors = LEAF_SETS[leaves] ?? LEAF_SETS.round;
-  const clusters = 5 + Math.floor(random() * 3);
+  const cy = trunkH + 0.3 * scale, rx = 0.3 * scale * spread, ry = 0.24 * scale;
+  const core = enable(new THREE.Mesh(blob(0.24 * scale * spread, random, 2, 0.85), leafMat(new THREE.Color(colors[3]).multiplyScalar(0.85).getHex())));
+  core.position.set(0, cy, 0); g.add(core);
+  const clusters = 13 + Math.floor(random() * 5);
   for (let i = 0; i < clusters; i += 1) {
-    const a = (i / clusters) * Math.PI * 2 + random();
-    const r = i === 0 ? 0 : 0.11 * scale * (0.6 + random() * 0.5);
-    const y = trunkH + 0.16 * scale + (i === 0 ? 0.08 * scale : (random() - 0.3) * 0.12 * scale);
-    const radius = (i === 0 ? 0.2 : 0.13 + random() * 0.05) * scale;
-    const m = mat(colors[i % colors.length], { rough: 0.9 });
-    const mesh = enable(new THREE.Mesh(blob(radius, random, 2, 0.92), m));
-    mesh.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+    const theta = random() * Math.PI * 2, phi = Math.acos(1 - random() * 1.35);
+    const px = Math.cos(theta) * Math.sin(phi) * rx, py = Math.cos(phi) * ry, pz = Math.sin(theta) * Math.sin(phi) * rx;
+    const radius = (0.1 + random() * 0.06) * scale;
+    // Lighter clusters on top and toward the sun (−X, +Z), darker underneath.
+    const lightness = py / ry * 0.5 + (pz - px) / rx * 0.25;
+    const color = lightness > 0.35 ? colors[2] : lightness > -0.05 ? colors[1] : colors[0];
+    const mesh = enable(new THREE.Mesh(blob(radius, random, 2, 0.88), leafMat(color)));
+    mesh.position.set(px, cy + py, pz);
     g.add(mesh);
+  }
+  if (leaves === 'blossom' || leaves === 'jacaranda') {
+    for (let i = 0; i < 14; i += 1) { const a = random() * Math.PI * 2; sphere(g, Math.cos(a) * rx * 0.9, cy + (random() - 0.2) * ry, Math.sin(a) * rx * 0.9, 0.018 * scale, mat(PALETTE.white, { rough: 0.6 }), 0); }
   }
   g.position.set(x, 0, z);
   parent.add(g);
   return g;
 }
 
+/** Tall columnar poplar. */
+export function poplar(parent, x, z, random, { scale = 1 } = {}) {
+  const g = new THREE.Group();
+  cylinder(g, 0, 0, 0, 0.02 * scale, 0.032 * scale, 0.2 * scale, mat(0x7a5638, { tex: 'bark' }), 8);
+  for (let i = 0; i < 7; i += 1) {
+    const y = 0.25 * scale + i * 0.13 * scale, r = (0.13 - Math.abs(i - 2.5) * 0.018) * scale;
+    const mesh = enable(new THREE.Mesh(blob(r, random, 2, 1.25), leafMat(pick(random, [0x4f8a5c, 0x5f9a5f, 0x467f52]))));
+    mesh.position.set((random() - 0.5) * 0.04 * scale, y, (random() - 0.5) * 0.04 * scale);
+    g.add(mesh);
+  }
+  g.position.set(x, 0, z); parent.add(g); return g;
+}
+
+/** Layered stone pine / conifer. */
+export function pine(parent, x, z, random, { scale = 1 } = {}) {
+  const g = new THREE.Group();
+  cylinder(g, 0, 0, 0, 0.022 * scale, 0.035 * scale, 0.3 * scale, mat(0x6e4b33, { tex: 'bark' }), 8);
+  for (let i = 0; i < 4; i += 1) {
+    const cone = enable(new THREE.Mesh(new THREE.ConeGeometry((0.28 - i * 0.055) * scale, 0.3 * scale, 9), leafMat(pick(random, [0x3e6d4a, 0x467a52, 0x355f42]))));
+    cone.position.set(0, (0.32 + i * 0.17) * scale, 0); cone.rotation.y = random() * Math.PI;
+    g.add(cone);
+  }
+  g.position.set(x, 0, z); parent.add(g); return g;
+}
+
+/** Fan palm cluster (several short trunks with fan fronds). */
+export function fanPalm(parent, x, z, random, { scale = 1 } = {}) {
+  const g = new THREE.Group();
+  for (let k = 0; k < 3; k += 1) {
+    const a = (k / 3) * Math.PI * 2 + random(), h = (0.28 + random() * 0.18) * scale;
+    const tx = Math.cos(a) * 0.05 * scale, tz = Math.sin(a) * 0.05 * scale;
+    cylinder(g, tx, 0, tz, 0.022 * scale, 0.028 * scale, h, mat(0x8d6c4a, { tex: 'bark' }), 8);
+    for (let f = 0; f < 7; f += 1) {
+      const fa = (f / 7) * Math.PI * 2;
+      const fan = enable(new THREE.Mesh(new THREE.CircleGeometry(0.11 * scale, 10, 0, Math.PI * 0.8), mat(pick(random, [0x5aa463, 0x4f9a5a, 0x66ad6c]), { rough: 0.85, side: THREE.DoubleSide })));
+      fan.position.set(tx + Math.cos(fa) * 0.05 * scale, h + 0.02 * scale, tz + Math.sin(fa) * 0.05 * scale);
+      fan.rotation.set(-Math.PI / 2 + 0.6, fa, 0);
+      g.add(fan);
+    }
+  }
+  g.position.set(x, 0, z); parent.add(g); return g;
+}
+
+/** Banana / bird-of-paradise style broad leaves. */
+export function bananaPlant(parent, x, z, random, { scale = 1 } = {}) {
+  const g = new THREE.Group();
+  cylinder(g, 0, 0, 0, 0.025 * scale, 0.035 * scale, 0.22 * scale, mat(0x7c9a52), 8);
+  for (let i = 0; i < 6; i += 1) {
+    const a = (i / 6) * Math.PI * 2 + random() * 0.5;
+    const leaf = enable(new THREE.Mesh(new THREE.PlaneGeometry(0.07 * scale, 0.28 * scale, 1, 4), mat(pick(random, [0x5fa25a, 0x6fb35f]), { rough: 0.8, side: THREE.DoubleSide })));
+    const pos = leaf.geometry.attributes.position;
+    for (let v = 0; v < pos.count; v += 1) { const t = (pos.getY(v) / (0.28 * scale)) + 0.5; pos.setZ(v, -t * t * 0.08 * scale); }
+    leaf.geometry.computeVertexNormals();
+    leaf.position.set(Math.cos(a) * 0.08 * scale, 0.3 * scale, Math.sin(a) * 0.08 * scale);
+    leaf.rotation.set(0, -a + Math.PI / 2, 0.9); leaf.rotateX(-0.4);
+    g.add(leaf);
+  }
+  g.position.set(x, 0, z); parent.add(g); return g;
+}
+
+/** Ornamental grass tuft. */
+export function grassTuft(parent, x, z, random, { scale = 1, color = 0x9cbf6a } = {}) {
+  for (let i = 0; i < 9; i += 1) {
+    const blade = enable(new THREE.Mesh(new THREE.ConeGeometry(0.008 * scale, 0.12 * scale, 4), mat(color, { rough: 1 })));
+    const a = random() * Math.PI * 2;
+    blade.position.set(x + Math.cos(a) * 0.02 * scale, 0.06 * scale, z + Math.sin(a) * 0.02 * scale);
+    blade.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
+    parent.add(blade);
+  }
+}
+
+export function rock(parent, x, z, random, { scale = 1 } = {}) {
+  const mesh = enable(new THREE.Mesh(blob(0.07 * scale, random, 1, 0.6), mat(pick(random, [0xb9b2a2, 0xc8c1b0, 0xa8a293]), { rough: 0.95, flat: true, tex: 'stone' })));
+  mesh.position.set(x, 0.02 * scale, z); mesh.rotation.y = random() * 3; parent.add(mesh);
+}
+
 /** Slim Italian cypress. */
 export function cypress(parent, x, z, random, { scale = 1 } = {}) {
   const g = new THREE.Group();
   cylinder(g, 0, 0, 0, 0.02 * scale, 0.025 * scale, 0.08 * scale, mat(PALETTE.walnut), 6);
-  const m = mat(pick(random, [0x3e6d4a, 0x467a52]), { rough: 0.95 });
+  const m = leafMat(pick(random, [0x3e6d4a, 0x467a52]));
   const mesh = enable(new THREE.Mesh(blob(0.1 * scale, random, 2, 3.6), m));
   mesh.position.set(0, 0.42 * scale, 0);
   g.add(mesh);
@@ -352,8 +480,8 @@ export function palm(parent, x, z, random, { scale = 1, lean = 0.25 } = {}) {
   const height = 0.95 * scale;
   const dir = random() * Math.PI * 2;
   let top = new THREE.Vector3();
-  const trunkMat = mat(0x9b7a55, { rough: 0.95 });
-  const ringMat = mat(0x7d5f42, { rough: 0.95 });
+  const trunkMat = mat(0x9b7a55, { rough: 0.95, tex: 'bark' });
+  const ringMat = mat(0x7d5f42, { rough: 0.95, tex: 'bark' });
   for (let i = 0; i < segments; i += 1) {
     const t0 = i / segments, t1 = (i + 1) / segments;
     const p0 = new THREE.Vector3(Math.cos(dir) * lean * t0 * t0 * scale, height * t0, Math.sin(dir) * lean * t0 * t0 * scale);
@@ -367,14 +495,14 @@ export function palm(parent, x, z, random, { scale = 1, lean = 0.25 } = {}) {
   }
   const frondMat = mat(pick(random, [0x4f9a5a, 0x5aa463, 0x468c52]), { rough: 0.85 });
   frondMat.side = THREE.DoubleSide;
-  const fronds = 9;
+  const fronds = 13;
   for (let i = 0; i < fronds; i += 1) {
     const angle = (i / fronds) * Math.PI * 2 + random() * 0.4;
-    const length = (0.36 + random() * 0.08) * scale;
+    const length = (0.34 + random() * 0.12) * scale * (i % 2 ? 0.85 : 1);
     // A frond is a tapered strip bent downward along its length.
     const steps = 8;
     const positions = [];
-    const width = 0.075 * scale;
+    const width = 0.095 * scale;
     for (let s = 0; s < steps; s += 1) {
       const t0 = s / steps, t1 = (s + 1) / steps;
       const w0 = width * Math.sin(Math.PI * Math.min(1, t0 * 1.15 + 0.08)), w1 = width * Math.sin(Math.PI * Math.min(1, t1 * 1.15 + 0.08));
@@ -390,6 +518,7 @@ export function palm(parent, x, z, random, { scale = 1, lean = 0.25 } = {}) {
     const frond = enable(new THREE.Mesh(geometry, frondMat));
     frond.position.copy(top);
     frond.rotation.y = angle;
+    frond.rotation.z = i % 2 ? -0.25 : 0.1;
     g.add(frond);
   }
   for (let i = 0; i < 3; i += 1) sphere(g, top.x + Math.cos(i * 2.1) * 0.025 * scale, top.y - 0.03 * scale, top.z + Math.sin(i * 2.1) * 0.025 * scale, 0.022 * scale, mat(0x6b5a2e), 1);
@@ -400,10 +529,12 @@ export function palm(parent, x, z, random, { scale = 1, lean = 0.25 } = {}) {
 
 /** Rounded shrub. */
 export function shrub(parent, x, z, random, { scale = 1, color = null, flowers = null } = {}) {
-  const m = mat(color ?? pick(random, [0x4f8a5c, 0x5f9654, 0x3f7550]), { rough: 0.95 });
-  const mesh = enable(new THREE.Mesh(blob(0.09 * scale, random, 2, 0.8), m));
-  mesh.position.set(x, 0.06 * scale, z);
-  parent.add(mesh);
+  const m = leafMat(color ?? pick(random, [0x4f8a5c, 0x5f9654, 0x3f7550]));
+  for (let i = 0; i < 3; i += 1) {
+    const mesh = enable(new THREE.Mesh(blob((0.085 - i * 0.012) * scale, random, 2, 0.8), m));
+    mesh.position.set(x + (i ? (random() - 0.5) * 0.08 * scale : 0), (0.06 + i * 0.02) * scale, z + (i ? (random() - 0.5) * 0.08 * scale : 0));
+    parent.add(mesh);
+  }
   if (flowers) for (let i = 0; i < 6; i += 1) {
     const a = random() * Math.PI * 2, r = 0.06 * scale;
     sphere(parent, x + Math.cos(a) * r, 0.09 * scale + random() * 0.04 * scale, z + Math.sin(a) * r, 0.016 * scale, mat(flowers, { rough: 0.6 }), 0);
@@ -424,7 +555,7 @@ export function flowerbed(parent, x, z, w, d, random, colors = [PALETTE.coral, P
 
 /** Paved path segment (flush with the lot). */
 export function path(parent, x, z, w, d, color = PALETTE.paving) {
-  box(parent, x, 0, z, w, 0.012, d, mat(color, { rough: 0.95 }));
+  box(parent, x, 0, z, w, 0.012, d, pavingMat(color));
 }
 
 /** Classic street lamp. The lamp head is tagged so the night pass lights it. */

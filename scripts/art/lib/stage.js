@@ -46,7 +46,7 @@ export function createStage({ resolution }) {
   scene.add(ground);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
-  const scale = PX_PER_UNIT * resolution; // texture px per scene unit
+  const baseScale = PX_PER_UNIT * resolution; // texture px per scene unit
   const viewDir = new THREE.Vector3(Math.cos(ELEVATION) * Math.SQRT1_2, Math.sin(ELEVATION), Math.cos(ELEVATION) * Math.SQRT1_2);
 
   function aimCamera(center) {
@@ -58,7 +58,7 @@ export function createStage({ resolution }) {
   const toCamera = (point) => point.clone().applyMatrix4(camera.matrixWorldInverse);
 
   /** Frustum that contains `points` and puts the scene origin on an exact texture pixel. */
-  function fit(points, pad = 3) {
+  function fit(points, pad = 3, scale = baseScale) {
     const origin = toCamera(new THREE.Vector3(0, 0, 0));
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const p of points) {
@@ -154,7 +154,7 @@ export function createStage({ resolution }) {
     const center = box.getCenter(new THREE.Vector3());
     aimCamera(center);
     placeSun(box);
-    const result = {};
+    const result = { top: box.max.y };
 
     // 1. Color pass: lit model, self-shadowed; the lawn plane itself is invisible.
     ground.visible = false;
@@ -172,8 +172,9 @@ export function createStage({ resolution }) {
       const along = SUN_DIRECTION.clone().multiplyScalar(-1 / SUN_DIRECTION.y);
       const pts = corners(box).map((p) => new THREE.Vector3(p.x + along.x * p.y, 0, p.z + along.z * p.y));
       pts.push(...corners(box).map((p) => new THREE.Vector3(p.x, 0, p.z)));
-      frame = fit(pts);
-      result.shadow = { canvas: renderTo(frame.width, frame.height), anchor: frame.anchor };
+      // Shadows are soft, so they bake at half resolution into their own atlas.
+      frame = fit(pts, 2, baseScale / 2);
+      result.shadow = { canvas: renderTo(frame.width, frame.height), anchor: frame.anchor, half: true };
       for (const [mesh, material] of originals) mesh.material = material;
       ground.visible = false;
     }
@@ -188,6 +189,7 @@ export function createStage({ resolution }) {
       for (const mesh of meshes(object)) {
         originals.set(mesh, mesh.material);
         if (mesh.userData.lamp) { mesh.material = new THREE.MeshBasicMaterial({ color: 0xfff2c8 }); any = true; }
+        else if (mesh.userData.sign && originals.get(mesh).map) { mesh.material = new THREE.MeshBasicMaterial({ map: originals.get(mesh).map }); any = true; }
         else if (mesh.userData.window && (mesh.userData.lit ?? random() < litShare)) {
           mesh.material = new THREE.MeshBasicMaterial({ color: warm[Math.floor(random() * warm.length)] }); any = true;
         } else mesh.material = black;
@@ -195,7 +197,8 @@ export function createStage({ resolution }) {
       const savedTone = renderer.toneMapping;
       renderer.toneMapping = THREE.NoToneMapping;
       const savedEnv = scene.environment; scene.environment = null;
-      frame = fit(corners(box));
+      // Night glow is soft light, so it also bakes at half resolution (into the half-resolution atlas).
+      frame = fit(corners(box), 2, baseScale / 2);
       if (any) {
         const canvas = renderTo(frame.width, frame.height, 0x000000);
         // Black → transparent: alpha = brightness, color = normalized, for additive or normal blending.
@@ -208,7 +211,7 @@ export function createStage({ resolution }) {
           d[i] = Math.min(255, d[i] * 255 / a); d[i + 1] = Math.min(255, d[i + 1] * 255 / a); d[i + 2] = Math.min(255, d[i + 2] * 255 / a); d[i + 3] = a;
         }
         ctx.putImageData(image, 0, 0);
-        result.emissive = { canvas, anchor: frame.anchor };
+        result.emissive = { canvas, anchor: frame.anchor, half: true };
       }
       for (const [mesh, material] of originals) mesh.material = material;
       renderer.toneMapping = savedTone;
@@ -251,24 +254,50 @@ export function trim(entry) {
   return { canvas: out, anchor: { x: anchor.x - minX, y: anchor.y - minY } };
 }
 
-/** Shelf packer into fixed-size pages with padding (mip-safe). */
+/** Skyline bottom-left packer into fixed-size pages with padding (mip-safe). */
 export function pack(entries, { size = 2048, padding = 6 } = {}) {
   const sorted = [...entries].sort((a, b) => b.canvas.height - a.canvas.height || b.canvas.width - a.canvas.width);
   const pages = [];
-  let page = null;
-  const newPage = () => { page = { frames: [], x: padding, y: padding, shelf: 0 }; pages.push(page); };
-  newPage();
+  const newPage = () => { const page = { frames: [], skyline: [{ x: 0, y: 0, w: size }], used: 0 }; pages.push(page); return page; };
+  const place = (page, w, h) => {
+    let best = null;
+    for (let i = 0; i < page.skyline.length; i += 1) {
+      const x = page.skyline[i].x;
+      if (x + w > size) break;
+      let y = 0, width = 0, j = i;
+      while (width < w && j < page.skyline.length) { y = Math.max(y, page.skyline[j].y); width += page.skyline[j].w; j += 1; }
+      if (width < w || y + h > size) continue;
+      if (!best || y + h < best.y + best.h || (y + h === best.y + best.h && x < best.x)) best = { x, y, h, i };
+    }
+    if (!best) return null;
+    // Raise the skyline over [x, x + w).
+    const { x, y } = best;
+    const next = [];
+    for (const seg of page.skyline) {
+      const segEnd = seg.x + seg.w;
+      if (segEnd <= x || seg.x >= x + w) { next.push(seg); continue; }
+      if (seg.x < x) next.push({ x: seg.x, y: seg.y, w: x - seg.x });
+      if (segEnd > x + w) next.push({ x: x + w, y: seg.y, w: segEnd - x - w });
+    }
+    next.push({ x, y: y + h, w });
+    next.sort((a, b) => a.x - b.x);
+    const merged = [];
+    for (const seg of next) { const last = merged.at(-1); if (last && last.y === seg.y && last.x + last.w === seg.x) last.w += seg.w; else merged.push({ ...seg }); }
+    page.skyline = merged;
+    page.used = Math.max(page.used, y + h);
+    return { x, y };
+  };
+  let page = newPage();
   for (const entry of sorted) {
-    const w = entry.canvas.width, h = entry.canvas.height;
-    if (w + 2 * padding > size || h + 2 * padding > size) throw new Error(`${entry.name} (${w}×${h}) exceeds atlas page ${size}`);
-    if (page.x + w + padding > size) { page.x = padding; page.y += page.shelf + padding; page.shelf = 0; }
-    if (page.y + h + padding > size) newPage();
-    page.frames.push({ entry, x: page.x, y: page.y });
-    page.x += w + padding;
-    page.shelf = Math.max(page.shelf, h);
+    const w = entry.canvas.width + padding * 2, h = entry.canvas.height + padding * 2;
+    if (w > size || h > size) throw new Error(`${entry.name} (${w}×${h}) exceeds atlas page ${size}`);
+    let spot = place(page, w, h);
+    if (!spot) { spot = pages.slice(0, -1).map((p) => ({ p, s: place(p, w, h) })).find((r) => r.s); if (spot) { spot.p.frames.push({ entry, x: spot.s.x + padding, y: spot.s.y + padding }); continue; } page = newPage(); spot = place(page, w, h); }
+    page.frames.push({ entry, x: spot.x + padding, y: spot.y + padding });
   }
   return pages.map((p, index) => {
-    const height = Math.min(size, 2 ** Math.ceil(Math.log2(p.y + p.shelf + padding)));
+    // Exact used height (WebGL2 handles non-power-of-two textures and their mipmaps).
+    const height = Math.min(size, Math.ceil(Math.max(64, p.used) / 8) * 8);
     const canvas = document.createElement('canvas');
     canvas.width = size; canvas.height = height;
     const ctx = canvas.getContext('2d');
