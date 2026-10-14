@@ -1,6 +1,6 @@
 # Regression tests (Phase 4.6)
 
-## Camera unit tests: `src/game/camera.test.ts` (24 tests)
+## Camera unit tests: `src/game/camera.test.ts` (25 tests)
 
 All tests use tolerances in world units or screen pixels. Fuzz cases use a seeded generator, and none depends on one
 city seed.
@@ -14,9 +14,9 @@ city seed.
 | E | Viewport resize | A resize keeps the looked-at point at the focal point. A panel opening or closing keeps the picture still, and later framing uses the new area. |
 | F | Pan | The content follows the pointer at four zooms. A pan ends Follow, and endless pans stay on the map. |
 | G | Reset | The home glide ends exactly on the framing, with a minimum duration. |
-| H | Follow interpolation | The same steady-state lag at 20 and 60 fps (within one world pixel), under 12 screen px behind a walker, and `approach()` composes exactly across frame rates. A stationary target leaves the camera perfectly still. |
+| H | Follow interpolation | The same steady-state lag at 20 and 60 fps (within one world pixel), under 12 screen px behind a walker, and `approach()` composes exactly across frame rates. A stationary target leaves the camera perfectly still and reports `moving` false. Follow reports `moving` until it has re-centred the character after the visible area changes, even with 250 ms frames. |
 | I | Focus position | The glide lands the target on the focal point at the requested zoom; a new glide replaces an older one. |
-| J | Follow cancellation | Follow-on glides onto a moving target and hands over. Zoom while following stays on the target. Off means no later pull-back. |
+| J | Follow cancellation | Follow-on glides onto a moving target and hands over (still `moving` while it catches up with a walker). Zoom while following stays on the target. Off means no later pull-back. |
 | K | Mode switching | The City View pose is kept and restored exactly. Life View zoom by viewport. |
 | L | Reduced motion | Glides, zoom and Follow are immediate. |
 | M | High-DPI | The camera works in CSS pixels, so the same client point maps to the same world point at 1× and 2×. e2e "retina pointer mapping" covers it in the browser. |

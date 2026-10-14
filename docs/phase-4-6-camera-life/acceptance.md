@@ -34,7 +34,7 @@
 | Suite | Result |
 |---|---|
 | Typecheck (all packages, app, e2e) | Pass |
-| Frontend unit (Vitest) | 223 passed, including 24 camera, 1 camera cost, 1 name-tag and 2 inset tests |
+| Frontend unit (Vitest) | 224 passed, including 25 camera, 1 camera cost, 1 name-tag and 2 inset tests |
 | Simulation | 286 passed (unchanged) |
 | AI Architect | 64 passed (unchanged) |
 | API (pytest, `-W error`) | 80 passed (unchanged) |
@@ -42,7 +42,7 @@
 | Playwright, full CI-mode run | 58 of 60 passed on a clean run (see below) |
 | Playwright, after the fixes | All affected specs pass: 37 of 38 in one rerun (see below), then 32 of 32 for phase-4-6, city-builder, visual-world and life-mode |
 
-Three issues came up in the e2e runs.
+Four issues came up in the e2e runs.
 
 - **Two life-mode tests in the clean full run.** They clicked a street tile while the new Center neighborhood
   glide was still running. The old helpers judged the camera settled when two minimap readings 250 ms apart matched,
@@ -54,6 +54,12 @@ Three issues came up in the e2e runs.
   far slower than normal. All of them pass in isolation in 10–30 s.
 - **One teardown hang.** A city-builder duplex test passed its steps but hung closing the browser context on
   macOS. Repeated three times, it passes each time in 27 s.
+- **Two Phase 4.6 tests in the first GitHub Actions run** (C/D/E and I, on `cc78697`). The camera's `moving` flag
+  covered glides and zoom animation but not Follow catching up with the character. On the SwiftShader runner frames
+  were about 250 ms apart, so the test's settle check saw the same pose twice while Follow was still 25 world units
+  (46 px) short.
+  - Fix: `moving` now stays true until Follow has caught up (within 0.05 screen px), including right after the visible
+    area changes. A new unit test runs 250 ms frames and fails without the fix. Assertions are unchanged.
 
 ## Known limitations
 

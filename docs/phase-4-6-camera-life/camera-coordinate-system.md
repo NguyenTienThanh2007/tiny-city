@@ -87,4 +87,6 @@ changes the simulation.
 ## Diagnostics
 
 `window.__tinyCityCamera` exposes `{ x, y, zoom, following, moving, width, height, focalX, focalY, minZoom, maxZoom,
-subject }` for tests and tooling. `subject` is the world point of the followed character or resident.
+subject }` for tests and tooling. `subject` is the world point of the followed character or resident. `moving` is true
+while a glide or zoom animation runs and while Follow has not yet caught up with its target (more than 0.05 screen px
+away), so tests can wait for a camera that has really come to rest.

@@ -236,13 +236,36 @@ describe('glides, focus and follow (G, H, I, J, K, L)', () => {
     for (let i = 0; i < 100; i += 1) changed = camera.update(16, iso(31, 30)) || changed;
     expect(changed).toBe(false);
     expect(camera.pose).toEqual(still);
+    expect(camera.moving).toBe(false);
+  });
+  it('Follow reports moving until it has re-centred the character after the visible area changes', () => {
+    const target = iso(31, 30);
+    const camera = new CameraController(desktop, SIZE, { ...target, zoom: 1.3 });
+    camera.setFollowing(true);
+    camera.update(16, target);
+    expect(camera.moving).toBe(false);
+    // Closing the side panel keeps the picture still, so the character is now off the new focal point.
+    camera.setViewport({ ...desktop, insets: { ...desktop.insets, right: 0 } });
+    expect(camera.moving).toBe(true);
+    let frames = 0;
+    while (camera.moving && frames < 500) { camera.update(250, target); frames += 1; }
+    expect(camera.moving).toBe(false);
+    near(camera.toScreen(target), focalPoint(camera.viewport), 0.05);
+    // Slow frames (a software-rendered runner) never report a still camera while it is still off target.
+    camera.setViewport(desktop);
+    camera.update(250, target);
+    const offset = Math.hypot(camera.toScreen(target).x - focalPoint(desktop).x, camera.toScreen(target).y - focalPoint(desktop).y);
+    expect(offset).toBeGreaterThan(0.05);
+    expect(camera.moving).toBe(true);
   });
   it('turning Follow on glides onto a moving target and hands over; zoom while following stays on the target (J)', () => {
     const camera = new CameraController(desktop, SIZE, home);
     let x = 20;
     camera.setFollowing(true, iso(x, 20), 1.3);
     for (let i = 0; i < 80; i += 1) { x += 0.02; camera.update(16, iso(x, 20)); }
-    expect(camera.moving).toBe(false);
+    // The glide has handed over to Follow, which is still catching up with the walker (so the camera reports moving).
+    expect(camera.following).toBe(true);
+    expect(camera.moving).toBe(true);
     near(camera.toScreen(iso(x, 20)), focalPoint(desktop), 8); // speed × time constant behind
     camera.zoomBy(ZOOM_STEP, { x: 100, y: 100 }); // a cursor far away is ignored while following
     for (let i = 0; i < 60; i += 1) camera.update(16, iso(x, 20));

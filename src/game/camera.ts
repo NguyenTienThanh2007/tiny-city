@@ -156,13 +156,16 @@ export class CameraController {
   following = false;
   private glide: Glide | null = null;
   private zoomGoal: ZoomGoal | null = null;
+  /** Follow has not yet caught up with its target (the camera is still moving toward the character). */
+  private followLag = false;
 
   constructor(viewport: Viewport, readonly size: number, pose: CameraPose, public reducedMotion = false) {
     this.viewport = viewport;
     this.pose = clampPose(pose, viewport, size);
   }
 
-  get moving(): boolean { return this.glide !== null || this.zoomGoal !== null; }
+  /** Gliding, zooming, or Follow still catching up with its target. */
+  get moving(): boolean { return this.glide !== null || this.zoomGoal !== null || (this.following && this.followLag); }
   /** The zoom the camera is heading to (the current zoom when it is still). */
   get targetZoom(): number { return this.zoomGoal?.zoom ?? this.glide?.to.zoom ?? this.pose.zoom; }
   limits() { return zoomLimits(this.viewport, this.size); }
@@ -190,6 +193,8 @@ export class CameraController {
     }
     this.pose = clampPose(this.pose, viewport, this.size);
     if (this.glide) this.glide.to = clampPose(this.glide.to, viewport, this.size);
+    // The visible area moved, so Follow re-centres the character in it from the next frame.
+    if (this.following) this.followLag = true;
   }
 
   /** Immediately shows a pose (initial framing, renderer recreation). */
@@ -275,7 +280,7 @@ export class CameraController {
       const e = easeInOut(t);
       const zoom = Math.exp(Math.log(glide.from.zoom) + (Math.log(glide.to.zoom) - Math.log(glide.from.zoom)) * e);
       this.pose = { x: glide.from.x + (glide.to.x - glide.from.x) * e, y: glide.from.y + (glide.to.y - glide.from.y) * e, zoom };
-      if (t >= 1) { this.pose = glide.to; this.glide = null; }
+      if (t >= 1) { this.pose = glide.to; this.glide = null; this.followLag = false; }
     } else {
       if (this.zoomGoal) {
         const goal = this.zoomGoal;
@@ -285,13 +290,17 @@ export class CameraController {
         this.applyZoom(done ? goal.zoom : Math.exp(logZoom), goal.screen, goal.anchor);
         if (done) this.zoomGoal = null;
       }
+      this.followLag = false;
       if (this.following && followPoint) {
         const goal = clampPose({ ...followPoint, zoom: this.pose.zoom }, this.viewport, this.size);
         const k = this.reducedMotion ? 1 : approach(dt, FOLLOW_TAU_MS);
         const dx = goal.x - this.pose.x, dy = goal.y - this.pose.y;
         // Within a twentieth of a screen pixel the camera is already there: stop instead of creeping.
         if (Math.hypot(dx, dy) * this.pose.zoom < 0.05) { if (dx || dy) this.pose = { ...this.pose, x: goal.x, y: goal.y }; }
-        else this.pose = { ...this.pose, x: this.pose.x + dx * k, y: this.pose.y + dy * k };
+        else {
+          this.pose = { ...this.pose, x: this.pose.x + dx * k, y: this.pose.y + dy * k };
+          this.followLag = Math.hypot(goal.x - this.pose.x, goal.y - this.pose.y) * this.pose.zoom >= 0.05;
+        }
       }
     }
     return before.x !== this.pose.x || before.y !== this.pose.y || before.zoom !== this.pose.zoom;
