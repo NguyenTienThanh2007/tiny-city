@@ -63,6 +63,8 @@ export function PlanEconomyCard({ impact }: { impact: EconomyImpactEstimate }) {
         <div><dt>City running costs</dt><dd>{signedMoney(e.expensesChange)}</dd></div>
         <div className="is-total"><dt>Daily budget</dt><dd className={e.netChange >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(e.netChange)}</dd></div>
       </dl>
+      {e.jobsAdded > 0 && e.employedChange < e.jobsAdded && <p className="small plan-economy-note">{e.jobsAdded - Math.max(0, e.employedChange)} of the new jobs would stay empty: {e.employedChange <= 0 ? 'every resident already has a job' : 'not enough residents are free'}. They fill as homes are added.</p>}
+      {e.residentsAdded > 0 && e.employedChange < e.residentsAdded && <p className="small plan-economy-note">{e.residentsAdded - Math.max(0, e.employedChange)} new resident{e.residentsAdded - Math.max(0, e.employedChange) === 1 ? '' : 's'} would have no job (city support).</p>}
       <p className="muted small">One day at today’s activity once residents settle in. The simulation calculates the real result each midnight.</p>
     </div>
   </div>;

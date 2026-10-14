@@ -99,12 +99,14 @@ export function EconomyPanel({ world, overview, onApplyPolicy, onSelectBuilding,
       <strong data-testid="economy-treasury">{money(overview.treasury)}</strong>
       <small>{overview.lastNet === null ? 'No full day settled yet'
         : <><b className={overview.lastNet >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(overview.lastNet)}</b> operating result, {dayLabel(last!.day)}</>}</small>
+      {last && (last.unpaid.upkeep + last.unpaid.support) > 0 && <small className="runway">{money(last.unpaid.upkeep + last.unpaid.support)} of city costs could not be paid</small>}
       {overview.runway !== null && <small className="runway">About {overview.runway} day{overview.runway === 1 ? '' : 's'} of money left at this rate</small>}
     </div>
 
     <dl className="economy-kpis">
       <div><dt>Income · last day</dt><dd>{last ? money(operatingNet(last).income) : '—'}</dd></div>
-      <div><dt>Expenses · last day</dt><dd>{last ? money(operatingNet(last).expenses) : '—'}</dd></div>
+      <div><dt>Expenses · last day</dt><dd>{last ? money(operatingNet(last).expenses) : '—'}
+        {last && (last.unpaid.upkeep + last.unpaid.support) > 0 && <small className="is-loss">+{money(last.unpaid.upkeep + last.unpaid.support)} unpaid</small>}</dd></div>
       <div><dt>Employment</dt><dd>{overview.employment.rate === null ? '—' : `${overview.employment.rate}%`}<small>{overview.employment.employed} of {overview.employment.residents} residents · {overview.employment.jobs} jobs</small></dd></div>
       <div><dt>Businesses</dt><dd>{overview.businesses.total ? `${overview.businesses.profitable}/${overview.businesses.total}` : '—'}<small>{overview.businesses.total ? 'profitable last day' : 'Offices and malls'}</small></dd></div>
     </dl>

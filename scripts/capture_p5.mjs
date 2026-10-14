@@ -38,7 +38,7 @@ const shot = async (page, name) => {
 const day = async (page) => Number(/DAY\s+(\d+)/.exec(await page.getByLabel('Simulation clock').textContent())[1]);
 /** Welcomes residents and runs at 4× until `days` midnights have settled, then pauses. */
 async function live(page, days) {
-  await page.getByRole('button', { name: 'Watch residents live their day' }).click();
+  await page.getByRole('navigation', { name: 'Game mode' }).getByRole('button', { name: /^Live/ }).click();
   await page.getByRole('button', { name: 'Welcome residents' }).click();
   const resume = page.getByRole('button', { name: 'Resume', exact: true });
   if (await resume.isVisible()) await resume.click();
@@ -55,7 +55,7 @@ const scrollTo = (locator) => locator.evaluate((el) => el.scrollIntoView({ block
 if (want('01', '02', '03', '04', '05', '09')) {
   const { context, page } = await open(coralBay31());
   await live(page, 3);
-  await page.getByRole('button', { name: 'City economy' }).click();
+  await page.getByRole('button', { name: 'City economy', exact: true }).click();
   await panel(page).waitFor();
   if (want('01')) await shot(page, '01-economy-dashboard');
   if (want('02')) {
@@ -83,7 +83,7 @@ if (want('01', '02', '03', '04', '05', '09')) {
   }
   if (want('09')) {
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Build roads and buildings' }).click();
+    await page.getByRole('navigation', { name: 'Game mode' }).getByRole('button', { name: /^Build/ }).click();
     await page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: 'Office $640', exact: true }).click();
     await shot(page, '09-build-tool-running-cost');
   }
@@ -108,7 +108,7 @@ if (want('07')) {
   const villas = Array.from({ length: 12 }, (_, i) => ({ id: `villa-${i}`, name: `Villa ${i + 1}`, kind: 'villa', x: 9 + i * 3, y: 18, createdAt: 0 }));
   const { context, page } = await open({ size: 64, funds: 300, roads, buildings: [...villas, { id: 'park', name: 'Sunny Park', kind: 'park', x: 20, y: 22, createdAt: 0 }] });
   await live(page, 3);
-  await page.getByRole('button', { name: 'City economy' }).click();
+  await page.getByRole('button', { name: 'City economy', exact: true }).click();
   await panel(page).waitFor();
   await shot(page, '07-treasury-empty-alerts');
   await context.close();
@@ -116,7 +116,7 @@ if (want('07')) {
 
 if (want('08')) {
   const { context, page } = await open(coralBay31(), { width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Watch residents live their day' }).click();
+  await page.getByRole('navigation', { name: 'Game mode' }).getByRole('button', { name: /^Live/ }).click();
   await page.getByRole('button', { name: 'Welcome residents' }).click();
   await page.getByRole('button', { name: 'Close panel' }).click().catch(() => {});
   const resume = page.getByRole('button', { name: 'Resume', exact: true });
@@ -125,7 +125,7 @@ if (want('08')) {
   for (let i = 0; i < 6000 && (await day(page)) < 3; i += 1) await page.waitForTimeout(100);
   await page.waitForTimeout(1500);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
-  await page.getByRole('button', { name: 'Build roads and buildings' }).click();
+  await page.getByRole('navigation', { name: 'Game mode' }).getByRole('button', { name: /^Build/ }).click();
   await page.getByRole('button', { name: 'Open city economy' }).click();
   await panel(page).waitFor();
   await shot(page, '08-mobile-economy');

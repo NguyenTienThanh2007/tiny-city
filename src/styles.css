@@ -1411,3 +1411,4 @@ button.funds-chip:hover { background: var(--sand-200); }
   .economy-kpis dd { font-size: 15px; }
   .treasury-card > strong { font-size: 28px; }
 }
+.plan-economy-note { margin: 6px 0 0; color: #7a4b16; font-weight: 600; }
