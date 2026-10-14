@@ -6,6 +6,7 @@ import { ArchitecturePicker } from './ArchitecturePicker';
 import type { ArchitectureCollectionId } from '@tiny-city/ai-architect';
 import type { DesignChoice, DesignChoices } from '../game/architecture';
 import { Icon } from './Icon';
+import { runningCost, signedMoney } from '../simulation/economyView';
 
 export interface OnboardingStep { id: string; label: string; hint: string; done: boolean }
 
@@ -23,7 +24,7 @@ function capacityLabel(kind: BuildingKind): string {
   return `${spec.capacity} visitors`;
 }
 
-export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onShowGuide, onChoose, onWelcome, populationEnabled, designChoices = {}, onDesignChange, onApplyCollection }: {
+export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onShowGuide, onChoose, onWelcome, populationEnabled, designChoices = {}, onDesignChange, onApplyCollection, dailyNet = null, onOpenEconomy }: {
   tool: Tool;
   funds: number;
   steps: OnboardingStep[];
@@ -37,6 +38,9 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
   designChoices?: DesignChoices;
   onDesignChange?: (kind: BuildingKind, choice: DesignChoice) => void;
   onApplyCollection?: (collection: ArchitectureCollectionId) => void;
+  /** Phase 5: the last settled day's operating result, and the way into the economy panel (also on phones). */
+  dailyNet?: number | null;
+  onOpenEconomy?: () => void;
 }) {
   const remaining = steps.filter((step) => !step.done);
   const next = remaining[0];
@@ -47,7 +51,7 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
     const spec = BUILDINGS[buildingTool];
     return { title: spec.label, kind: buildingTool, rows: [
       ['Footprint', `${spec.width} × ${spec.height} tiles`], ['Capacity', capacityLabel(buildingTool)],
-      ['Cost', `$${spec.cost.toLocaleString()}`], ['Placement', spec.requiresRoad ? 'Must touch a road' : 'Anywhere on land'],
+      ['Cost', `$${spec.cost.toLocaleString()}`], ['Running cost', runningCost(buildingTool)], ['Placement', spec.requiresRoad ? 'Must touch a road' : 'Anywhere on land'],
     ] as const, hint: funds >= spec.cost ? 'Hover the map: green road tiles show where it connects. Click to build.' : `You need $${(spec.cost - funds).toLocaleString()} more.` };
   })() : tool === 'road' ? { title: 'Road', kind: null, rows: [['Cost', `$${CONSTRUCTION_COSTS.road} per tile`], ['Gesture', 'Click or drag']] as const,
     hint: 'Residents only walk on connected roads. One drag is one undo step.' }
@@ -73,7 +77,10 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
         onChange={(choice) => onDesignChange(toolCard.kind!, choice)} onApplyToAll={(collection) => onApplyCollection?.(collection)} />}
     </div>;
   return <section className="build-panel" aria-labelledby="build-heading">
-    <div className="panel-topline"><span>CONSTRUCTION</span><span className="funds-chip"><Icon name="coin" size={13} /> ${funds.toLocaleString()}</span></div>
+    <div className="panel-topline"><span>CONSTRUCTION</span>{onOpenEconomy
+      ? <button type="button" className="funds-chip" onClick={onOpenEconomy} aria-label="Open city economy" title="Open city economy">
+        <Icon name="coin" size={13} /> ${funds.toLocaleString()}{dailyNet !== null && <i className={dailyNet >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(dailyNet)}/day</i>}</button>
+      : <span className="funds-chip"><Icon name="coin" size={13} /> ${funds.toLocaleString()}</span>}</div>
     <h2 id="build-heading">Shape the neighborhood</h2>
     <p className="panel-lede">Pick a building, then click an open lot next to a road. Drag with the road tool to pave a street.</p>
     {/* With a building tool active, its card and Architectural Style Selector lead; otherwise the guide does. */}

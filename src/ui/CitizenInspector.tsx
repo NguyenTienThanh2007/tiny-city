@@ -8,7 +8,7 @@ export const activityIcons: Record<CitizenActivity, string> = {
   sleep: 'bed', home: 'home', work: 'briefcase', leisure: 'leaf', idle: 'clock', travel: 'walk',
 };
 
-export function CitizenInspector({ citizen, world, minuteOfDay, following, onFocus, onFollow, onClose, onSelectBuilding, lifeActions }: {
+export function CitizenInspector({ citizen, world, minuteOfDay, following, onFocus, onFollow, onClose, onSelectBuilding, lifeActions, economy }: {
   citizen: Citizen;
   world: WorldState;
   minuteOfDay: number;
@@ -19,6 +19,8 @@ export function CitizenInspector({ citizen, world, minuteOfDay, following, onFoc
   onSelectBuilding: (id: string) => void;
   /** Phase 4: interaction choices when the player is in Life mode. */
   lifeActions?: ReactNode;
+  /** Phase 5: employment, income and savings. */
+  economy?: ReactNode;
 }) {
   const details = describeCitizen(citizen, world);
   const rows = scheduleRows(citizen, world, minuteOfDay);
@@ -52,6 +54,7 @@ export function CitizenInspector({ citizen, world, minuteOfDay, following, onFoc
       <div><dt><Icon name="target" size={14} /> Destination</dt><dd>{details.destination ?? <span className="muted">None right now</span>}</dd></div>
       {pace !== undefined && <div><dt><Icon name="walk" size={14} /> Walking pace</dt><dd>{(pace * 60).toFixed(0)} tiles per game hour</dd></div>}
     </dl>
+    {economy}
     <div className="schedule">
       <div className="section-heading"><span>DAILY ROUTINE</span><small>{citizen.scheduleMode === 'custom' ? 'Custom schedule' : 'Generated from home & job'}</small></div>
       <div className="schedule-bar" aria-hidden="true">

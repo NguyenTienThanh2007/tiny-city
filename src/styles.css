@@ -1272,3 +1272,142 @@ kbd { font-family: var(--font-ui); }
 .proposal-designs li { display: flex; align-items: center; gap: 8px; }
 .proposal-designs li .model-thumb { flex: 0 0 auto; border-radius: 6px; background: var(--sand-100); }
 .proposal-designs li small { margin-left: auto; color: var(--muted); font-size: 10.5px; font-weight: 700; }
+
+/* ==========================================================================
+   Phase 5 — Living economy
+   ========================================================================== */
+:root { --gain: #2d7a5a; --gain-100: #dff3ea; --loss: var(--danger); --loss-100: var(--danger-100); }
+.is-gain { color: var(--gain); }
+.is-loss { color: var(--loss); }
+.mode-switch[data-mode='economy'] .mode-indicator { opacity: 0; }
+
+/* The treasury in the top bar opens the city economy. */
+button.hud-stat { font: inherit; color: inherit; cursor: pointer; text-align: left; transition: background .15s, border-color .15s, box-shadow .15s; }
+button.hud-stat:hover { background: var(--paper); border-color: var(--sand-400); }
+button.hud-stat.is-active { background: var(--paper); border-color: #c9a85a; box-shadow: 0 0 0 2px rgba(232, 182, 76, .28); }
+button.hud-stat:focus-visible { outline: 2px solid var(--forest-500); outline-offset: 2px; }
+.hud-stat small i { margin-left: 5px; font-style: normal; letter-spacing: .02em; }
+.hud-stat.cash .tab-badge { top: -6px; right: -6px; }
+button.funds-chip { border: 0; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+button.funds-chip:hover { background: var(--sand-200); }
+.funds-chip i { font-style: normal; margin-left: 4px; }
+
+.economy-panel h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.economy-heading-row { display: flex; align-items: center; gap: 12px; margin: 8px 0 14px; }
+.economy-heading-row p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+.economy-coin { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(145deg, #fbefd2, #f1dca9); color: #9a7224; box-shadow: inset 0 0 0 1px rgba(154, 114, 36, .18); }
+
+.treasury-card {
+  display: grid; gap: 2px; padding: 14px 16px; border-radius: var(--radius-md);
+  background: linear-gradient(160deg, var(--paper), #f7efdd); border: 1px solid rgba(176, 138, 60, .22); box-shadow: var(--shadow-sm);
+}
+.treasury-card > span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.treasury-card > strong { font-family: var(--font-display); font-size: 32px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--forest-900); }
+.treasury-card small { color: var(--muted); font-size: 12px; }
+.treasury-card small b { font-weight: 800; }
+.treasury-card .runway { color: var(--loss); font-weight: 700; }
+.treasury-card.is-deficit, .treasury-card.is-broke { background: linear-gradient(160deg, var(--paper), #f8e8e2); border-color: rgba(181, 72, 62, .25); }
+
+.economy-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 0; }
+.economy-kpis > div { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); }
+.economy-kpis dt { color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.economy-kpis dd { margin: 3px 0 0; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.economy-kpis dd small { display: block; margin-top: 2px; color: var(--faint); font-size: 10.5px; font-weight: 600; }
+
+.economy-alerts { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.economy-alerts li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: start; padding: 9px 11px; border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.35; }
+.economy-alerts li.is-warning { background: #fdf1e2; color: #7a4b16; }
+.economy-alerts li.is-info { background: var(--sea-100); color: #245a5b; }
+.economy-alerts svg { margin-top: 2px; }
+
+.segmented { display: inline-flex; padding: 3px; gap: 3px; border-radius: 999px; background: var(--sage-100); }
+.segmented button { border: 0; background: transparent; padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 11.5px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.segmented button.active { background: var(--paper); color: var(--forest-800); box-shadow: var(--shadow-sm); }
+.economy-chart { margin: 10px 0 0; padding: 10px 10px 6px; border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); }
+.economy-chart svg { display: block; width: 100%; height: 112px; overflow: visible; }
+.economy-chart figcaption { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--faint); font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.economy-chart figcaption i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
+.chart-area { fill: rgba(232, 182, 76, .16); }
+.chart-line { fill: none; stroke: #b08a3c; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.chart-dot { fill: var(--paper); stroke: #b08a3c; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.chart-axis { stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-income, .key-income { fill: var(--forest-400); background: var(--forest-400); }
+.chart-expense, .key-expense { fill: #dc9a7e; background: #dc9a7e; }
+.chart-net, .key-net { fill: var(--forest-800); background: var(--forest-800); }
+.chart-net.is-negative { fill: var(--loss); }
+.economy-empty { margin: 10px 0 0; padding: 14px; border-radius: var(--radius-sm); background: var(--paper); border: 1px dashed var(--line-strong); }
+
+.economy-days { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.economy-days th { color: var(--faint); font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; text-align: right; padding: 4px 4px; }
+.economy-days td { text-align: right; padding: 5px 4px; border-top: 1px solid var(--line); font-weight: 600; }
+.economy-days th:first-child, .economy-days td:first-child { text-align: left; }
+.economy-days td.is-gain, .economy-days td.is-loss { font-weight: 800; }
+
+.flow-list { margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); }
+.flow-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; }
+.flow-list.is-in .flow-head strong { color: var(--gain); }
+.flow-list.is-out .flow-head strong { color: var(--terracotta-600); }
+.flow-list ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.flow-list li { position: relative; display: flex; justify-content: space-between; gap: 10px; padding: 6px 0 8px; font-size: 12.5px; border-top: 1px solid var(--line); }
+.flow-list li small { display: block; color: var(--faint); font-size: 10.5px; font-weight: 600; }
+.flow-list li strong { font-variant-numeric: tabular-nums; }
+.flow-list li i { position: absolute; left: 0; bottom: 2px; height: 3px; border-radius: 3px; background: var(--forest-400); opacity: .55; }
+.flow-list.is-out li i { background: #dc9a7e; }
+.economy-warning { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--loss); font-size: 12px; font-weight: 700; }
+
+.today-estimate { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--sand-100); border: 1px dashed var(--sand-400); }
+.today-estimate div span { display: block; color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.today-estimate div strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.today-estimate p { grid-column: 1 / -1; margin: 2px 0 0; }
+
+.policy-card { display: grid; gap: 12px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--paper); border: 1px solid var(--line); }
+.policy-slider { display: grid; gap: 4px; }
+.policy-label { display: flex; justify-content: space-between; font-size: 13px; }
+.policy-label output { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--forest-800); }
+.policy-slider input[type='range'] { width: 100%; accent-color: var(--forest-700); }
+.policy-slider small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.policy-preview { padding: 9px 11px; border-radius: var(--radius-sm); background: var(--sage-100); font-size: 12px; }
+.policy-preview ul { margin: 5px 0 0; padding-left: 16px; display: grid; gap: 2px; }
+.policy-actions { display: flex; align-items: center; gap: 8px; }
+.policy-actions .primary-action { flex: 1; }
+.policy-actions .primary-action:disabled { opacity: .55; cursor: default; }
+
+.business-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.business-list button { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); font: inherit; text-align: left; cursor: pointer; }
+.business-list button:hover { border-color: var(--sage-300); background: #fbfcf8; }
+.business-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--sea-100); color: #2f6f70; }
+.business-mark.is-mall { background: var(--terracotta-100); color: var(--terracotta-600); }
+.business-copy strong { display: block; font-size: 13px; }
+.business-copy small { color: var(--muted); font-size: 11px; }
+.business-copy em { font-style: normal; font-weight: 700; }
+.business-list b { font-variant-numeric: tabular-nums; font-size: 13px; }
+.status-profitable { color: var(--gain); }
+.status-loss, .status-weak-demand { color: var(--loss); }
+.status-understaffed, .status-unstaffed { color: #9a6a12; }
+.status-public { color: #2f6f70; }
+.economy-footnote { margin-top: 14px; line-height: 1.45; }
+
+/* Economic cards in the building inspector, resident profile and AI plan preview. */
+.economy-card { margin-top: 12px; padding: 11px 13px; border-radius: var(--radius-md); background: var(--paper); border: 1px solid var(--line); }
+.economy-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.economy-card-head span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.economy-card-head em { font-style: normal; font-size: 11.5px; font-weight: 800; }
+.economy-card dl, .plan-economy dl { margin: 0; }
+.economy-card dl > div, .plan-economy dl > div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+.economy-card dt, .plan-economy dt { color: var(--muted); font-weight: 600; }
+.economy-card dd, .plan-economy dd { margin: 0; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+.economy-card .is-total, .plan-economy .is-total { border-top-color: var(--line-strong); }
+.condition-comfortable { color: var(--gain); }
+.condition-getting-by { color: #8a6a2c; }
+.condition-struggling { color: var(--loss); }
+.plan-economy { display: grid; gap: 8px; margin: 10px 0; }
+.plan-economy-block { padding: 9px 11px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--paper); }
+.plan-economy-block > span { display: block; margin-bottom: 3px; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.plan-economy-block.is-confirmed > span { color: var(--forest-700); }
+.plan-economy-block.is-estimate { background: var(--sand-100); border-style: dashed; border-color: var(--sand-400); }
+.plan-economy-block p { margin: 6px 0 0; }
+
+@media (max-width: 759px) {
+  .economy-kpis dd { font-size: 15px; }
+  .treasury-card > strong { font-size: 28px; }
+}

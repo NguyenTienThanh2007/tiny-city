@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
-import type { LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
+import type { EconomyPolicy, LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { Building as SimBuilding, CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { BuildingDesign, PlanProposal, PlanningConstraints, PlanningHost, PlanningResponse, ValidationRequest } from '@tiny-city/ai-architect';
@@ -27,7 +27,10 @@ import { LivePanel } from './ui/LivePanel';
 import { BuildingThumb } from './ui/BuildingThumb';
 import { residentsWithoutJobs, summarizeActivities } from './simulation/citizenView';
 import { emptyLifeFeed, reduceLifeFeed, type LifeFeedState } from './simulation/lifeFeed';
-import { ArchitectClientError, checkPlannerConnection, createPlanningRequest, requestCityPlan, requestPlanValidation } from './aiArchitect/client';
+import { ArchitectClientError, checkPlannerConnection, createPlanningRequest, plannerWorld, requestCityPlan, requestPlanValidation } from './aiArchitect/client';
+import { EconomyPanel } from './ui/EconomyPanel';
+import { BuildingEconomyCard, CitizenEconomyCard, PlanEconomyCard } from './ui/EconomyCards';
+import { alertText, buildingEconomy, citizenEconomy, economyOverview, planEconomy, signedMoney } from './simulation/economyView';
 import { ConnectionBadge, isRecoverablePlannerError, PlannerRecovery, type ConnectionView } from './ui/PlannerConnection';
 import { rejectionFeedback } from './simulation/feedback';
 import { loadCitySave, saveCity } from './simulation/citySave';
@@ -38,7 +41,7 @@ import { useAuth } from './auth/AuthProvider';
 import { navigate, usePathname } from './auth/navigation';
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
-type BaseMode = 'build' | 'live' | 'life';
+type BaseMode = 'build' | 'live' | 'life' | 'economy';
 /** Life Mode onboarding: look & name in the creator, then a home chosen on the map. */
 type LifeFlow = { step: 'identity'; draft: CharacterDraft; editing: boolean } |
   { step: 'home'; draft: CharacterDraft | null; purpose: 'create' | 'move'; selectedId: string | null };
@@ -118,7 +121,7 @@ function App() {
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
   const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator } = useCitySimulation(loaded.city, loaded.world);
+    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity } = useCitySimulation(loaded.city, loaded.world);
   const [baseMode, setBaseMode] = useState<BaseMode>('build');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCitizenId, setSelectedCitizenId] = useState<string | null>(null);
@@ -313,6 +316,18 @@ function App() {
     }
 
     const preview = architectState.proposal;
+    // A midnight settlement changes the treasury the plan was costed against (Phase 5): the plan must be regenerated.
+    const treasuryChanged = preview ? preview.projectedBudget + preview.estimatedCost !== world.budget.balance : false;
+    if (architectState.status === 'preview-ready' && preview && treasuryChanged && preview.sourceRevision === world.revision) {
+      try { activeReviewRef.current?.reject(); } catch { /* Keep stale plans non-applicable. */ }
+      activeReviewRef.current = null;
+      setDestructiveConfirmation(false);
+      setArchitectState({ status: 'stale', proposal: preview, requestId: architectState.requestId,
+        errorCode: 'STALE_WORLD', message: 'The treasury changed at the end of the day. Generate a fresh plan before applying.' });
+      const pendingHistory = promptHistory.find((entry) => entry.requestId === architectState.requestId);
+      if (pendingHistory) updatePromptHistory(pendingHistory.id, { status: 'Stale', errorCode: 'STALE_WORLD' });
+      return;
+    }
     if (architectState.status === 'preview-ready' && preview && preview.sourceRevision !== world.revision) {
       try { activeReviewRef.current?.reject(); } catch { /* Keep stale plans non-applicable. */ }
       activeReviewRef.current = null;
@@ -322,7 +337,7 @@ function App() {
       const pendingHistory = promptHistory.find((entry) => entry.requestId === architectState.requestId);
       if (pendingHistory) updatePromptHistory(pendingHistory.id, { status: 'Stale', errorCode: 'STALE_WORLD' });
     }
-  }, [world.revision, architectState.status, architectState.proposal, architectState.requestId, promptHistory]);
+  }, [world.revision, world.budget.balance, architectState.status, architectState.proposal, architectState.requestId, promptHistory]);
 
   useEffect(() => () => {
     requestTokenRef.current += 1;
@@ -381,6 +396,7 @@ function App() {
     endGesture(); setMovingBuildingId(null); setTool('select');
     const previous = history.at(-1);
     if (!previous) return;
+    if (!canRestoreCity(previous.snapshot)) { showNotice('The treasury can no longer pay for that construction.', 'warn'); return; }
     const currentCity = { snapshot: getCitySnapshot(), city: cityRef.current };
     restoreCity(previous.snapshot);
     const next = projectCity(getSnapshot(), previous.city);
@@ -390,12 +406,14 @@ function App() {
     setCity(next);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [history, restoreCity, getSnapshot, getCitySnapshot, endGesture]);
+  }, [history, restoreCity, canRestoreCity, showNotice, getSnapshot, getCitySnapshot, endGesture]);
 
   const redo = useCallback(() => {
     endGesture(); setMovingBuildingId(null); setTool('select');
     const next = redoHistory.at(-1);
     if (!next) return;
+    // Operating money since then is not rewound (Phase 5), so redoing construction must still be affordable.
+    if (!canRestoreCity(next.snapshot)) { showNotice(`Not enough funds to redo that construction now.`, 'warn'); return; }
     const currentCity = { snapshot: getCitySnapshot(), city: cityRef.current };
     restoreCity(next.snapshot);
     const restored = projectCity(getSnapshot(), next.city);
@@ -405,7 +423,7 @@ function App() {
     setCity(restored);
     setSaved(false);
     setSelectedBuildingId(null);
-  }, [redoHistory, restoreCity, getSnapshot, getCitySnapshot, endGesture]);
+  }, [redoHistory, restoreCity, canRestoreCity, showNotice, getSnapshot, getCitySnapshot, endGesture]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -454,6 +472,13 @@ function App() {
     if (architectState.status === 'error' && isRecoverablePlannerError(architectState.errorCode)) checkConnection();
   }, [architectState.status, architectState.errorCode, checkConnection]);
 
+  // Phase 5: midnight settlements change the treasury outside city edits; the editor city mirrors it.
+  useEffect(() => {
+    if (cityRef.current.funds === world.budget.balance) return;
+    const next = { ...cityRef.current, funds: world.budget.balance };
+    cityRef.current = next;
+    setCity(next);
+  }, [world.budget.balance]);
   const fundsRef = useRef(city.funds);
   useEffect(() => {
     const amount = city.funds - fundsRef.current;
@@ -468,7 +493,8 @@ function App() {
 
   const save = () => {
     try {
-      saveCity(localStorage, cityRef.current, getSnapshot());
+      const snapshot = getSnapshot();
+      saveCity(localStorage, { ...cityRef.current, funds: snapshot.budget.balance }, snapshot);
       setSaved(true);
       showNotice('Villa Gardens saved on this device');
     } catch {
@@ -479,7 +505,8 @@ function App() {
   const openCloudSaves = () => {
     try {
       // Preserve the live editor state locally before showing account pages; cloud upload remains an explicit choice.
-      saveCity(localStorage, cityRef.current, getSnapshot());
+      const snapshot = getSnapshot();
+      saveCity(localStorage, { ...cityRef.current, funds: snapshot.budget.balance }, snapshot);
       setSaved(true);
       navigate('/account/saves');
     } catch {
@@ -677,7 +704,7 @@ function App() {
       setArchitectState({ status: 'stale', errorCode: 'STALE_WORLD', message: 'The city changed since this plan was prepared. Send the prompt again to plan against the current city.' });
       return;
     }
-    const request: ValidationRequest = { contractVersion: 1, world: snapshot, sourceRevision: snapshot.revision, seed: followUp.proposal.seed, constraints, intent };
+    const request: ValidationRequest = { contractVersion: 1, world: plannerWorld(snapshot), sourceRevision: snapshot.revision, seed: followUp.proposal.seed, constraints, intent };
     await executePlanning(followUp.prompt, snapshot, (signal) => requestPlanValidation(request, signal), false);
   };
   const confirmTargets = () => {
@@ -793,6 +820,15 @@ function App() {
     if (added > 0 && baseModeRef.current !== 'live') setUnseenFeed((count) => Math.min(9, count + added));
   }), [subscribe]);
 
+  // Phase 5: a newly active economic warning is announced once (the simulation deduplicates), without covering a notice
+  // that is already on screen; every active alert stays listed in the economy panel.
+  const noticeRef = useRef(notice);
+  noticeRef.current = notice;
+  useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
+    const alert = events.find((event) => event.type === 'economy.alert' && event.alert.severity === 'warning');
+    if (alert?.type === 'economy.alert' && !noticeRef.current) showNotice(alertText(alert.alert, state), 'warn');
+  }), [subscribe, showNotice]);
+
   const selectBuilding = useCallback((id: string | null) => {
     setSelectedBuildingId(id);
     if (id !== null) { setSelectedCitizenId(null); setFollowCitizenId(null); }
@@ -808,7 +844,7 @@ function App() {
   };
   const zoomCamera = (factor: number) => requestCamera({ action: 'zoom', factor });
 
-  const chooseMode = (next: 'build' | 'plan' | 'live' | 'life') => {
+  const chooseMode = (next: 'build' | 'plan' | 'live' | 'life' | 'economy') => {
     setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null); setLifePlaceId(null);
     if (next === 'plan') {
       setArchitectPanelOpen((open) => compact ? !open : true);
@@ -828,6 +864,7 @@ function App() {
   /** A character who has not moved in yet (no free room when created) waits in home selection. */
   const playerWaiting = !!player && !isPlayerPlaced(player);
   const lifeActive = mode === 'life';
+  const economyActive = mode === 'economy';
   const runLife = useCallback((command: LifeCommand, success?: string) => {
     const result = executeLife(command);
     if (!result.applied) { if (result.reason) showNotice(rejectionText[result.reason], 'warn'); return result; }
@@ -1035,6 +1072,25 @@ function App() {
     { id: 'meet', label: 'Meet a resident', hint: 'Click someone walking on the map to see their routine.', done: metResident },
   ];
 
+  // Phase 5: the economy panel's overview (projection included) is computed only while it is open.
+  const economyLast = world.economy?.history.at(-1) ?? null;
+  const lastEconomyNet = economyLast ? economyLast.income.residentialTax + economyLast.income.commercialTax + economyLast.income.venueFees -
+    economyLast.expenses.publicServices - economyLast.expenses.roads - economyLast.expenses.amenities - economyLast.expenses.unemploymentSupport : null;
+  const economyAlertCount = world.economy?.alerts.filter((alert) => alert.severity === 'warning').length ?? 0;
+  const overview = useMemo(() => economyActive && !selectedCitizen && !selectedBuilding ? economyOverview(world) : null,
+    // The projection depends on the settled economy, residents, the plan and the treasury, not on every frame's clock.
+    [economyActive, selectedCitizen, selectedBuilding, world.economy, world.citizens, world.plan, world.budget]); // eslint-disable-line react-hooks/exhaustive-deps
+  const applyPolicy = (policy: EconomyPolicy) => {
+    const result = executeEconomy({ type: 'economy.set-policy', policy });
+    if (result.applied) { setSaved(false); showNotice(`Tax rates updated: residential ${policy.residentialTaxRate}%, commercial ${policy.commercialTaxRate}%. They apply from the next midnight.`); }
+    return result.applied;
+  };
+  const selectedBuildingEconomy = selectedBuilding ? buildingEconomy(world, selectedBuilding.id) : null;
+  const selectedCitizenEconomy = selectedCitizen ? citizenEconomy(world, selectedCitizen.id) : null;
+  const proposalEconomy = useMemo(() => currentProposal && currentProposal.status !== 'REJECTED' && currentProposal.commands.length && world.economy
+    ? planEconomy(getSnapshot(), currentProposal.commands) : null,
+  [currentProposal, world.revision, world.economy, getSnapshot]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const dirty = history.length > 0 || redoHistory.length > 0 || world.clock.tick !== loaded.world.clock.tick || populationEnabled !== (loaded.world.population !== undefined) || lifeEdits > 0;
   const view = selectedCitizen ? 'citizen' : selectedBuilding && !movingBuildingId && mode !== 'life' ? 'building' : mode;
   const lifeSheet = view === 'life' && (lifeFlow?.step === 'home' || !!lifePlace);
@@ -1123,8 +1179,12 @@ function App() {
             <Icon name="person" size={16} /><span>Life</span></button>
         </nav>
         <div className="hud-stats">
-          <div className="hud-stat cash" title="Funds available for construction"><Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds</small>
-            {fundsDelta && <span key={fundsDelta.id} className={`funds-delta ${fundsDelta.amount < 0 ? 'is-spend' : 'is-gain'}`} aria-hidden="true">{fundsDelta.amount < 0 ? '−' : '+'}${Math.abs(fundsDelta.amount).toLocaleString()}</span>}</div>
+          <button className={`hud-stat cash ${economyActive ? 'is-active' : ''}`} aria-label="City economy" aria-pressed={economyActive}
+            title={lastEconomyNet === null ? 'Treasury · open the city economy' : `Treasury · ${signedMoney(lastEconomyNet)} yesterday · open the city economy`}
+            onClick={() => economyActive ? chooseMode('build') : chooseMode('economy')}>
+            <Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds{lastEconomyNet !== null && <i className={lastEconomyNet >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(lastEconomyNet)}/d</i>}</small>
+            {economyAlertCount > 0 && <b className="tab-badge" aria-hidden="true">{economyAlertCount}</b>}
+            {fundsDelta && <span key={fundsDelta.id} className={`funds-delta ${fundsDelta.amount < 0 ? 'is-spend' : 'is-gain'}`} aria-hidden="true">{fundsDelta.amount < 0 ? '−' : '+'}${Math.abs(fundsDelta.amount).toLocaleString()}</span>}</button>
           <div className="hud-stat" title={populationEnabled ? 'Residents living in the city' : 'Residents have not moved in yet'}><Icon name="people" size={15} /><strong>{populationEnabled ? citizens.length : '—'}</strong><small>Residents</small></div>
           <div className="hud-stat" title="Home buildings"><Icon name="home" size={15} /><strong>{villas}</strong><small>Homes</small></div>
         </div>
@@ -1291,6 +1351,7 @@ function App() {
               {currentProposal.impact.buildingsMoved > 0 && <li><Icon name="move" size={13} />Moves {currentProposal.impact.buildingsMoved} building{currentProposal.impact.buildingsMoved === 1 ? '' : 's'}</li>}
               {currentProposal.impact.roomsAdded > 0 && <li><Icon name="villa" size={13} />Adds {currentProposal.impact.roomsAdded} rooms{player && !isPlayerPlaced(player) ? ` — one is kept for ${player.name}` : ''}</li>}
             </ul>}
+            {proposalEconomy && <PlanEconomyCard impact={proposalEconomy} />}
             <div className="proposal-counts">
               <span>{currentProposal.placements.filter((placement) => placement.operation === 'build').length} builds</span>
               <span>{currentProposal.placements.filter((placement) => placement.operation === 'move').length} moves</span>
@@ -1351,6 +1412,7 @@ function App() {
         </section>
 
         {view === 'citizen' && selectedCitizen && <CitizenInspector citizen={selectedCitizen} world={world} minuteOfDay={gameTime.minuteOfDay}
+          economy={selectedCitizenEconomy && <CitizenEconomyCard economy={selectedCitizenEconomy} />}
           following={followCitizenId === selectedCitizen.id}
           onFocus={() => focusCitizen(selectedCitizen.id)}
           onFollow={() => setFollowCitizenId((current) => current === selectedCitizen.id ? null : selectedCitizen.id)}
@@ -1359,6 +1421,7 @@ function App() {
           lifeActions={citizenLifeActions} />}
 
         {view === 'building' && selectedBuilding && <BuildingInspector building={selectedBuilding} roadConnected={roadConnected}
+          economy={selectedBuildingEconomy && <BuildingEconomyCard finance={selectedBuildingEconomy.finance} projected={selectedBuildingEconomy.projected} />}
           occupancy={populationEnabled ? getBuildingOccupancy(selectedBuilding.id) : null}
           citizens={citizenMap} populationEnabled={populationEnabled} player={player ?? null}
           onSelectPlayer={() => { setSelectedBuildingId(null); setBaseMode('life'); if (compact) setSheetOpen(true); }}
@@ -1376,12 +1439,17 @@ function App() {
           onShowGuide={() => { setGuideHidden(false); writeGuideHidden(false); }}
           onChoose={(kind) => { setMovingBuildingId(null); setTool(kind); if (compact) setSheetOpen(false); }}
           onWelcome={welcomeResidents} populationEnabled={populationEnabled}
+          dailyNet={lastEconomyNet} onOpenEconomy={() => chooseMode('economy')}
           designChoices={designChoices}
           onDesignChange={(kind, choice) => setDesignChoices((current) => ({ ...current, [kind]: choice }))}
           onApplyCollection={(collection) => {
             setDesignChoices((current) => applyCollectionToAll(current, collection));
             showNotice(`New buildings will use ${architectureCollection(collection)?.name ?? collection} where it has models. Existing buildings keep their look.`);
           }} />}
+
+        {view === 'economy' && overview && <EconomyPanel world={world} overview={overview} onApplyPolicy={applyPolicy}
+          onSelectBuilding={(id) => { selectBuilding(id); if (compact) setSheetOpen(true); }}
+          onClose={() => chooseMode('build')} />}
 
         {view === 'live' && <LivePanel populationEnabled={populationEnabled} homes={villas} capacity={homeCapacity} citizens={citizens}
           summary={activitySummary} jobless={jobless} feed={feed.entries} paused={world.clock.paused} selectedCitizenId={selectedCitizenId}
