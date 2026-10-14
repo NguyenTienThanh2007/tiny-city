@@ -56,9 +56,9 @@ export const ECONOMY = Object.freeze({
   localShopping: Object.freeze({ base: 85, neutralCommercialTax: 6, perTaxPoint: 3, min: 40 }),
   /** A business with fewer workers than this percent of its jobs is understaffed. */
   understaffedPercent: 50,
-  /** Bounded history: daily reports kept, ledger entries kept. */
+  /** Bounded history: daily reports kept, and the most recent ledger entries kept (lifetime totals are kept separately). */
   historyDays: 28,
-  ledgerEntries: 400,
+  ledgerEntries: 200,
 });
 
 /** Integer percent of a whole-dollar amount, rounded half up (toward +∞ at exactly .5). Exact for safe integers. */

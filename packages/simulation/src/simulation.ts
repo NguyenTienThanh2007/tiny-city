@@ -348,11 +348,14 @@ export class Simulation {
     let economy = this.state.economy;
     if (economy) {
       // A resident who arrives at a park, pool or clubhouse for leisure has really visited it (fees settle at midnight).
-      const arrived = new Map(citizens.map((c) => [c.id, c]));
+      let arrived: Map<string, Citizen> | null = null;
       for (let i = lifeEvents; i < events.length; i += 1) {
         const event = events[i]!;
         if (event.type !== 'citizen.arrived') continue;
-        const venue = this.getNavigator().getBuilding(event.buildingId), citizen = arrived.get(event.citizenId);
+        const venue = this.getNavigator().getBuilding(event.buildingId);
+        if (!venue || !providesLeisure(venue)) continue;
+        arrived ??= new Map(citizens.map((c) => [c.id, c]));
+        const citizen = arrived.get(event.citizenId);
         if (venue && providesLeisure(venue) && citizen?.movement?.arrivalActivity === 'leisure') economy = recordVisit(economy, citizen.id, venue);
       }
     }
