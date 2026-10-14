@@ -86,7 +86,12 @@ export class PlayerLayer {
     this.root.eventMode = 'none';
     this.root.visible = false;
     this.figure.addChild(this.ring);
-    this.root.addChild(this.figure, this.marker);
+    this.root.addChild(this.figure);
+    // The "you" chevron lives in the marker layer above every building, so the character's position still reads
+    // when a taller building in front hides their body (Phase 4.6).
+    this.marker.eventMode = 'none';
+    this.marker.visible = false;
+    top.addChild(this.marker);
     this.scene.addChild(this.root, this.pin);
     this.pin.eventMode = 'none';
     this.pin.visible = false;
@@ -225,7 +230,7 @@ export class PlayerLayer {
     const player = world.player;
     // A character waiting for a home is not in the world yet.
     if (!player || player.movement.status === 'unplaced') {
-      this.root.visible = false; this.pin.visible = false; this.overlay.clear(); this.rendered = null; this.visibleOnMap = false;
+      this.root.visible = false; this.marker.visible = false; this.pin.visible = false; this.overlay.clear(); this.rendered = null; this.visibleOnMap = false;
       this.drawPulses(viewScale, dt);
       return;
     }
@@ -248,6 +253,7 @@ export class PlayerLayer {
     const showFigure = !inside || OPEN_AIR.has(inside.type ?? '');
     this.visibleOnMap = showFigure;
     this.root.visible = showFigure;
+    this.marker.visible = showFigure;
     // Slightly larger than residents so "you" stands out in a crowd.
     const scale = npcSpriteScale(viewScale) * PLAYER_SCALE;
     if (showFigure) {
@@ -288,8 +294,8 @@ export class PlayerLayer {
         const idle = this.reducedMotion ? 0 : Math.sin(this.time / 420) * 0.3;
         this.body.y = moving ? -Math.abs(Math.sin(this.walkPhase)) * 0.7 : idle;
       }
-      this.marker.y = this.reducedMotion ? 0 : Math.sin(this.time / 320) * 1.2;
-      this.marker.scale.x = this.facing;
+      this.marker.position.set(screen.x, screen.y + (this.reducedMotion ? 0 : Math.sin(this.time / 320) * 1.2) * scale);
+      this.marker.scale.set(scale);
       this.ring.scale.set(this.reducedMotion ? 1 : 1 + Math.sin(this.time / 300) * 0.06);
     }
     this.pin.visible = !!inside && !showFigure;
@@ -379,6 +385,7 @@ export class PlayerLayer {
     for (const g of this.parts.values()) g.destroy();
     this.parts.clear();
     this.root.destroy({ children: true });
+    this.marker.destroy();
     this.pin.destroy({ children: true });
     this.badges.destroy({ children: true });
     this.overlay.destroy();

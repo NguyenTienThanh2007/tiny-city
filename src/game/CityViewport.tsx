@@ -17,7 +17,7 @@ import { AmbientLayer } from './ambientLayer';
 import { getGameTime } from '@tiny-city/simulation';
 import { buildingDepth } from './npcMotion';
 import { cityView, footprint, iso, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
-import { CameraController, footprintOf, lifeZoomFor, readCameraPrefs, READABLE_ZOOM, visibleBox, wheelZoomFactor, worldTransform, writeCameraPrefs,
+import { CameraController, focalPoint, footprintOf, lifeZoomFor, readCameraPrefs, READABLE_ZOOM, visibleBox, wheelZoomFactor, worldTransform, writeCameraPrefs,
   type CameraPose, type CameraSnapshot, type Insets, type Viewport } from './camera';
 import { rejectionFeedback } from '../simulation/feedback';
 import { currentArt, loadArt, type ArtLibrary } from './art/artLibrary';
@@ -840,9 +840,14 @@ export default function CityViewport(props: Props) {
       motionQuery?.addEventListener?.('change', onMotionPreference);
       let lastFootprint = 0;
       let footprintDirty = false;
+      let published = '';
       const publishFootprint = () => {
-        lastFootprint = performance.now();
         footprintDirty = false;
+        // Only a real change is published (and restarts the throttle), so the first moving frame always shows.
+        const key = `${cam.pose.x},${cam.pose.y},${cam.pose.zoom},${cam.viewport.width},${cam.viewport.height},${focalPoint(cam.viewport).x},${focalPoint(cam.viewport).y}`;
+        if (key === published) return;
+        published = key;
+        lastFootprint = performance.now();
         propsRef.current.onCameraFootprintChange(footprintOf(cam.pose, cam.viewport));
       };
       /** Applies the camera pose to the Pixi world (the only place the world transform is written). */
