@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { cameraSettled } from './support/camera';
 import { untilClock, untilInGameTime, untilText } from './support/gameTime';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
@@ -45,13 +46,7 @@ async function screenPoint(page: Page, x: number, y: number, lift = 0) {
 /** Frames the whole city and waits for the minimap camera to settle before screen positions are computed. */
 async function centerCity(page: Page) {
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
-  let previous = '';
-  await expect.poll(async () => {
-    const current = (await page.getByTestId('minimap-camera').getAttribute('points')) ?? '';
-    const settled = current === previous;
-    previous = current;
-    return settled;
-  }, { intervals: [250], timeout: 10_000 }).toBe(true);
+  await cameraSettled(page);
 }
 async function clickTile(page: Page, x: number, y: number) {
   const point = await screenPoint(page, x + 0.5, y + 0.5);
@@ -314,7 +309,7 @@ async function fullCityRecovery(page: Page, buildAt: { x: number; y: number }) {
     // Phones hide the camera buttons: center the lot through the minimap, then let the camera settle.
     const minimap = (await page.getByRole('button', { name: 'Navigate neighborhood overview' }).boundingBox())!;
     await page.mouse.click(minimap.x + minimap.width * (buildAt.x + 1) / 64, minimap.y + minimap.height * (buildAt.y + 1) / 64);
-    await page.waitForTimeout(600);
+    await cameraSettled(page);
   }
   await clickTile(page, buildAt.x, buildAt.y);
   await expect(notice(page)).toContainText('has a free room for Mai');

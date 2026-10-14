@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { cameraSettled } from './support/camera';
 import { untilClock, untilInGameTime } from './support/gameTime';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
@@ -31,13 +32,7 @@ async function openCity(page: Page, city: CityState = fixture) {
 }
 async function centerCity(page: Page) {
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
-  let previous = '';
-  await expect.poll(async () => {
-    const current = (await page.getByTestId('minimap-camera').getAttribute('points')) ?? '';
-    const settled = current === previous;
-    previous = current;
-    return settled;
-  }, { intervals: [250], timeout: 10_000 }).toBe(true);
+  await cameraSettled(page);
 }
 async function screenPoint(page: Page, x: number, y: number, lift = 0) {
   const bounds = (await page.locator('canvas').boundingBox())!;

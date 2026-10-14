@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { cameraSettled } from './support/camera';
 import type { CityState } from '../src/types';
 import { BUILDING_CATALOG, CONSTRUCTION_COSTS, type BuildingType } from '../packages/simulation/src/index';
 
@@ -156,7 +157,8 @@ test('zoom and pan preserve pointer coordinates; minimap navigation and home rec
   await openCity(page);
   const original = await page.getByTestId('minimap-camera').getAttribute('points');
   await hoverTile(page, 12, 21);
-  await page.mouse.wheel(0, -300);
+  // One wheel notch. Zoom is proportional to the scroll distance (Phase 4.6), so -300 would be three notches.
+  await page.mouse.wheel(0, -100);
   await expect(page.getByTestId('minimap-camera')).not.toHaveAttribute('points', original!);
   const from = await screenPoint(page, 16, 23);
   await page.keyboard.down('Shift');
@@ -177,6 +179,7 @@ test('zoom and pan preserve pointer coordinates; minimap navigation and home rec
   const beforeHome = await page.getByTestId('minimap-camera').getAttribute('points');
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
   await expect(page.getByTestId('minimap-camera')).not.toHaveAttribute('points', beforeHome!);
+  await cameraSettled(page);
   await selectRoof(page, 'park', 30, 23);
   await expect(page.locator('.building-details')).toContainText('30, 23');
 });

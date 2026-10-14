@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { cameraSettled } from './support/camera';
 import { untilClock } from './support/gameTime';
 import type { CityState } from '../src/types';
 
@@ -44,7 +45,7 @@ test('residents render as baked characters and stay visible and selectable after
   await page.getByRole('button', { name: 'Welcome residents' }).click();
   await runUntil(page, 7 * 60 + 10);
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
-  await page.waitForTimeout(400);
+  await cameraSettled(page);
   const before = await footprint(page);
   for (let cycle = 0; cycle < 8; cycle += 1) {
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
