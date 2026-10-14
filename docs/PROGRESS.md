@@ -154,4 +154,17 @@ PR #18 merged; main CI 38409390925 green. Docs: `docs/visual-world-3/architectur
 - [x] M2 six Luxury Minimalist villas; M3 duplexes, townhouses and apartments (4 each); M4 commercial and public models (37 new in total)
 - [x] M5 AI Architect: design intent, validation without substitution, previews of exact models, approval records designs
 - [x] Screenshots (20 required views plus matched before/after against 3.0C), long-session renderer test, phone
-- [ ] M6 performance write-up, acceptance doc, GitHub Actions 3/3
+- [x] M6 performance write-up, acceptance doc, GitHub Actions 3/3 (merged as PR #19, `57225d0`)
+
+## Phase 4.6 camera stability & Life View (branch `feature/p4-6-camera-life-ux`, from `origin/main` @ `57225d0`)
+
+Docs: `docs/phase-4-6-camera-life/`. Root cause: every wheel event was a full step (zero/sideways deltas zoomed out), steps
+were not inverses (1.1 × 0.91), and nothing bounded the camera, so trackpad scrolling shrank the city into the cursor's
+corner (pose ended at world (4439, −894), zoom 0.08).
+
+- [x] M1 reproduction (`scripts/p46_camera_repro.mjs`), root cause, coordinate systems and invariants
+- [x] M2 `src/game/camera.ts` single pose, invertible proportional zoom, bounds, measured insets, DPR, unit tests (A–N)
+- [x] M3 City View / Life View, Focus, Follow, glides, reduced motion, renderer-recreation-safe camera
+- [x] M4 one camera control group, off-screen locator, nearby name tags, drag-to-pan, pinch, phone layout
+- [x] M5 `e2e/phase-4-6-camera.spec.ts` (scenarios A–J), screenshots, benchmark
+- [ ] M6 PR, GitHub Actions 3/3
