@@ -9,14 +9,16 @@ import { applyCollectionToAll, DEFAULT_CHOICE, readDesignChoices, resolveChoice,
 import { architectureCollection, architectureModel } from '@tiny-city/ai-architect';
 import { ModelThumb } from './ui/ArchitecturePicker';
 import CityViewport from './game/CityViewport';
-import type { CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, SafeArea, TargetHighlight } from './game/CityViewport';
+import type { CameraCommand, CameraRequest, HomeHighlight, LifeFeedback, LifeTarget, TargetHighlight } from './game/CityViewport';
+import { useCameraInsets } from './ui/cameraInsets';
+import { CameraControls } from './ui/CameraControls';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
 import { ActionButton, HomePicker, LifeEntry, LifePanel, LifeStrip, PlaceCard } from './ui/LifePanel';
 import { homeOccupancy, projectWelcome } from './simulation/housingView';
 import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, rejectionText, type PlayerLogState } from './simulation/playerView';
 import { DEFAULT_APPEARANCE } from './game/playerLook';
 import { Icon } from './ui/Icon';
-import { MiniMap } from './ui/MiniMap';
+import { createFootprintStore, MiniMap } from './ui/MiniMap';
 import { SimulationDock } from './ui/SimulationDock';
 import { CitizenInspector } from './ui/CitizenInspector';
 import { BuildingInspector } from './ui/BuildingInspector';
@@ -63,28 +65,17 @@ function writeGuideHidden(hidden: boolean) {
   try { if (hidden) localStorage.setItem(GUIDE_KEY, '1'); else localStorage.removeItem(GUIDE_KEY); } catch { /* Guide visibility is a convenience only. */ }
 }
 
-/** Screen regions covered by floating HUD panels; the camera centers content in what remains visible. */
-function useSafeArea(): { safeArea: SafeArea; compact: boolean } {
-  const read = () => {
-    const width = typeof window === 'undefined' ? 1280 : window.innerWidth;
-    if (width < 760) return { compact: true, safeArea: { left: 64, right: 0, top: 112, bottom: 150 } };
-    if (width < 1100) return { compact: false, safeArea: { left: 88, right: 330, top: 72, bottom: 104 } };
-    return { compact: false, safeArea: { left: 92, right: 384, top: 72, bottom: 104 } };
-  };
-  const [value, setValue] = useState(read);
+/** Phone layout below 760 px. The camera's unobstructed area is measured from the real panels (`useCameraInsets`). */
+function useCompactLayout(): boolean {
+  const read = () => (typeof window === 'undefined' ? 1280 : window.innerWidth) < 760;
+  const [compact, setCompact] = useState(read);
   useEffect(() => {
-    const onResize = () => setValue((current) => {
-      const next = read();
-      return current.compact === next.compact && current.safeArea.left === next.safeArea.left &&
-        current.safeArea.right === next.safeArea.right && current.safeArea.top === next.safeArea.top &&
-        current.safeArea.bottom === next.safeArea.bottom ? current : next;
-    });
+    const onResize = () => setCompact(read());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  return value;
+  return compact;
 }
-type CameraFootprintPoint = { x: number; y: number };
 type ArchitectStatus = 'idle' | 'requesting' | 'validating' | 'preview-ready' | 'applying' | 'applied' | 'rejected' | 'cancelled' | 'error' | 'stale' | 'clarify' | 'authorize';
 type ArchitectState = {
   status: ArchitectStatus;
@@ -137,7 +128,8 @@ function App() {
   const [unseenFeed, setUnseenFeed] = useState(0);
   const [guideHidden, setGuideHidden] = useState(readGuideHidden);
   const [metResident, setMetResident] = useState(false);
-  const { safeArea, compact } = useSafeArea();
+  const compact = useCompactLayout();
+  const stageRef = useRef<HTMLElement>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(() => readFlag(PANEL_KEY));
   const [connection, setConnection] = useState<ConnectionView>({ state: 'idle' });
   const connectionCheckedAt = useRef(0);
@@ -180,7 +172,8 @@ function App() {
   const [noticeTone, setNoticeTone] = useState<'info' | 'warn'>('info');
   const panelRef = useRef<HTMLElement>(null);
   const [saved, setSaved] = useState(false);
-  const [cameraFootprint, setCameraFootprint] = useState<CameraFootprintPoint[] | null>(null);
+  // The camera footprint changes many times a second while the camera moves; only the minimap subscribes to it.
+  const footprintStore = useMemo(createFootprintStore, []);
   const [cameraRequest, setCameraRequest] = useState<CameraRequest>();
   const gestureRef = useRef<{ active: boolean; recorded: boolean }>({ active: false, recorded: false });
   const architectHostRef = useRef<PlanningHost | null>(null);
@@ -196,9 +189,11 @@ function App() {
   const nextHistoryIdRef = useRef(1);
   const beginGesture = useCallback(() => { gestureRef.current = { active: true, recorded: false }; }, []);
   const endGesture = useCallback(() => { gestureRef.current.active = false; }, []);
-  const navigateCamera = useCallback((cell?: Cell) => {
-    setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, ...(cell ? { cell } : {}) }));
+  const requestCamera = useCallback((command: CameraCommand) => {
+    setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, ...command }));
   }, []);
+  /** The minimap jumps (it is dragged to scrub); the neighbourhood framing glides. */
+  const navigateCamera = useCallback((cell?: Cell) => requestCamera(cell ? { action: 'goto', cell, instant: true } : { action: 'home' }), [requestCamera]);
   const noticeTimerRef = useRef<number | null>(null);
   const noticeSeqRef = useRef(0);
 
@@ -809,9 +804,9 @@ function App() {
   }, []);
   const focusCitizen = (id: string) => {
     const citizen = getSnapshot().citizens.find((entry) => entry.id === id);
-    if (citizen) setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, cell: citizen.position, scale: 1.15 }));
+    if (citizen) requestCamera({ action: 'goto', cell: citizen.position, zoom: 1.15 });
   };
-  const zoomCamera = (zoom: number) => setCameraRequest((current) => ({ id: (current?.id ?? 0) + 1, zoom }));
+  const zoomCamera = (factor: number) => requestCamera({ action: 'zoom', factor });
 
   const chooseMode = (next: 'build' | 'plan' | 'live' | 'life') => {
     setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null); setLifePlaceId(null);
@@ -842,10 +837,28 @@ function App() {
     else if (getSnapshot().clock.paused && (command.type === 'player.move-to' || command.type === 'player.start-activity')) showNotice('Time is paused. Press Resume (Space) to set off.');
     return result;
   }, [executeLife, showNotice, getSnapshot]);
+  /** Phase 4.6: the camera glides to the character's real position (nothing happens while they wait for a home). */
   const focusPlayer = useCallback(() => {
-    const current = getSnapshot().player;
-    if (current) setCameraRequest((request) => ({ id: (request?.id ?? 0) + 1, cell: current.position, scale: 1.2 }));
-  }, [getSnapshot]);
+    setFollowCitizenId(null);
+    requestCamera({ action: 'focus-player' });
+  }, [requestCamera]);
+  // City View / Life View. Entering Life Mode with a character in the world frames them (Life View) and follows;
+  // leaving it, or the character leaving the world, restores the City View camera kept meanwhile.
+  const playerPlaced = !!player && !playerWaiting;
+  const lifeReady = lifeActive && playerPlaced;
+  const [cameraView, setCameraView] = useState<'city' | 'life'>('city');
+  const cameraViewRef = useRef(cameraView);
+  cameraViewRef.current = cameraView;
+  const showLifeView = useCallback(() => {
+    setFollowCitizenId(null); setCameraView('life'); setFollowPlayer(true); requestCamera({ action: 'life-view' });
+  }, [requestCamera]);
+  const showCityView = useCallback(() => {
+    setCameraView('city'); setFollowPlayer(false); requestCamera({ action: 'city-view' });
+  }, [requestCamera]);
+  useEffect(() => {
+    if (lifeReady) { if (cameraViewRef.current !== 'life') showLifeView(); }
+    else if (cameraViewRef.current === 'life') showCityView();
+  }, [lifeReady, showLifeView, showCityView]);
   useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
     const next = reducePlayerLog(playerLogRef.current, events, state);
     if (next !== playerLogRef.current) { playerLogRef.current = next; setPlayerLog(next); }
@@ -918,7 +931,7 @@ function App() {
     if (lifeFlow?.step !== 'home') return;
     setLifeFlow({ ...lifeFlow, selectedId: id });
     const building = getSnapshot().plan.buildings.find((entry) => entry.id === id);
-    if (building) setCameraRequest((request) => ({ id: (request?.id ?? 0) + 1, cell: { x: building.position.x + building.footprint.width / 2, y: building.position.y + building.footprint.height / 2 } }));
+    if (building) requestCamera({ action: 'goto', cell: { x: building.position.x + building.footprint.width / 2, y: building.position.y + building.footprint.height / 2 } });
   };
   const confirmHome = () => {
     if (lifeFlow?.step !== 'home' || !lifeFlow.selectedId) return;
@@ -934,7 +947,7 @@ function App() {
     if (!result.applied) return;
     if (welcomeWithPlayer && !getSnapshot().population) enablePopulation({ maxCitizens: 1000 });
     resume();
-    setLifeFlow(null); setFollowPlayer(true); setBaseMode('life'); setSheetOpen(false); focusPlayer();
+    setLifeFlow(null); setFollowPlayer(true); setBaseMode('life'); setSheetOpen(false);
     showNotice(`Welcome home, ${waiting.name}! Click a road to walk, or choose an action.`);
   };
   const onLifeTarget = (target: LifeTarget) => {
@@ -1029,6 +1042,10 @@ function App() {
   // Collapsing hides only the Build/Live/Life overview; inspectors, the AI panel and home selection still open when relevant.
   const panelHidden = !compact && panelCollapsed && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet);
   const togglePanel = (collapsed: boolean) => { setPanelCollapsed(collapsed); writeFlag(PANEL_KEY, collapsed); };
+  const lifeStripShown = lifeActive && !!player && !playerWaiting && !lifeFlow;
+  // The camera centres its view in the part of the map no panel covers, measured from the real layout.
+  const safeArea = useCameraInsets(stageRef, `${compact}|${mode}|${view}|${panelHidden}|${sheetVisible}|${lifeStripShown}|${lifeFlow?.step ?? ''}`);
+  const followingPlayer = lifeActive && followPlayer && playerPlaced && !followCitizenId && !lifeFlow;
   const selectedFootprint = selectedBuilding ? { x: selectedBuilding.x, y: selectedBuilding.y, width: BUILDINGS[selectedBuilding.kind].width, height: BUILDINGS[selectedBuilding.kind].height } : null;
   const proposalBreakdown = currentProposal ? Object.entries(currentProposal.placements
     .filter((placement) => placement.operation === 'build')
@@ -1048,7 +1065,7 @@ function App() {
 
   return (
     <main className={`app-shell mode-${mode} ${compact ? 'is-compact' : ''} ${panelHidden ? 'panel-collapsed' : ''}`}>
-      <section className="map-stage">
+      <section className="map-stage" ref={stageRef}>
         <CityViewport
           city={city}
           world={world}
@@ -1069,7 +1086,7 @@ function App() {
           onMoveBuilding={moveBuilding}
           onAddRoad={addRoad}
           onBulldoze={bulldoze}
-          onCameraFootprintChange={setCameraFootprint}
+          onCameraFootprintChange={footprintStore.set}
           cameraRequest={cameraRequest}
           safeArea={safeArea}
           onBeginGesture={beginGesture}
@@ -1077,7 +1094,8 @@ function App() {
           lifeMode={lifeActive}
           onLifeTarget={onLifeTarget}
           onSelectPlayer={player ? () => chooseMode('life') : undefined}
-          followPlayer={lifeActive && followPlayer && !!player && !followCitizenId && !lifeFlow}
+          followPlayer={followingPlayer}
+          cameraView={cameraView}
           lifeFeedback={lifeFeedback}
           homeHighlights={homeHighlights}
           targetHighlights={targetHighlights}
@@ -1085,7 +1103,7 @@ function App() {
         {overlayProposal && <div className="preview-ribbon" role="note"><Icon name="sparkle" size={14} /> AI preview · not built yet</div>}
       </section>
 
-      <header className="topbar">
+      <header className="topbar" data-camera-inset="top">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span /><span /><span /><span /></div>
           <div className="brand-copy">
@@ -1122,7 +1140,7 @@ function App() {
         </div>
       </header>
 
-      <nav className="tool-rail" aria-label="Build tools">
+      <nav className="tool-rail" aria-label="Build tools" data-camera-inset="left">
         {tools.map((item, index) => <div key={item.id} className="tool-slot">
           {(index === 3 || index === tools.length - 1) && <span className="rail-divider" aria-hidden="true" />}
           <button className={`tool-button tool-${item.id} ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => {
@@ -1137,21 +1155,21 @@ function App() {
         </div>)}
       </nav>
 
-      <SimulationDock day={gameDay} clock={gameClock} minuteOfDay={gameTime.minuteOfDay} paused={world.clock.paused} speed={speed} lastEvent={lastEvent}
+      <SimulationDock insetSide={compact ? 'top' : undefined} day={gameDay} clock={gameClock} minuteOfDay={gameTime.minuteOfDay} paused={world.clock.paused} speed={speed} lastEvent={lastEvent}
         onTogglePause={() => { togglePause(); setSaved(false); }} onStep={() => { step(); setSaved(false); }} onSpeed={setSpeed} />
 
-      <div className="map-tools">
-        <div className="zoom-controls" role="group" aria-label="Camera">
-          <button className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomCamera(1.25)}><Icon name="plus" size={16} /></button>
-          <button className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomCamera(0.8)}><Icon name="minus" size={16} /></button>
-          <button className="icon-button camera-home" aria-label="Center neighborhood" title="Return to the built neighborhood" onClick={() => { setFollowCitizenId(null); setFollowPlayer(false); navigateCamera(); }}><Icon name="center" size={16} /></button>
-        </div>
-        <MiniMap city={city} citizens={citizens} cameraFootprint={cameraFootprint} selectedCitizenId={selectedCitizenId} selectedFootprint={selectedFootprint} onNavigate={(cell) => { setFollowCitizenId(null); setFollowPlayer(false); navigateCamera(cell); }} />
+      <div className="map-tools" data-camera-avoid="">
+        <CameraControls lifeActive={lifeActive} playerName={player?.name ?? null} playerPlaced={playerPlaced} cameraView={cameraView} following={followingPlayer}
+          onZoom={zoomCamera} onFocus={focusPlayer}
+          onHome={() => { setFollowCitizenId(null); setFollowPlayer(false); if (lifeActive) setCameraView('city'); navigateCamera(); }}
+          onToggleFollow={() => { setFollowCitizenId(null); setFollowPlayer(!followingPlayer); }}
+          onView={(next) => { if (next === 'life') showLifeView(); else showCityView(); }} />
+        <MiniMap city={city} citizens={citizens} footprint={footprintStore} selectedCitizenId={selectedCitizenId} selectedFootprint={selectedFootprint} onNavigate={(cell) => { setFollowCitizenId(null); setFollowPlayer(false); navigateCamera(cell); }} />
       </div>
 
       <div className="tool-hint" aria-hidden="true"><span className="control-dot" />{toolHint}<span className="control-separator">·</span>Scroll to zoom<span className="control-separator">·</span>Shift + drag to pan</div>
 
-      <form ref={plannerFormRef} className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
+      <form ref={plannerFormRef} data-camera-inset="bottom" className={`planner-bar ${architectBusy ? 'is-busy' : ''}`} onSubmit={plannerSubmit} aria-busy={architectBusy}>
         <button type="button" className="architect-panel-toggle" aria-controls="architect-panel"
           aria-expanded={architectPanelOpen} aria-label={architectPanelOpen ? 'Hide AI Architect panel' : 'Show AI Architect panel'}
           onClick={() => { const opening = !architectPanelOpen; setArchitectPanelOpen(opening); if (opening) { setSelectedBuildingId(null); setSelectedCitizenId(null); setSheetOpen(false); } }}>
@@ -1181,7 +1199,7 @@ function App() {
 
       {panelHidden && <button className="panel-handle" aria-label="Show side panel" title="Show side panel" onClick={() => togglePanel(false)}>
         <Icon name="chevron" size={16} className="is-flipped" /><span>{mode === 'live' ? 'Live' : mode === 'life' ? 'Life' : 'Build'}</span></button>}
-      <aside ref={panelRef} className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''} ${panelHidden ? 'is-collapsed' : ''}`}>
+      <aside ref={panelRef} data-camera-inset={compact ? 'bottom' : 'right'} className={`inspector side-panel view-${view} ${architectPanelOpen ? 'architect-open' : ''} ${sheetOpen ? 'sheet-open' : ''} ${sheetVisible ? 'sheet-visible' : ''} ${selectedBuilding && !movingBuildingId ? 'has-selection' : ''} ${panelHidden ? 'is-collapsed' : ''}`}>
         {!compact && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet) && <button className="panel-collapse" aria-label="Collapse side panel" title="Collapse side panel" onClick={() => togglePanel(true)}><Icon name="chevron" size={16} /></button>}
         {compact && sheetVisible && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet) && !architectPanelOpen && <button className="sheet-close" aria-label="Close panel" onClick={() => setSheetOpen(false)}><Icon name="close" size={16} /></button>}
         <section id="architect-panel" className={`architect-panel ${architectPanelOpen ? 'is-open' : ''}`} aria-labelledby="architect-heading">
@@ -1383,12 +1401,11 @@ function App() {
           kindOf={(id) => city.buildings.find((entry) => entry.id === id)?.kind} />}
         {view === 'life' && lifeFlow?.step !== 'home' && !player && <LifeEntry populationEnabled={populationEnabled} onCreate={openCreator} />}
         {view === 'life' && lifeFlow?.step !== 'home' && player && !playerWaiting && <LifePanel player={player} world={world} actions={lifeActions} log={playerLog.entries}
-          paused={world.clock.paused} following={followPlayer && !followCitizenId} place={placeCard}
+          paused={world.clock.paused} place={placeCard}
           nearby={nearby} onSelectCitizen={(id) => { selectCitizen(id); if (compact) setSheetOpen(true); }}
           onAction={(action) => runLife(action === 'go-home' ? { type: 'player.move-to', destination: { type: 'building', buildingId: player.homeBuildingId ?? '' } }
             : action === 'visit' ? { type: 'player.start-activity', activity: 'visit' } : { type: 'player.start-activity', activity: action })}
-          onCancel={() => runLife({ type: 'player.cancel' })} onFocus={focusPlayer}
-          onFollow={() => { setFollowCitizenId(null); setFollowPlayer((value) => !value); }}
+          onCancel={() => runLife({ type: 'player.cancel' })}
           onEdit={() => setLifeFlow({ step: 'identity', draft: { name: player.name, appearance: player.appearance }, editing: true })}
           onChangeHome={() => setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: null })}
           onResume={() => { resume(); setSaved(false); }} onClosePlace={() => setLifePlaceId(null)} />}
@@ -1396,9 +1413,9 @@ function App() {
       {playerWaiting && player && !lifeActive && <button className="home-return" onClick={() => chooseMode('life')} aria-label="Back to home selection">
         <Icon name="home" size={15} /><span><strong>{player.name} needs a home</strong><small>{housing.freeRooms > 0 ? `${housing.freeRooms} free room${housing.freeRooms === 1 ? '' : 's'} · choose one` : 'Build a home beside a road'}</small></span>
         <Icon name="chevron" size={14} /></button>}
-      {lifeActive && player && !playerWaiting && !lifeFlow && <LifeStrip player={player} world={world} following={followPlayer && !followCitizenId}
+      {lifeStripShown && player && <LifeStrip player={player} world={world}
         onOpen={() => { setSelectedCitizenId(null); setLifePlaceId(null); if (compact) setSheetOpen(true); else if (panelCollapsed) togglePanel(false); }}
-        onFollow={() => { setFollowCitizenId(null); setFollowPlayer((value) => !value); }} onCancel={() => runLife({ type: 'player.cancel' })} />}
+        onCancel={() => runLife({ type: 'player.cancel' })} />}
       {lifeFlow?.step === 'identity' && <CharacterCreator initial={lifeFlow.draft} editing={lifeFlow.editing} onCancel={() => setLifeFlow(null)}
         onSubmit={(draft) => {
           if (lifeFlow.editing) { const result = runLife({ type: 'player.customize', name: draft.name, appearance: draft.appearance }, 'Look saved.'); if (result.applied) setLifeFlow(null); return; }

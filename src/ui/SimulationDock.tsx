@@ -2,7 +2,7 @@ import type { SimulationEvent } from '@tiny-city/simulation';
 import { Icon } from './Icon';
 import { SIMULATION_SPEEDS, type SimulationSpeed } from '../simulation/useCitySimulation';
 
-export function SimulationDock({ day, clock, minuteOfDay, paused, speed, lastEvent, onTogglePause, onStep, onSpeed }: {
+export function SimulationDock({ day, clock, minuteOfDay, paused, speed, lastEvent, onTogglePause, onStep, onSpeed, insetSide }: {
   day: string;
   clock: string;
   minuteOfDay: number;
@@ -12,10 +12,12 @@ export function SimulationDock({ day, clock, minuteOfDay, paused, speed, lastEve
   onTogglePause: () => void;
   onStep: () => void;
   onSpeed: (speed: SimulationSpeed) => void;
+  /** Where the dock covers the map (the camera keeps its view clear of it), if anywhere. */
+  insetSide?: 'top';
 }) {
   const night = minuteOfDay < 360 || minuteOfDay >= 1170;
   const progress = (minuteOfDay / 1440) * 100;
-  return <section className={`sim-dock ${paused ? 'is-paused' : 'is-running'}`} role="group" aria-label="Simulation controls">
+  return <section className={`sim-dock ${paused ? 'is-paused' : 'is-running'}`} role="group" aria-label="Simulation controls" data-camera-inset={insetSide} data-camera-avoid="">
     <div className="sim-time">
       <span className={`sim-sky ${night ? 'is-night' : 'is-day'}`}><Icon name={night ? 'moon' : 'sun'} size={16} /></span>
       <output aria-label="Simulation clock"><span className="sim-day">DAY {day}</span><span className="sim-sep"> · </span><span className="sim-clock">{clock}</span></output>

@@ -16,19 +16,36 @@ import { DAYLIGHT, windowsOn, worldLighting, type WorldLighting } from './lighti
 import { AmbientLayer } from './ambientLayer';
 import { getGameTime } from '@tiny-city/simulation';
 import { buildingDepth } from './npcMotion';
-import { cityView, footprint, iso, MAX_SCALE, MIN_SCALE, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
+import { cityView, footprint, iso, proposalOverlayGeometry, tileStroke, toCell, toGrid, type Point } from './mapGeometry';
+import { CameraController, footprintOf, lifeZoomFor, readCameraPrefs, READABLE_ZOOM, visibleBox, wheelZoomFactor, worldTransform, writeCameraPrefs,
+  type CameraPose, type CameraSnapshot, type Insets, type Viewport } from './camera';
 import { rejectionFeedback } from '../simulation/feedback';
 import { currentArt, loadArt, type ArtLibrary } from './art/artLibrary';
 import { selectBuildingAsset, selectRoadAsset } from './art/artManifest';
 import { designLabel, predictBuildingId, resolveChoice, type DesignChoices } from './architecture';
 import { drawTerrainArt } from './terrainArt';
+import { NearbyTags } from './nearbyTags';
 
 export { buildingLift } from './buildingArt';
 
-/** `cell` may be fractional (a resident's position). `zoom` multiplies the scale around the visible center. */
-export type CameraRequest = { id: number; cell?: Position; zoom?: number; scale?: number };
-export type SafeArea = { left: number; right: number; top: number; bottom: number };
+/**
+ * Camera commands from the UI (Phase 4.6). `goto` cells may be fractional (a resident's position) and `instant` jumps
+ * (minimap scrubbing); `zoom` multiplies the zoom around the centre of the visible area; `home` frames the built city;
+ * `focus-player` glides to the character; `life-view` remembers the City View camera and frames the character for
+ * Life View; `city-view` restores it.
+ */
+export type CameraCommand =
+  | { action: 'zoom'; factor: number }
+  | { action: 'goto'; cell: Position; zoom?: number; instant?: boolean }
+  | { action: 'home' }
+  | { action: 'focus-player' }
+  | { action: 'life-view' }
+  | { action: 'city-view' };
+export type CameraRequest = { id: number } & CameraCommand;
+export type SafeArea = Insets;
 export type RendererStats = { fps: number; frameMs: number; residents: number; visibleResidents: number; venueVisitors?: number; art?: string;
+  /** Life View name tags shown over nearby residents (4.6). */
+  nearbyTags?: number;
   /** Finished and constructing buildings drawn from baked art vs the vector fallback at the last city redraw (3.1). */
   bakedBuildings?: number; vectorBuildings?: number;
   /** Baked art drawn per model (classic art as `classic:<kind>:v<variant>`), so tests can see exactly what is shown. */
@@ -78,7 +95,12 @@ type Props = {
   onBulldoze: (cell: Cell) => void;
   onCameraFootprintChange: (points: Point[]) => void;
   cameraRequest?: CameraRequest;
+  /** HUD panels covering the canvas edges (CSS px); the camera centres content in the rest. */
   safeArea?: SafeArea;
+  /** Life Mode camera framing ('life' = close-up on the character); remembered zoom applies only in Life View. */
+  cameraView?: 'city' | 'life';
+  /** Shows the edge arrow pointing at an off-screen character (Life Mode). */
+  showPlayerLocator?: boolean;
   onBeginGesture?: () => void;
   onEndGesture?: () => void;
   /** Phase 4: clicks steer the player instead of selecting (only with the select tool). */
@@ -569,6 +591,12 @@ export default function CityViewport(props: Props) {
   const propsRef = useRef(props);
   const refreshRef = useRef<(() => void) | null>(null);
   const cameraRef = useRef<((request: CameraRequest) => void) | null>(null);
+  /** The camera outlives renderer recreation (StrictMode remounts, context loss), so the view never resets. */
+  const cameraControllerRef = useRef<CameraController | null>(null);
+  /** City View pose kept while Life View is shown. */
+  const cityPoseRef = useRef<CameraPose | null>(null);
+  const locatorRef = useRef<HTMLButtonElement>(null);
+  const locatorFocusRef = useRef<(() => void) | null>(null);
   const safeAreaRef = useRef<(() => void) | null>(null);
   const nameplateRef = useRef<(() => void) | null>(null);
   const registryRef = useRef<BuildingRegistry>(new Map());
@@ -690,6 +718,8 @@ export default function CityViewport(props: Props) {
         const building = propsRef.current.city.buildings.find((entry) => entry.id === id);
         return building ? buildingTop(building, propsRef.current.city.roads) : 30;
       }, (b) => frontOf(b));
+      // Life View: quiet name tags over the residents closest to the character.
+      const nearbyTags = new NearbyTags(world, world.getChildIndex(labels));
       let lastHighlights: readonly HomeHighlight[] | null | undefined;
       const decor = new DecorLayer(buildings, groundDecor, app.renderer, decorShadows);
       const effects = new EffectsLayer(effectsContainer);
@@ -789,68 +819,106 @@ export default function CityViewport(props: Props) {
         refreshRef.current?.();
       });
 
-      const safeBox = () => {
-        const area = propsRef.current.safeArea ?? NO_SAFE_AREA;
-        const width = Math.max(120, app.screen.width - area.left - area.right);
-        const height = Math.max(120, app.screen.height - area.top - area.bottom);
-        return { width, height, cx: area.left + width / 2, cy: area.top + height / 2 };
+      const viewportOf = (): Viewport => ({ width: app.screen.width, height: app.screen.height, insets: propsRef.current.safeArea ?? NO_SAFE_AREA });
+      /** Frames the built neighbourhood in the visible area, a little above centre (headroom for the skyline). */
+      const homePose = (viewport: Viewport): CameraPose => {
+        const box = visibleBox(viewport);
+        const next = cityView(propsRef.current.city, box.width, box.height);
+        return { x: next.center.x, y: next.center.y + 25 / next.scale, zoom: next.scale };
       };
-      const home = (() => { const box = safeBox(); return cityView(propsRef.current.city, box.width, box.height); })();
-      const view = { x: 0, y: -25, scale: home.scale };
-      let center = home.center;
+      const motionQuery = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      let camera = cameraControllerRef.current;
+      const firstRenderer = !camera;
+      if (camera) camera.setViewport(viewportOf());
+      else {
+        const viewport = viewportOf();
+        camera = new CameraController(viewport, propsRef.current.city.size, homePose(viewport), reducedMotion);
+        cameraControllerRef.current = camera;
+      }
+      const cam: CameraController = camera;
+      const onMotionPreference = () => { cam.reducedMotion = !!motionQuery?.matches; };
+      motionQuery?.addEventListener?.('change', onMotionPreference);
       let lastFootprint = 0;
-      let following = false;
-      const updateCamera = (throttle = false) => {
-        const box = safeBox();
-        world.scale.set(view.scale);
-        decor.setDetail(view.scale);
-        world.position.set(box.cx - center.x * view.scale + view.x, box.cy - center.y * view.scale + view.y);
-        const now = performance.now();
-        if (throttle && now - lastFootprint < 120) return;
-        lastFootprint = now;
-        const screenCorners = [
-          { x: 0, y: 0 },
-          { x: app.screen.width, y: 0 },
-          { x: app.screen.width, y: app.screen.height },
-          { x: 0, y: app.screen.height },
-        ];
-        const footprintPoints = screenCorners.map((corner) => {
-          const localX = (corner.x - world.position.x) / view.scale;
-          const localY = (corner.y - world.position.y) / view.scale;
-          return toGrid({ x: localX, y: localY });
-        });
-        propsRef.current.onCameraFootprintChange(footprintPoints);
+      let footprintDirty = false;
+      const publishFootprint = () => {
+        lastFootprint = performance.now();
+        footprintDirty = false;
+        propsRef.current.onCameraFootprintChange(footprintOf(cam.pose, cam.viewport));
       };
-      const zoomAround = (screenPoint: Point, nextScale: number) => {
-        const box = safeBox();
-        const oldScale = view.scale;
-        const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
-        const worldX = (screenPoint.x - world.x) / oldScale;
-        const worldY = (screenPoint.y - world.y) / oldScale;
-        view.scale = clamped;
-        view.x = screenPoint.x - worldX * clamped - (box.cx - center.x * clamped);
-        view.y = screenPoint.y - worldY * clamped - (box.cy - center.y * clamped);
+      /** Applies the camera pose to the Pixi world (the only place the world transform is written). */
+      const applyCamera = (throttle = false) => {
+        const transform = worldTransform(cam.pose, cam.viewport);
+        world.scale.set(transform.scale);
+        world.position.set(transform.x, transform.y);
+        decor.setDetail(transform.scale);
+        (window as unknown as { __tinyCityCamera?: CameraSnapshot }).__tinyCityCamera = cam.snapshot();
+        if (throttle && performance.now() - lastFootprint < 120) { footprintDirty = true; return; }
+        publishFootprint();
+      };
+      /** The character's world point (never invented: null while they are waiting for a home or absent). */
+      const playerPoint = (): Point | null => {
+        const live = propsRef.current.getWorld?.() ?? propsRef.current.world;
+        if (!live.player || live.player.movement.status === 'unplaced') return null;
+        const at = player.focus ?? live.player.position;
+        return iso(at.x, at.y);
+      };
+      const lifeZoom = () => readCameraPrefs().lifeZoom ?? lifeZoomFor(cam.viewport);
+      let rememberTimer = 0;
+      let rememberedZoom: number | null = null;
+      const flushLifeZoom = () => {
+        window.clearTimeout(rememberTimer);
+        if (rememberedZoom !== null && rememberedZoom >= READABLE_ZOOM) writeCameraPrefs({ lifeZoom: Math.round(rememberedZoom * 1000) / 1000 });
+        rememberedZoom = null;
+      };
+      /** In Life View the zoom the player chooses becomes the Life View zoom (a per-viewer preference, written once settled). */
+      const rememberLifeZoom = () => {
+        if (propsRef.current.cameraView !== 'life') return;
+        rememberedZoom = cam.targetZoom;
+        window.clearTimeout(rememberTimer);
+        rememberTimer = window.setTimeout(flushLifeZoom, 500);
+      };
+      const focusPlayer = () => {
+        const target = playerPoint();
+        if (!target) return false;
+        const zoom = cam.pose.zoom >= READABLE_ZOOM ? cam.pose.zoom : lifeZoom();
+        // Tracks the moving character and ends exactly on them; Follow (if on) continues from there.
+        cam.trackTo(target, zoom);
+        return true;
       };
       cameraRef.current = (request) => {
-        if (request.zoom !== undefined && !request.cell) {
-          const box = safeBox();
-          zoomAround({ x: box.cx, y: box.cy }, view.scale * request.zoom);
-        } else if (request.cell) {
-          center = iso(request.cell.x, request.cell.y);
-          if (request.scale !== undefined) view.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, request.scale));
-          view.x = 0; view.y = request.scale !== undefined ? 0 : -25;
-        } else {
-          const box = safeBox();
-          const next = cityView(propsRef.current.city, box.width, box.height);
-          center = next.center; view.scale = next.scale;
-          view.x = 0; view.y = -25;
+        switch (request.action) {
+          case 'zoom': cam.zoomBy(request.factor); rememberLifeZoom(); break;
+          case 'goto': {
+            const pose = { ...iso(request.cell.x, request.cell.y), zoom: request.zoom ?? cam.pose.zoom };
+            if (request.instant) cam.jumpTo(pose); else cam.glideTo(pose);
+            break;
+          }
+          case 'home': cam.setFollowing(false); cam.glideTo(homePose(cam.viewport)); cityPoseRef.current = null; break;
+          case 'focus-player': focusPlayer(); break;
+          case 'life-view': {
+            const target = playerPoint();
+            if (!target) break; // waiting for a home: keep the current view
+            cityPoseRef.current ??= { ...cam.pose };
+            cam.setFollowing(true, target, lifeZoom());
+            break;
+          }
+          case 'city-view':
+            cam.setFollowing(false);
+            cam.glideTo(cityPoseRef.current ?? homePose(cam.viewport));
+            cityPoseRef.current = null;
+            break;
         }
-        updateCamera();
+        applyCamera();
         refreshRef.current?.();
       };
-      safeAreaRef.current = () => updateCamera();
-      if (propsRef.current.cameraRequest) cameraRef.current(propsRef.current.cameraRequest);
-      else updateCamera();
+      safeAreaRef.current = () => { cam.setViewport(viewportOf()); applyCamera(); };
+      // A request made before the first renderer existed is shown directly; a recreated renderer keeps the camera as is.
+      const initialRequest = propsRef.current.cameraRequest;
+      if (firstRenderer && initialRequest && initialRequest.action !== 'zoom') {
+        cameraRef.current(initialRequest);
+        cam.finish(playerPoint());
+      }
+      applyCamera();
 
       let pointerAction: 'paint' | 'bulldoze' | 'pan' | null = null;
       let lastPointer = { x: 0, y: 0 };
@@ -860,11 +928,17 @@ export default function CityViewport(props: Props) {
       let hoverCitizenId: string | null = null;
       let hoverPlayer = false;
       let gestureTool = propsRef.current.tool;
+      /** A select-tool press waits for release: a click acts, a drag beyond the threshold pans instead. */
+      let press: { x: number; y: number; localPoint: Point; cell: Cell; touch: boolean } | null = null;
+      /** Active touch points (canvas CSS px) and the current two-finger gesture. */
+      const touches = new Map<number, Point>();
+      let pinch: { distance: number; mid: Point } | null = null;
       const endGesture = () => {
         pointerAction = null; lastCell = null;
         propsRef.current.onEndGesture?.();
       };
       const leave = () => {
+        press = null;
         endGesture(); hoverPoint = null; hoverBuildingId = null; hoverCitizenId = null; hoverPlayer = false;
         ghostShape.clear(); ghostArt.clear(); ghostSprite.visible = false; setPreview('');
         host.style.cursor = '';
@@ -897,7 +971,7 @@ export default function CityViewport(props: Props) {
         if (hoverPlayer && live.player && player.position) {
           text = `${live.player.name} · you`;
           const point = iso(player.position.x, player.position.y);
-          anchor = { x: point.x, y: point.y - 38 * npcSpriteScale(view.scale) };
+          anchor = { x: point.x, y: point.y - 38 * npcSpriteScale(cam.pose.zoom) };
         }
         if (citizenId) {
           const citizen = live.citizens.find((entry) => entry.id === citizenId);
@@ -906,7 +980,7 @@ export default function CityViewport(props: Props) {
             text = citizen.name;
             const point = iso(position.x, position.y);
             // Clear the figure (and the selected resident's activity badge), which scale with zoom.
-            anchor = { x: point.x, y: point.y - (citizenId === current.selectedCitizenId ? 36 : 25) * npcSpriteScale(view.scale) };
+            anchor = { x: point.x, y: point.y - (citizenId === current.selectedCitizenId ? 36 : 25) * npcSpriteScale(cam.pose.zoom) };
           }
         }
         const buildingId = !text ? hoverBuildingId ?? (current.lifeMode ? null : current.selectedBuildingId) : null;
@@ -921,7 +995,7 @@ export default function CityViewport(props: Props) {
         }
         if (!text || !anchor) { labels.visible = false; return; }
         nameplate.text = text;
-        const inverse = 1 / Math.max(0.35, Math.min(1.4, view.scale));
+        const inverse = 1 / Math.max(0.35, Math.min(1.4, cam.pose.zoom));
         labels.scale.set(1);
         nameplate.scale.set(inverse);
         nameplate.position.set(anchor.x, anchor.y);
@@ -942,8 +1016,13 @@ export default function CityViewport(props: Props) {
         gestureTool = current.tool;
         lastCell = cell;
         hoverPoint = { x: event.global.x, y: event.global.y };
+        if (pinch || touches.size > 1) return;
         if (event.button === 1 || event.button === 2 || event.shiftKey) {
           pointerAction = 'pan';
+          return;
+        }
+        if (current.tool === 'select') {
+          press = { x: event.global.x, y: event.global.y, localPoint, cell, touch: event.pointerType === 'touch' };
           return;
         }
         if (current.tool === 'road') {
@@ -961,24 +1040,31 @@ export default function CityViewport(props: Props) {
             if (building) current.onBeginMoveBuilding(building.id);
             else current.onSelectBuilding(null);
           }
-        } else if (current.tool === 'select' && current.lifeMode && current.onLifeTarget) {
-          const citizenId = player.pick(localPoint, view.scale) ? null : npcs.pick(localPoint, view.scale);
-          if (player.pick(localPoint, view.scale)) current.onLifeTarget({ type: 'player' });
-          else if (citizenId) current.onLifeTarget({ type: 'citizen', id: citizenId });
-          else {
-            const building = buildingAtPoint(current.city, localPoint);
-            current.onLifeTarget(building ? { type: 'building', id: building.id } : { type: 'tile', cell });
-          }
-        } else if (current.tool === 'select') {
-          if (current.onSelectPlayer && player.pick(localPoint, view.scale)) { current.onSelectPlayer(); return; }
-          const citizenId = current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
-          if (citizenId) current.onSelectCitizen?.(citizenId);
-          else current.onSelectBuilding(buildingAtPoint(current.city, localPoint)?.id ?? null);
         } else {
           const kind = current.tool as BuildingKind;
           current.onPlaceBuilding(kind, cell.x, cell.y);
         }
       });
+      /** A completed select-tool click (Life Mode steers the character; otherwise it selects). */
+      const clickAt = ({ localPoint, cell }: { localPoint: Point; cell: Cell }) => {
+        const current = propsRef.current;
+        if (current.tool !== 'select') return;
+        const zoom = cam.pose.zoom;
+        if (current.lifeMode && current.onLifeTarget) {
+          const citizenId = player.pick(localPoint, zoom) ? null : npcs.pick(localPoint, zoom);
+          if (player.pick(localPoint, zoom)) current.onLifeTarget({ type: 'player' });
+          else if (citizenId) current.onLifeTarget({ type: 'citizen', id: citizenId });
+          else {
+            const building = buildingAtPoint(current.city, localPoint);
+            current.onLifeTarget(building ? { type: 'building', id: building.id } : { type: 'tile', cell });
+          }
+        } else {
+          if (current.onSelectPlayer && player.pick(localPoint, zoom)) { current.onSelectPlayer(); return; }
+          const citizenId = current.onSelectCitizen ? npcs.pick(localPoint, zoom) : null;
+          if (citizenId) current.onSelectCitizen?.(citizenId);
+          else current.onSelectBuilding(buildingAtPoint(current.city, localPoint)?.id ?? null);
+        }
+      };
       const footprintTiles = (x: number, y: number, width: number, height: number) => {
         const tiles = new Set<string>();
         for (let ty = y; ty < y + height; ty += 1) for (let tx = x; tx < x + width; tx += 1) tiles.add(cellKey(tx, ty));
@@ -1092,8 +1178,8 @@ export default function CityViewport(props: Props) {
           }
         } else if (current.tool === 'select' && current.lifeMode) {
           const live = current.getWorld?.() ?? current.world;
-          hoverPlayer = player.pick(localPoint, view.scale);
-          hoverCitizenId = hoverPlayer ? null : npcs.pick(localPoint, view.scale);
+          hoverPlayer = player.pick(localPoint, cam.pose.zoom);
+          hoverCitizenId = hoverPlayer ? null : npcs.pick(localPoint, cam.pose.zoom);
           npcs.setHovered(hoverCitizenId);
           const building = hoverPlayer || hoverCitizenId ? undefined : buildingAtPoint(current.city, localPoint);
           hoverBuildingId = building?.id ?? null;
@@ -1113,8 +1199,8 @@ export default function CityViewport(props: Props) {
             polygon(ghostShape, tileDiamond(cell.x, cell.y), road ? 0xbfe8c9 : 0xd97962, road ? 0.45 : 0.4, road ? 0x2f8a5b : 0xb84c43, 0.9);
           }
         } else if (current.tool === 'select') {
-          hoverPlayer = !!current.onSelectPlayer && player.pick(localPoint, view.scale);
-          hoverCitizenId = !hoverPlayer && current.onSelectCitizen ? npcs.pick(localPoint, view.scale) : null;
+          hoverPlayer = !!current.onSelectPlayer && player.pick(localPoint, cam.pose.zoom);
+          hoverCitizenId = !hoverPlayer && current.onSelectCitizen ? npcs.pick(localPoint, cam.pose.zoom) : null;
           npcs.setHovered(hoverCitizenId);
           if (!hoverCitizenId) hoverBuildingId = buildingAtPoint(current.city, localPoint)?.id ?? null;
           const hovered = hoverBuildingId && hoverBuildingId !== current.selectedBuildingId ? current.city.buildings.find((entry) => entry.id === hoverBuildingId) : undefined;
@@ -1140,12 +1226,18 @@ export default function CityViewport(props: Props) {
         const cell = toCell(localPoint);
         const current = propsRef.current;
         if (gestureTool !== current.tool) endGesture();
+        if (pinch) return;
+        if (press && !pointerAction && Math.hypot(event.global.x - press.x, event.global.y - press.y) > (press.touch ? 10 : 6)) {
+          // Dragging from the press point: the grabbed spot stays under the pointer from here on.
+          pointerAction = 'pan';
+          lastPointer = { x: press.x, y: press.y };
+          press = null;
+        }
         if (pointerAction === 'pan') {
-          view.x += event.global.x - lastPointer.x;
-          view.y += event.global.y - lastPointer.y;
+          const wasFollowing = cam.pan(event.global.x - lastPointer.x, event.global.y - lastPointer.y);
           lastPointer = { x: event.global.x, y: event.global.y };
-          if (following) { following = false; current.onFollowEnd?.(); }
-          updateCamera();
+          if (wasFollowing) current.onFollowEnd?.();
+          applyCamera();
         } else if (pointerAction === 'paint' || pointerAction === 'bulldoze') {
           const cells = lastCell ? tileStroke(lastCell, cell, current.city.size) : [cell];
           for (const tile of cells) handleCell(tile, tile.x === cell.x && tile.y === cell.y ? localPoint : undefined);
@@ -1153,8 +1245,46 @@ export default function CityViewport(props: Props) {
         }
         refreshPreview();
       });
-      app.stage.on('pointerup', endGesture);
-      app.stage.on('pointerupoutside', endGesture);
+      app.stage.on('pointerup', () => {
+        const pending = press;
+        press = null;
+        if (pending && !pinch) clickAt(pending);
+        endGesture();
+      });
+      app.stage.on('pointerupoutside', () => { press = null; endGesture(); });
+      // Two-finger touch: pinch zooms about the fingers' midpoint and the midpoint's movement pans. Listening on the
+      // host in the capture phase sees the second finger before Pixi does, so it never paints or clicks.
+      const canvasPoint = (event: PointerEvent) => {
+        const bounds = app.canvas.getBoundingClientRect();
+        return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      };
+      const pinchShape = () => {
+        const [a, b] = [...touches.values()] as [Point, Point];
+        return { distance: Math.hypot(b.x - a.x, b.y - a.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+      };
+      const onTouchDown = (event: PointerEvent) => {
+        if (event.pointerType !== 'touch') return;
+        touches.set(event.pointerId, canvasPoint(event));
+        if (touches.size === 2) { press = null; endGesture(); pinch = pinchShape(); }
+      };
+      const onTouchMove = (event: PointerEvent) => {
+        if (!touches.has(event.pointerId)) return;
+        touches.set(event.pointerId, canvasPoint(event));
+        if (!pinch || touches.size < 2) return;
+        const next = pinchShape();
+        if (cam.gesture(next.mid.x - pinch.mid.x, next.mid.y - pinch.mid.y, next.distance / Math.max(1, pinch.distance), next.mid)) propsRef.current.onFollowEnd?.();
+        pinch = next;
+        rememberLifeZoom();
+        applyCamera();
+      };
+      const onTouchUp = (event: PointerEvent) => {
+        touches.delete(event.pointerId);
+        if (touches.size < 2) pinch = null;
+      };
+      host.addEventListener('pointerdown', onTouchDown, { capture: true });
+      window.addEventListener('pointermove', onTouchMove, { capture: true });
+      window.addEventListener('pointerup', onTouchUp, { capture: true });
+      window.addEventListener('pointercancel', onTouchUp, { capture: true });
       app.canvas.addEventListener('pointerleave', leave);
       window.addEventListener('pointerup', endGesture);
       window.addEventListener('blur', leave);
@@ -1165,8 +1295,12 @@ export default function CityViewport(props: Props) {
         event.preventDefault();
         const bounds = app.canvas.getBoundingClientRect();
         const mouse = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
-        zoomAround(mouse, view.scale * (event.deltaY < 0 ? 1.1 : 0.91));
-        updateCamera();
+        // Proportional to the scroll distance; sideways swipes and zero deltas (trackpad momentum) never zoom.
+        const factor = wheelZoomFactor(event);
+        if (factor === 1) return;
+        cam.zoomBy(factor, mouse);
+        rememberLifeZoom();
+        applyCamera();
         refreshPreview();
       };
       app.canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -1174,15 +1308,85 @@ export default function CityViewport(props: Props) {
         // Pixi queues window resize on RAF; update it before deriving pointer/minimap transforms.
         app.resize();
         app.stage.hitArea = app.screen;
-        updateCamera();
+        cam.setViewport(viewportOf());
+        applyCamera();
         refreshPreview();
       });
       resizeObserver.observe(host);
+      // Moving the window to a display with another pixel ratio re-renders at the new density (CSS-pixel camera unchanged).
+      let densityQuery: MediaQueryList | null = null;
+      const onDensity = () => {
+        app.renderer.resolution = Math.min(window.devicePixelRatio || 1, 2);
+        app.resize();
+        cam.setViewport(viewportOf());
+        applyCamera();
+        watchDensity();
+      };
+      const watchDensity = () => {
+        densityQuery?.removeEventListener?.('change', onDensity);
+        densityQuery = typeof window.matchMedia === 'function' ? window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`) : null;
+        densityQuery?.addEventListener?.('change', onDensity);
+      };
+      watchDensity();
       const disconnectSimulation = connectSimulationTicker(app.ticker, (elapsedMs) => propsRef.current.onSimulationFrame(elapsedMs));
       // Geometry, labels, and scaffolding must finish even while simulation time is paused.
       let wasConstructing = false;
       let lastConstructionDraw = 0;
       let frames = 0, frameWindowStart = performance.now(), frameCost = 0;
+      let lastWantFollow = cam.following;
+      // Off-screen character locator: a button on the edge of the visible area pointing at the character.
+      let locatorShown = false, locatorX = -1, locatorY = -1, locatorAngle = 0;
+      // Map controls marked `data-camera-avoid` (zoom, minimap, camera block) are not covered by the locator.
+      let avoid: { left: number; top: number; right: number; bottom: number }[] = [];
+      let avoidCheck = -Infinity;
+      const updateLocator = (current: Props, subject: Point | null) => {
+        const button = locatorRef.current;
+        if (!button) return;
+        let show = false;
+        if (current.lifeMode && subject && current.showPlayerLocator !== false && !current.followCitizenId) {
+          const box = visibleBox(cam.viewport);
+          const at = cam.toScreen(subject);
+          const margin = 28;
+          const now = performance.now();
+          if (now - avoidCheck > 500) {
+            avoidCheck = now;
+            const canvas = app.canvas.getBoundingClientRect();
+            avoid = [...document.querySelectorAll('[data-camera-avoid]')].map((element) => {
+              const r = element.getBoundingClientRect();
+              return { left: r.left - canvas.left - 24, top: r.top - canvas.top - 24, right: r.right - canvas.left + 24, bottom: r.bottom - canvas.top + 24 };
+            }).filter((r) => r.right - r.left > 48);
+          }
+          const dx = at.x - box.cx, dy = at.y - box.cy;
+          const inside = at.x > box.left + margin && at.x < box.left + box.width - margin && at.y > box.top + margin && at.y < box.top + box.height - margin;
+          // Behind a HUD card (dock, zoom and minimap) counts as off screen too: point at the card's edge instead.
+          const cover = inside ? avoid.find((r) => at.x > r.left && at.x < r.right && at.y > r.top && at.y < r.bottom) : undefined;
+          if (!inside || cover) {
+            show = true;
+            let t: number;
+            if (cover) {
+              const slab = (origin: number, delta: number, low: number, high: number) => delta === 0 ? -Infinity : Math.min((low - origin) / delta, (high - origin) / delta);
+              t = Math.max(0, Math.max(slab(box.cx, dx, cover.left, cover.right), slab(box.cy, dy, cover.top, cover.bottom)));
+            } else t = Math.min((box.width / 2 - margin) / Math.max(1e-6, Math.abs(dx)), (box.height / 2 - margin) / Math.max(1e-6, Math.abs(dy)));
+            let x = Math.round(box.cx + dx * t), y = Math.round(box.cy + dy * t);
+            const angle = Math.round(Math.atan2(dy, dx) * 180 / Math.PI);
+            // Off a HUD card: to its nearest edge that stays inside the visible area.
+            const within = (px: number, py: number) => px >= box.left + 12 && px <= box.left + box.width - 12 && py >= box.top + 12 && py <= box.top + box.height - 12;
+            for (const r of avoid) {
+              if (r === cover || x <= r.left || x >= r.right || y <= r.top || y >= r.bottom) continue;
+              const options = [[r.left, y], [r.right, y], [x, r.top], [x, r.bottom]].filter(([px, py]) => within(px!, py!))
+                .sort((a, b) => Math.hypot(a[0]! - x, a[1]! - y) - Math.hypot(b[0]! - x, b[1]! - y));
+              if (options[0]) { x = Math.round(options[0][0]!); y = Math.round(options[0][1]!); }
+            }
+            if (x !== locatorX || y !== locatorY || angle !== locatorAngle) {
+              locatorX = x; locatorY = y; locatorAngle = angle;
+              button.style.transform = `translate(${x}px, ${y}px)`;
+              button.style.setProperty('--locator-angle', `${angle}deg`);
+            }
+          }
+        }
+        if (show !== locatorShown) { locatorShown = show; button.hidden = !show; }
+      };
+      locatorFocusRef.current = () => { if (focusPlayer()) applyCamera(); };
       app.ticker.add(() => {
         graveyard.flush();
         const frameStart = performance.now();
@@ -1198,7 +1402,7 @@ export default function CityViewport(props: Props) {
 
         // Residents: read the authoritative snapshot after this frame's simulation advance.
         const live = current.getWorld?.() ?? current.world;
-        const inverse = 1 / view.scale;
+        const inverse = 1 / cam.pose.zoom;
         const margin = 60 * inverse;
         const bounds: LocalBounds | null = live.citizens.length > 60 ? (() => {
           const corners = [world.toLocal({ x: 0, y: 0 }), world.toLocal({ x: app.screen.width, y: app.screen.height })];
@@ -1220,34 +1424,41 @@ export default function CityViewport(props: Props) {
           for (const [id, visual] of registry) if (visual.lights) visual.lights.alpha = lighting.glow * windowsOn(types.get(id), id, minuteOfDay);
         }
         if (!live.clock.paused) ambientTime += Math.min(100, app.ticker.deltaMS);
-        const detailed = view.scale >= 0.32;
+        const detailed = cam.pose.zoom >= 0.32;
         ambient.update(ambientTime, detailed);
         const tl = world.toLocal({ x: 0, y: 0 }), br = world.toLocal({ x: app.screen.width, y: app.screen.height });
         decor.sway(ambientTime, { left: tl.x - 60, top: tl.y - 60, right: br.x + 60, bottom: br.y + 120 }, reducedMotion);
-        npcs.sync(live, frameStart, view.scale, bounds);
+        npcs.sync(live, frameStart, cam.pose.zoom, bounds);
         player.feedback(current.lifeFeedback);
         if (current.homeHighlights !== lastHighlights) { lastHighlights = current.homeHighlights; player.setHomeHighlights(current.homeHighlights ?? null); }
-        player.sync(live, frameStart, view.scale);
+        player.sync(live, frameStart, cam.pose.zoom);
+        const lifePlayer = live.player && live.player.movement.status !== 'unplaced' ? live.player : null;
+        nearbyTags.update({ active: !!current.lifeMode && !!lifePlayer && cam.pose.zoom >= READABLE_ZOOM, nowMs: frameStart, citizens: live.citizens,
+          at: player.focus ?? lifePlayer?.position ?? null, exclude: new Set([current.selectedCitizenId, hoverCitizenId].filter((id): id is string => !!id)),
+          rendered: (id) => npcs.getRenderedPosition(id), lift: 25 * npcSpriteScale(cam.pose.zoom), zoom: cam.pose.zoom, character: player.position });
         effects.update(Math.min(100, app.ticker.deltaMS));
 
+        // Camera subject: a followed resident, else the character (Life Mode). Follow turns on/off on prop edges, so a
+        // pan that just ended Follow is not re-enabled before React catches up.
         const followId = current.followCitizenId ?? null;
-        const playerFocus = current.followPlayer ? player.focus : null;
-        if (playerFocus) {
-          const goal = iso(playerFocus.x, playerFocus.y);
-          if (!following) { following = true; view.x = 0; view.y = 0; }
-          center = { x: center.x + (goal.x - center.x) * 0.18, y: center.y + (goal.y - center.y) * 0.18 };
-          updateCamera(true);
-        } else if (followId) {
+        let subject: Point | null = null;
+        if (followId) {
           const citizen = live.citizens.find((entry) => entry.id === followId);
           const rendered = npcs.getRenderedPosition(followId);
-          const target = citizen ? (citizen.movement?.status === 'inside' || !rendered ? citizen.position : rendered) : null;
-          if (target) {
-            const goal = iso(target.x, target.y);
-            if (!following) { following = true; view.x = 0; view.y = 0; }
-            center = { x: center.x + (goal.x - center.x) * 0.18, y: center.y + (goal.y - center.y) * 0.18 };
-            updateCamera(true);
-          }
-        } else following = false;
+          const at = citizen ? (citizen.movement?.status === 'inside' || !rendered ? citizen.position : rendered) : null;
+          subject = at ? iso(at.x, at.y) : null;
+        } else if (current.lifeMode || current.followPlayer) subject = playerPoint();
+        const wantFollow = !!followId || !!current.followPlayer;
+        if (wantFollow !== lastWantFollow) {
+          lastWantFollow = wantFollow;
+          if (!wantFollow) cam.setFollowing(false);
+          else if (!cam.following) cam.setFollowing(true, subject, followId ? Math.max(cam.pose.zoom, 1.15) : cam.pose.zoom >= READABLE_ZOOM ? cam.pose.zoom : lifeZoom());
+        }
+        if (cam.update(app.ticker.deltaMS, subject)) applyCamera(cam.moving || cam.following);
+        else if (footprintDirty) publishFootprint();
+        const debug = (window as unknown as { __tinyCityCamera?: CameraSnapshot }).__tinyCityCamera;
+        if (debug) { debug.subject = subject; debug.following = cam.following; debug.moving = cam.moving; }
+        updateLocator(current, subject);
         if (hoverCitizenId || current.selectedCitizenId || hoverPlayer) drawNameplate();
 
         frames += 1;
@@ -1256,7 +1467,7 @@ export default function CityViewport(props: Props) {
           const stats: RendererStats = { fps: Math.round(frames * 1000 / (frameStart - frameWindowStart)),
             frameMs: Math.round(frameCost / frames * 100) / 100, residents: npcs.count,
             visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length,
-            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading',
+            venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading', nearbyTags: nearbyTags.shown.length,
             bakedBuildings: drawStats.baked, vectorBuildings: drawStats.vector, drawnModels: { ...drawStats.models },
             ...gpuTextureUse(app.renderer),
             atlasBytes: currentArt()?.textureBytes, atlasPages: currentArt() ? currentArt()!.index.manifest.sheets.length + (currentArt()!.index.manifest.characters?.sheets.length ?? 0) : 0 };
@@ -1280,6 +1491,14 @@ export default function CityViewport(props: Props) {
         afterRedrawRef.current = null;
         refreshGroundRef.current = null;
         app.canvas.removeEventListener('wheel', onWheel);
+        host.removeEventListener('pointerdown', onTouchDown, { capture: true });
+        window.removeEventListener('pointermove', onTouchMove, { capture: true });
+        window.removeEventListener('pointerup', onTouchUp, { capture: true });
+        window.removeEventListener('pointercancel', onTouchUp, { capture: true });
+        densityQuery?.removeEventListener?.('change', onDensity);
+        motionQuery?.removeEventListener?.('change', onMotionPreference);
+        flushLifeZoom();
+        locatorFocusRef.current = null;
         app.canvas.removeEventListener('pointerleave', leave);
         app.canvas.removeEventListener('contextmenu', preventContextMenu);
         window.removeEventListener('pointerup', endGesture);
@@ -1328,6 +1547,8 @@ export default function CityViewport(props: Props) {
 
   return <><div ref={hostRef} className={`city-viewport ${props.tool === 'move' ? 'is-moving' : ''} ${props.tool === 'bulldoze' ? 'is-demolishing' : ''} ${props.lifeMode ? 'is-life' : ''}`}
     aria-label="Isometric 64 by 64 city map" />
+    <button ref={locatorRef} type="button" className="player-locator" hidden aria-label="Your character is off screen · show them"
+      title="Show your character" onClick={() => locatorFocusRef.current?.()}><span className="player-locator-arrow" aria-hidden="true" /></button>
     {preview && <output className="placement-feedback" aria-label="Placement preview">{preview}</output>}
     {renderError && <div className="render-error" role="alert">The city renderer could not start. Reload to retry; your saved city is still on this device.</div>}
   </>;

@@ -1,21 +1,33 @@
-import { useRef } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { Citizen } from '@tiny-city/simulation';
 import { BUILDINGS, isLandCell, type Cell, type CityState } from '../types';
 import { isCitizenOutdoors } from '../game/npcMotion';
 
 type FootprintPoint = { x: number; y: number };
+export type FootprintStore = { get: () => FootprintPoint[] | null; set: (points: FootprintPoint[]) => void; subscribe: (listener: () => void) => () => void };
+/** The camera footprint lives outside React state, so a moving camera re-renders only the minimap (Phase 4.6). */
+export function createFootprintStore(): FootprintStore {
+  let points: FootprintPoint[] | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => points,
+    set: (next) => { points = next; listeners.forEach((listener) => listener()); },
+    subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+}
 
 const roleColors = { home: '#e7a774', park: '#cfe7a2', workplace: '#a9cfd2' } as const;
 
-export function MiniMap({ city, citizens, cameraFootprint, selectedCitizenId, selectedFootprint = null, onNavigate }: {
+export function MiniMap({ city, citizens, footprint, selectedCitizenId, selectedFootprint = null, onNavigate }: {
   city: CityState;
   citizens: readonly Citizen[];
-  cameraFootprint: FootprintPoint[] | null;
+  footprint: FootprintStore;
   selectedCitizenId: string | null;
   selectedFootprint?: { x: number; y: number; width: number; height: number } | null;
   onNavigate: (cell: Cell) => void;
 }) {
+  const cameraFootprint = useSyncExternalStore(footprint.subscribe, footprint.get, footprint.get);
   // Press-and-drag scrubs the camera across the map; a plain click still jumps there.
   const dragging = useRef(false);
   const cellAt = (event: ReactPointerEvent<HTMLDivElement> | ReactMouseEvent<HTMLDivElement>): Cell => {
