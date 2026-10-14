@@ -1,0 +1,184 @@
+{
+ "label": "after",
+ "base": "http://127.0.0.1:4195",
+ "date": "2026-10-14T07:34:53.509Z",
+ "viewport": "1440x900@1x",
+ "scenarios": [
+  {
+   "name": "city-running-20",
+   "rendererMs": 0.28,
+   "residents": 21,
+   "vectorBuildings": 0,
+   "population": 20,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "midnight-20",
+   "rendererMs": 0.21,
+   "residents": 21,
+   "vectorBuildings": 0,
+   "population": 20,
+   "settled": true,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "economy-panel-20",
+   "rendererMs": 0.27,
+   "residents": 21,
+   "vectorBuildings": 0,
+   "population": 20,
+   "avgMs": 16.67,
+   "p95Ms": 16.8,
+   "maxMs": 16.8,
+   "fps": 60,
+   "panelMutationsPerSecond": 55.2
+  },
+  {
+   "name": "save-20",
+   "rendererMs": 0.27,
+   "residents": 21,
+   "vectorBuildings": 0,
+   "population": 20,
+   "saveBytes": 39592,
+   "jsHeapMB": 92.9
+  },
+  {
+   "name": "city-running-100",
+   "rendererMs": 0.26,
+   "residents": 101,
+   "vectorBuildings": 0,
+   "population": 100,
+   "avgMs": 16.67,
+   "p95Ms": 16.8,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "midnight-100",
+   "rendererMs": 0.42,
+   "residents": 101,
+   "vectorBuildings": 0,
+   "population": 100,
+   "settled": true,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "economy-panel-100",
+   "rendererMs": 0.46,
+   "residents": 101,
+   "vectorBuildings": 0,
+   "population": 100,
+   "avgMs": 16.67,
+   "p95Ms": 16.8,
+   "maxMs": 16.8,
+   "fps": 60,
+   "panelMutationsPerSecond": 51.6
+  },
+  {
+   "name": "save-100",
+   "rendererMs": 0.46,
+   "residents": 101,
+   "vectorBuildings": 0,
+   "population": 100,
+   "saveBytes": 112936,
+   "jsHeapMB": 82.4
+  },
+  {
+   "name": "city-running-300",
+   "rendererMs": 0.41,
+   "residents": 301,
+   "vectorBuildings": 0,
+   "population": 300,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "midnight-300",
+   "rendererMs": 0.56,
+   "residents": 301,
+   "vectorBuildings": 0,
+   "population": 300,
+   "settled": true,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "economy-panel-300",
+   "rendererMs": 0.46,
+   "residents": 301,
+   "vectorBuildings": 0,
+   "population": 300,
+   "avgMs": 16.67,
+   "p95Ms": 16.8,
+   "maxMs": 16.8,
+   "fps": 60,
+   "panelMutationsPerSecond": 52.8
+  },
+  {
+   "name": "save-300",
+   "rendererMs": 0.46,
+   "residents": 301,
+   "vectorBuildings": 0,
+   "population": 300,
+   "saveBytes": 304042,
+   "jsHeapMB": 64.8
+  },
+  {
+   "name": "city-running-1000",
+   "rendererMs": 0.64,
+   "residents": 959,
+   "vectorBuildings": 0,
+   "population": 1000,
+   "avgMs": 16.67,
+   "p95Ms": 16.8,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "midnight-1000",
+   "rendererMs": 0.5,
+   "residents": 959,
+   "vectorBuildings": 0,
+   "population": 1000,
+   "settled": true,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60
+  },
+  {
+   "name": "economy-panel-1000",
+   "rendererMs": 0.5,
+   "residents": 959,
+   "vectorBuildings": 0,
+   "population": 1000,
+   "avgMs": 16.67,
+   "p95Ms": 16.7,
+   "maxMs": 16.8,
+   "fps": 60,
+   "panelMutationsPerSecond": 55.2
+  },
+  {
+   "name": "save-1000",
+   "rendererMs": 0.5,
+   "residents": 959,
+   "vectorBuildings": 0,
+   "population": 1000,
+   "saveBytes": 927062,
+   "jsHeapMB": 227.9
+  }
+ ]
+}
