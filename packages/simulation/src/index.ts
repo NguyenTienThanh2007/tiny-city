@@ -6,6 +6,8 @@ export type {
   PlayerCharacter, PlayerAppearance, PlayerNeeds, PlayerNeed, PlayerNeedLevel, PlayerActivity, PlayerActivityKind, PlayerMovement,
   PlayerOutcome, PlayerFailureReason, PlayerDestination, PlayerActionKind, PlayerHairStyle, PlayerOutfit, PlayerAccessory,
   PlayerSocialTopic, LifeCommand, LifeCommandResult, LifeRejectionReason,
+  EconomyPolicy, ResidentAccount, BusinessStatus, BuildingFinance, EconomyAccountKind, LedgerCategory, LedgerEntry, EconomyDayReport,
+  EconomyAlertKind, EconomyAlert, EconomyToday, EconomyState, EconomyOptions, EconomyCommand, EconomyRejectionReason, EconomyCommandResult,
 } from './types.js';
 export type { ClockOptions } from './clock.js';
 export { advanceClock, createClock, getGameTime, MINUTES_PER_DAY, stepClock } from './clock.js';
@@ -14,7 +16,13 @@ export { cloneWorld, createWorld, validateSchedule, validateWorld } from './worl
 export { Simulation } from './simulation.js';
 export { BUILDING_CATALOG, CONSTRUCTION_COSTS, isBuildingType } from './catalog.js';
 export type { BuildingDefinition } from './catalog.js';
-export { createBudget, validateBudget, spendBudget } from './budget.js';
+export { createBudget, validateBudget, spendBudget, applyOperating, restoreConstruction } from './budget.js';
+export { ECONOMY, percentOf } from './economyConfig.js';
+export { DEFAULT_POLICY, LEDGER_CATEGORIES, LEDGER_FLOWS, allocate, amenityRole, businessRole, computeEconomyDay, consumerConfidence, createEconomy,
+  financialCondition, isValidPolicy, localShoppingRate, officeDemandRate, operatingNet, roadUpkeep, projectEconomyDay, residentAccount, settleEconomyDay, validateEconomy, venueFee } from './economy.js';
+export type { FinancialCondition } from './economy.js';
+export { estimateEconomyImpact } from './economyForecast.js';
+export type { EconomyImpactEstimate } from './economyForecast.js';
 export { OccupancyGrid, footprintTiles, footprintPerimeter, tileKey } from './grid.js';
 export type { TileOccupant } from './grid.js';
 export { RoadGraph } from './roads.js';

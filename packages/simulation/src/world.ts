@@ -7,7 +7,8 @@ import { OccupancyGrid } from './grid.js';
 import { containsPosition, NPC_LIMITS } from './navigation.js';
 import { initializePopulation, providesJobs, providesLeisure } from './population.js';
 import { clonePlayer, validatePlayer } from './player.js';
-import type { CityPlan, CityPlanInput, Citizen, DailySchedule, PopulationOptions, Position, WorldState } from './types.js';
+import { cloneEconomy, createEconomy, validateEconomy } from './economy.js';
+import type { CityPlan, CityPlanInput, Citizen, DailySchedule, EconomyOptions, PopulationOptions, Position, WorldState } from './types.js';
 
 const ACTIVITIES = new Set(['sleep', 'home', 'work', 'leisure', 'idle', 'travel']);
 const BUILDING_KINDS = new Set(['home', 'workplace', 'park']);
@@ -151,18 +152,22 @@ export function validateWorld(world: WorldState): void {
     }
   }
   validatePlayer(world, assert);
+  validateEconomy(world, assert);
 }
 
 /** Copies plain contract data so callers retain ownership of their input objects. */
 export function cloneWorld(world: WorldState): WorldState {
   return {
     schemaVersion: 2, id: world.id, revision: world.revision, nextBuildingId: world.nextBuildingId,
-    budget: { openingBalance: world.budget.openingBalance, balance: world.budget.balance, totalSpent: world.budget.totalSpent },
+    budget: { openingBalance: world.budget.openingBalance, balance: world.budget.balance, totalSpent: world.budget.totalSpent,
+      ...(world.budget.operatingIncome === undefined ? {} : { operatingIncome: world.budget.operatingIncome }),
+      ...(world.budget.operatingExpenses === undefined ? {} : { operatingExpenses: world.budget.operatingExpenses }) },
     clock: { tick: world.clock.tick, fixedStepMs: world.clock.fixedStepMs, minutesPerTick: world.clock.minutesPerTick,
       accumulatedMs: world.clock.accumulatedMs, paused: world.clock.paused },
     randomState: world.randomState,
     ...(world.population === undefined ? {} : { population: { version: world.population.version, maxCitizens: world.population.maxCitizens, nextCitizenId: world.population.nextCitizenId } }),
     ...(world.player === undefined ? {} : { player: clonePlayer(world.player) }),
+    ...(world.economy === undefined ? {} : { economy: cloneEconomy(world.economy) }),
     plan: { id: world.plan.id, name: world.plan.name, width: world.plan.width, height: world.plan.height,
       roads: world.plan.roads.map((tile) => ({ x: tile.x, y: tile.y })),
       blockedTiles: world.plan.blockedTiles.map((tile) => ({ x: tile.x, y: tile.y })),
@@ -205,6 +210,8 @@ export function createWorld(options: {
   readonly clock?: ClockOptions;
   readonly startingFunds?: number;
   readonly population?: PopulationOptions;
+  /** Phase 5: enables the economy from the world's first day. */
+  readonly economy?: EconomyOptions;
 }): WorldState {
   const world: WorldState = {
     schemaVersion: 2,
@@ -216,7 +223,8 @@ export function createWorld(options: {
     budget: createBudget(options.startingFunds ?? 0), revision: 0, nextBuildingId: 1,
   };
   validateWorld(world);
-  const initialized = options.population === undefined ? world : initializePopulation(world, options.population).state;
+  const populated = options.population === undefined ? world : initializePopulation(world, options.population).state;
+  const initialized = options.economy === undefined ? populated : { ...populated, economy: createEconomy(populated, options.economy) };
   validateWorld(initialized);
   return freeze(cloneWorld(initialized));
 }
