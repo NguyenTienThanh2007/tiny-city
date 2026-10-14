@@ -1,6 +1,7 @@
 import { applyOperating } from './budget.js';
 import { getGameTime } from './clock.js';
 import { ECONOMY, percentOf } from './economyConfig.js';
+import { TRANSPORT } from './transportConfig.js';
 import { providesJobs, providesLeisure } from './population.js';
 import type {
   Building, BuildingFinance, BusinessStatus, CityBudget, EconomyAccountKind, EconomyAlert, EconomyDayReport, EconomyOptions,
@@ -37,6 +38,10 @@ export const LEDGER_FLOWS: Readonly<Record<LedgerCategory, readonly [EconomyAcco
   'city.amenity-upkeep': ['treasury', 'external'],
   'city.construction': ['treasury', 'external'],
   'city.construction-refund': ['external', 'treasury'],
+  // Phase 6 transportation: bus fares are paid to the city, car running costs leave the city, buses cost the city.
+  'transit.fares': ['residents', 'treasury'],
+  'resident.car-costs': ['residents', 'external'],
+  'city.transit-operations': ['treasury', 'external'],
 });
 export const LEDGER_CATEGORIES = Object.freeze(Object.keys(LEDGER_FLOWS) as LedgerCategory[]);
 
@@ -86,7 +91,7 @@ export function validateEconomy(world: WorldState, assert: (condition: boolean, 
   assert(Number.isSafeInteger(e.nextTransactionId) && e.nextTransactionId >= 1, 'invalid transaction cursor');
   assert(money(e.constructionSpentAtSettlement), 'invalid construction cursor');
   assert(e.today.day === day, 'economy day accumulators belong to another day');
-  for (const map of [e.today.visits, e.today.fees]) for (const value of Object.values(map)) assert(money(value), 'invalid daily economy counter');
+  for (const map of [e.today.visits, e.today.fees, e.today.fares ?? {}, e.today.carCosts ?? {}]) for (const value of Object.values(map)) assert(money(value), 'invalid daily economy counter');
   const accounts = Object.entries(e.residents);
   assert(accounts.length <= 20_000, 'too many resident accounts');
   for (const [, a] of accounts) assert(money(a.balance) && money(a.income) && money(a.taxes) && money(a.spending), 'invalid resident account');
@@ -100,8 +105,9 @@ export function validateEconomy(world: WorldState, assert: (condition: boolean, 
     assert(Number.isSafeInteger(r.day) && r.day > previousDay && r.day <= e.lastSettledDay, 'economy reports must be unique and in order');
     previousDay = r.day;
     assert(money(r.treasuryOpen) && money(r.treasuryClose), 'invalid report treasury');
-    const inflow = r.income.residentialTax + r.income.commercialTax + r.income.venueFees + r.income.constructionRefunds;
-    const outflow = r.expenses.publicServices + r.expenses.roads + r.expenses.amenities + r.expenses.unemploymentSupport + r.expenses.construction;
+    assert(money(r.income.transitFares ?? 0) && money(r.expenses.transit ?? 0), 'invalid report transit amounts');
+    const inflow = r.income.residentialTax + r.income.commercialTax + r.income.venueFees + r.income.constructionRefunds + (r.income.transitFares ?? 0);
+    const outflow = r.expenses.publicServices + r.expenses.roads + r.expenses.amenities + r.expenses.unemploymentSupport + r.expenses.construction + (r.expenses.transit ?? 0);
     assert(r.treasuryOpen + inflow - outflow === r.treasuryClose, 'report does not reconcile the treasury');
   }
   let previousTx = 0;
@@ -122,12 +128,20 @@ export function cloneEconomy(e: EconomyState): EconomyState {
   return {
     version: e.version, policy: { residentialTaxRate: e.policy.residentialTaxRate, commercialTaxRate: e.policy.commercialTaxRate },
     lastSettledDay: e.lastSettledDay, nextTransactionId: e.nextTransactionId, constructionSpentAtSettlement: e.constructionSpentAtSettlement,
-    today: { day: e.today.day, visits: { ...e.today.visits }, fees: { ...e.today.fees } },
+    today: { day: e.today.day, visits: { ...e.today.visits }, fees: { ...e.today.fees },
+      ...(e.today.fares === undefined ? {} : { fares: { ...e.today.fares } }), ...(e.today.carCosts === undefined ? {} : { carCosts: { ...e.today.carCosts } }) },
     residents: Object.fromEntries(Object.entries(e.residents).map(([id, a]) => [id, { balance: a.balance, income: a.income, taxes: a.taxes, spending: a.spending }])),
     buildings: Object.fromEntries(Object.entries(e.buildings).map(([id, f]) => [id, { ...f }])),
     history: e.history.map((r) => ({ ...r, income: { ...r.income }, expenses: { ...r.expenses }, unpaid: { ...r.unpaid } })),
     ledger: e.ledger.map((t) => ({ ...t })), totals: { ...e.totals }, alerts: e.alerts.map((a) => ({ ...a })),
   };
+}
+
+/** Phase 6: records a bus fare (owed to the city) or a car trip's running cost, collected at the day's settlement. */
+export function recordTransit(e: EconomyState, kind: 'fare' | 'car', citizenId: string, amount: number): EconomyState {
+  const map = kind === 'fare' ? e.today.fares ?? {} : e.today.carCosts ?? {};
+  const next = { ...map, [citizenId]: (map[citizenId] ?? 0) + amount };
+  return { ...e, today: { ...e.today, ...(kind === 'fare' ? { fares: next } : { carCosts: next }) } };
 }
 
 /** Records a resident's real arrival at a leisure venue on the current day (fees are collected at settlement). */
@@ -259,7 +273,7 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   const amenityCoverage = needed === 0 ? 100 : Math.min(100, Math.floor(leisureCapacity * 100 / needed));
   const strained = (economy.history.at(-1)?.unpaid.upkeep ?? 0) > 0;
   const confidence = consumerConfidence(policy, amenityCoverage, strained);
-  let housingTotal = 0, fees = 0, feesWaived = 0, demand = 0;
+  let housingTotal = 0, fees = 0, feesWaived = 0, demand = 0, fares = 0, carCosts = 0;
   const shopping = new Map<string, number>();
   for (const c of citizens) {
     let balance = balances.get(c.id)!;
@@ -268,16 +282,25 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
     balance -= housing; housingTotal += housing;
     const owed = economy.today.fees[c.id] ?? 0, fee = Math.min(owed, balance);
     balance -= fee; fees += fee; feesWaived += owed - fee;
+    // Phase 6: bus fares and car running costs from today's real trips (never beyond savings).
+    const fare = Math.min(economy.today.fares?.[c.id] ?? 0, balance);
+    balance -= fare; fares += fare;
+    const running = Math.min(economy.today.carCosts?.[c.id] ?? 0, balance);
+    balance -= running; carCosts += running;
     const disposable = Math.max(0, income.get(c.id)! - taxes.get(c.id)! - rent);
     const k = ECONOMY.consumption;
     const wanted = percentOf(Math.max(k.minimum, k.base + percentOf(disposable, k.ofDisposable) + percentOf(balance - k.comfortSavings, k.ofSavingsGap)), confidence);
     const spent = Math.min(wanted, balance);
     balance -= spent; demand += spent;
-    shopping.set(c.id, spent); spending.set(c.id, housing + fee + spent); balances.set(c.id, balance);
+    shopping.set(c.id, spent); spending.set(c.id, housing + fee + fare + running + spent); balances.set(c.id, balance);
   }
   add('resident.housing', housingTotal, null, citizens.length);
   add('resident.venue-fees', fees, null, Object.keys(economy.today.fees).filter((id) => live.has(id)).length);
   treasury += fees; treasuryIncome += fees;
+  const transportDay = world.transport?.today.day === day ? world.transport.today : null;
+  add('transit.fares', fares, null, transportDay?.boardings ?? 0);
+  treasury += fares; treasuryIncome += fares;
+  add('resident.car-costs', carCosts, null, transportDay?.carCompleted ?? 0);
 
   // Shopping stays in the city's malls up to what their staff can sell; the rest is spent outside the city.
   const malls = businesses.filter((b) => businessRole(b) === 'mall');
@@ -330,6 +353,9 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
     finance[b.id] = { buildingId: b.id, role, workers: 0, jobs: 0, revenue: 0, payroll: 0, upkeep: cost, tax: 0, profit: -cost,
       visits, fees: visits * venueFee(b), demand: 0, status: 'public', lossStreak: 0 };
   }
+  // Phase 6: the city runs the buses assigned to its active lines.
+  const buses = (world.transport?.lines ?? []).filter((l) => l.status === 'active').reduce((sum, l) => sum + l.buses, 0);
+  const transit = pay('city.transit-operations', buses * TRANSPORT.busDailyCost, null, buses);
 
   const residents: Record<string, ResidentAccount> = {};
   let savings = 0;
@@ -342,14 +368,15 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   const open = treasuryOpen ?? world.budget.balance + constructionSpent - refunds;
   const report: EconomyDayReport = {
     day, treasuryOpen: open, treasuryClose: treasury,
-    income: { residentialTax, commercialTax, venueFees: fees, constructionRefunds: refunds },
-    expenses: { publicServices, roads, amenities: amenityUpkeep, unemploymentSupport: supportPaid, construction: constructionSpent },
+    income: { residentialTax, commercialTax, venueFees: fees, constructionRefunds: refunds, ...(world.transport ? { transitFares: fares } : {}) },
+    expenses: { publicServices, roads, amenities: amenityUpkeep, unemploymentSupport: supportPaid, construction: constructionSpent, ...(world.transport ? { transit } : {}) },
     unpaid: { upkeep: upkeepUnpaid, support: supportUnpaid },
     population: citizens.length, employed, jobs: businesses.reduce((sum, b) => sum + b.capacity, 0), wages: wagesTotal,
     housing: housingTotal, shoppingDemand: demand, shoppingLocal: local, shoppingOutside: demand - local, feesWaived,
     residentSavings: savings, arrivals: arrivalCount, departures: departureCount,
     businesses: businesses.length, profitableBusinesses: profitable, businessRevenue, businessProfit,
     confidence, amenityCoverage, localShoppingRate: rate,
+    ...(world.transport ? { transitRides: transportDay?.boardings ?? 0, carTrips: transportDay?.carCompleted ?? 0, carCosts } : {}),
   };
   return { residents, buildings: finance, report, entries, treasuryIncome, treasuryExpenses };
 }
@@ -358,9 +385,7 @@ function alertsFor(report: EconomyDayReport, previous: readonly EconomyDayReport
   const alerts: EconomyAlert[] = [];
   const add = (kind: EconomyAlert['kind'], severity: EconomyAlert['severity'], value: number, buildingId: string | null = null) =>
     alerts.push({ id: buildingId ? `${kind}:${buildingId}` : kind, kind, severity, day: report.day, buildingId, value });
-  const inflow = report.income.residentialTax + report.income.commercialTax + report.income.venueFees;
-  const operating = report.expenses.publicServices + report.expenses.roads + report.expenses.amenities + report.expenses.unemploymentSupport;
-  const net = inflow - operating;
+  const { expenses: operating, net } = operatingNet(report);
   if (report.unpaid.upkeep + report.unpaid.support > 0) add('upkeep-unpaid', 'warning', report.unpaid.upkeep + report.unpaid.support);
   else if (operating > 0 && report.treasuryClose < operating * 3) add('treasury-low', 'warning', report.treasuryClose);
   if (net < 0) add('deficit', 'warning', -net);
@@ -374,8 +399,7 @@ function alertsFor(report: EconomyDayReport, previous: readonly EconomyDayReport
   if (report.population >= 20 && report.shoppingDemand > 0 && (report.shoppingDemand - report.shoppingLocal) * 100 > report.shoppingDemand * (100 - report.localShoppingRate + 25)) {
     add('shopping-demand', 'info', report.shoppingDemand - report.shoppingLocal);
   }
-  const nets = [...previous.slice(-2), report].map((r) => r.income.residentialTax + r.income.commercialTax + r.income.venueFees -
-    r.expenses.publicServices - r.expenses.roads - r.expenses.amenities - r.expenses.unemploymentSupport);
+  const nets = [...previous.slice(-2), report].map((r) => operatingNet(r).net);
   if (nets.length === 3 && net > 0 && nets[0]! < nets[1]! && nets[1]! < nets[2]!) add('improving', 'info', net);
   return alerts;
 }
@@ -429,7 +453,7 @@ export function financialCondition(account: ResidentAccount): FinancialCondition
 
 /** Operating income and expenses of a report (construction excluded). */
 export function operatingNet(report: EconomyDayReport): { income: number; expenses: number; net: number } {
-  const income = report.income.residentialTax + report.income.commercialTax + report.income.venueFees;
-  const expenses = report.expenses.publicServices + report.expenses.roads + report.expenses.amenities + report.expenses.unemploymentSupport;
+  const income = report.income.residentialTax + report.income.commercialTax + report.income.venueFees + (report.income.transitFares ?? 0);
+  const expenses = report.expenses.publicServices + report.expenses.roads + report.expenses.amenities + report.expenses.unemploymentSupport + (report.expenses.transit ?? 0);
   return { income, expenses, net: income - expenses };
 }

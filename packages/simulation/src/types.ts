@@ -93,7 +93,8 @@ export type LedgerCategory =
   | 'resident.arrival' | 'resident.departure' | 'business.services' | 'business.sales' | 'business.wages'
   | 'tax.residential' | 'tax.commercial' | 'city.support' | 'resident.housing' | 'resident.shopping-outside'
   | 'resident.venue-fees' | 'business.upkeep' | 'business.profit' | 'business.loss-cover' | 'city.public-services'
-  | 'city.road-upkeep' | 'city.amenity-upkeep' | 'city.construction' | 'city.construction-refund';
+  | 'city.road-upkeep' | 'city.amenity-upkeep' | 'city.construction' | 'city.construction-refund'
+  | 'transit.fares' | 'resident.car-costs' | 'city.transit-operations';
 
 /** One recorded money movement. Internal transfers move money between city actors; `external` creates or removes it. */
 export interface LedgerEntry {
@@ -114,9 +115,13 @@ export interface EconomyDayReport {
   readonly treasuryOpen: number;
   readonly treasuryClose: number;
   /** Treasury inflows. */
-  readonly income: { readonly residentialTax: number; readonly commercialTax: number; readonly venueFees: number; readonly constructionRefunds: number };
+  readonly income: { readonly residentialTax: number; readonly commercialTax: number; readonly venueFees: number; readonly constructionRefunds: number;
+    /** Phase 6 bus fares (absent in older reports, meaning 0). */
+    readonly transitFares?: number };
   /** Treasury outflows. */
-  readonly expenses: { readonly publicServices: number; readonly roads: number; readonly amenities: number; readonly unemploymentSupport: number; readonly construction: number };
+  readonly expenses: { readonly publicServices: number; readonly roads: number; readonly amenities: number; readonly unemploymentSupport: number; readonly construction: number;
+    /** Phase 6 bus operations (absent in older reports, meaning 0). */
+    readonly transit?: number };
   /** City costs the treasury could not pay (never owed later). */
   readonly unpaid: { readonly upkeep: number; readonly support: number };
   readonly population: number;
@@ -139,6 +144,11 @@ export interface EconomyDayReport {
   readonly confidence: number;
   readonly amenityCoverage: number;
   readonly localShoppingRate: number;
+  /** Phase 6: bus boardings and car trips that day (absent in older reports). */
+  readonly transitRides?: number;
+  readonly carTrips?: number;
+  /** Phase 6: what residents paid for their own car trips (to the outside economy). */
+  readonly carCosts?: number;
 }
 
 export type EconomyAlertKind = 'treasury-low' | 'deficit' | 'upkeep-unpaid' | 'unemployment' | 'understaffed' |
@@ -160,6 +170,10 @@ export interface EconomyToday {
   readonly visits: Readonly<Record<string, number>>;
   /** Resident → venue fees owed for today's visits, collected at settlement. */
   readonly fees: Readonly<Record<string, number>>;
+  /** Phase 6: resident → bus fares owed for today's boardings (absent in older saves). */
+  readonly fares?: Readonly<Record<string, number>>;
+  /** Phase 6: resident → running costs of today's car trips (absent in older saves). */
+  readonly carCosts?: Readonly<Record<string, number>>;
 }
 
 export interface EconomyState {
@@ -188,6 +202,165 @@ export interface EconomyOptions { readonly policy?: Partial<EconomyPolicy> }
 export type EconomyCommand = { readonly type: 'economy.set-policy'; readonly policy: EconomyPolicy };
 export type EconomyRejectionReason = 'economy-disabled' | 'invalid-policy' | 'unchanged-policy';
 
+
+/** Phase 6 transportation. Tiles are road tiles; a lane position is measured in integer units (100 per tile). */
+export type CompassDirection = 'N' | 'E' | 'S' | 'W';
+export type VehicleKind = 'car' | 'van' | 'bus';
+export type VehicleModel = 'compact' | 'sedan' | 'suv' | 'van' | 'bus';
+/**
+ * 'departing': waiting in the lot for room to pull out (not on the street yet). 'moving'/'queued': on the street,
+ * with or without progress this tick. 'junction': stopped at an intersection waiting for its turn. 'dwelling': a bus
+ * serving a stop.
+ */
+export type VehicleState = 'departing' | 'moving' | 'queued' | 'junction' | 'dwelling';
+
+/** A granted intersection crossing: quadrant mask per junction tile, released once the vehicle's rear leaves the tile. */
+export interface JunctionGrant {
+  /** Route tile index of the junction tile. */
+  readonly index: number;
+  /** Quadrants as a 4-bit mask (bit 0 NW, 1 NE, 2 SW, 3 SE). */
+  readonly mask: number;
+}
+
+export interface Vehicle {
+  readonly id: string;
+  readonly kind: VehicleKind;
+  readonly model: VehicleModel;
+  /** Body color palette index (the renderer owns the palette). */
+  readonly color: number;
+  /** First tile of the route and the compass steps from it (one letter per tile): compact and always on roads. */
+  readonly origin: Position;
+  readonly path: string;
+  /** Front of the vehicle: route edge (from tile `edge` to tile `edge + 1`) and integer progress along it, 0–100. */
+  readonly edge: number;
+  readonly offset: number;
+  /** Integer units per tick. */
+  readonly speed: number;
+  readonly state: VehicleState;
+  /** Consecutive ticks without progress (stall detection). */
+  readonly waitTicks: number;
+  readonly grants: readonly JunctionGrant[];
+  /** Cars: the owner; vans: the mall they serve. */
+  readonly ownerId: string | null;
+  /** Cars and vans: where the vehicle is heading (a building). */
+  readonly destinationBuildingId: string | null;
+  /** Buses: the line, the index of the stop being driven to, riders (citizen IDs, boarding order) and dwell ticks left. */
+  readonly lineId: string | null;
+  readonly stopIndex: number;
+  readonly passengers: readonly string[];
+  readonly dwell: number;
+  readonly departedTick: number;
+  /** World revision the route was planned at; older routes are re-planned a few vehicles per tick (new shortcuts). */
+  readonly plannedRevision: number;
+}
+
+export interface BusStop {
+  readonly id: string;
+  readonly name: string;
+  readonly tile: Position;
+}
+
+export interface BusLine {
+  readonly id: string;
+  readonly name: string;
+  /** Route color palette index. */
+  readonly color: number;
+  /** Served in order, then back to the first (a loop). */
+  readonly stopIds: readonly string[];
+  /** Buses assigned to the line. */
+  readonly buses: number;
+  /** 'suspended' while a stop is missing or the loop cannot be driven; buses are withdrawn until it can. */
+  readonly status: 'active' | 'suspended';
+  readonly suspendedReason: 'stop-removed' | 'unreachable' | null;
+  readonly lastDispatchTick: number;
+}
+
+export type TripMode = 'car' | 'bus';
+/** 'to-stop': walking to the boarding stop; 'waiting': at the stop; 'riding': on a bus; 'driving': in their car. */
+export type TripPhase = 'to-stop' | 'waiting' | 'riding' | 'driving';
+
+export interface Trip {
+  readonly id: string;
+  readonly citizenId: string;
+  readonly mode: TripMode;
+  readonly phase: TripPhase;
+  readonly originBuildingId: string;
+  readonly destinationBuildingId: string;
+  readonly vehicleId: string | null;
+  readonly lineId: string | null;
+  readonly boardStopId: string | null;
+  readonly alightStopId: string | null;
+  readonly startedTick: number;
+  /** Tick the current phase began (waiting time at a stop). */
+  readonly phaseTick: number;
+  /** Door-to-door estimate when the mode was chosen, in game minutes. */
+  readonly estimatedMinutes: number;
+}
+
+export interface TransportDayStats {
+  readonly day: number;
+  /** Trips started from a building, by mode. */
+  readonly walkTrips: number;
+  readonly carTrips: number;
+  readonly busTrips: number;
+  /** Completed car and bus trips and their total door-to-door minutes. */
+  readonly carCompleted: number;
+  readonly carMinutes: number;
+  /** What those completed trips were expected to take when chosen (experience: actual ÷ expected). */
+  readonly carExpected: number;
+  readonly busCompleted: number;
+  readonly busMinutes: number;
+  readonly busExpected: number;
+  readonly boardings: number;
+  /** Times a waiting resident could not board because the bus was full. */
+  readonly fullBuses: number;
+  /** Residents who gave up waiting, trips cancelled by road edits, and vehicles pulled over after a long stall. */
+  readonly gaveUp: number;
+  readonly cancelled: number;
+  readonly stalls: number;
+  /** Highest number of vehicles on the street at once. */
+  readonly peakVehicles: number;
+}
+
+export interface TransportState {
+  readonly version: 1;
+  readonly nextStopId: number;
+  readonly nextLineId: number;
+  readonly nextTripId: number;
+  readonly stops: readonly BusStop[];
+  readonly lines: readonly BusLine[];
+  /** Vehicles on the street (or pulling out), sorted by ID. Parked cars are not vehicles. */
+  readonly vehicles: readonly Vehicle[];
+  /** Residents currently using transport, sorted by citizen ID. Walking trips are not recorded here. */
+  readonly trips: readonly Trip[];
+  /** Car owner → building where their car is parked, only when that is not their home. */
+  readonly parkedCars: Readonly<Record<string, string>>;
+  /** Directed lane (`x,yD`) → smoothed delay (units of lost progress), sparse. Drives the congestion overlay. */
+  readonly congestion: Readonly<Record<string, number>>;
+  /** Routing penalties frozen from `congestion` at the last routing epoch (routes depend only on saved state). */
+  readonly routing: Readonly<Record<string, number>>;
+  /** Vans: mall → the next home on its delivery round (rotates deterministically). */
+  readonly vanRounds: Readonly<Record<string, number>>;
+  readonly today: TransportDayStats;
+  /** Newest last, at most `TRANSPORT.historyDays`. */
+  readonly history: readonly TransportDayStats[];
+  /**
+   * How much slower than expected driving and the bus have been lately (percent, ≥ 100), smoothed day by day.
+   * Residents scale their estimates by it, so a jammed commute shifts some of them to other modes the next day.
+   */
+  readonly experience: { readonly car: number; readonly bus: number };
+}
+
+
+export type TransportCommand =
+  | { readonly type: 'transport.create-line'; readonly stops: readonly Position[]; readonly buses: number; readonly name?: string }
+  | { readonly type: 'transport.delete-line'; readonly lineId: string }
+  | { readonly type: 'transport.set-buses'; readonly lineId: string; readonly buses: number }
+  | { readonly type: 'transport.rename-line'; readonly lineId: string; readonly name: string };
+export type TransportRejectionReason = 'transport-disabled' | 'invalid-command' | 'line-limit' | 'stop-limit' | 'too-few-stops' |
+  'too-many-stops' | 'duplicate-stop' | 'not-a-road' | 'stop-at-junction' | 'unreachable' | 'line-not-found' | 'invalid-buses' |
+  'invalid-name' | 'unchanged';
+
 export interface CitySnapshot {
   readonly plan: CityPlan;
   readonly budget: CityBudget;
@@ -211,7 +384,11 @@ export interface CitizenAttributes {
   readonly scheduleOffset: number;
 }
 export interface CitizenMovement {
-  readonly status: 'inside' | 'travelling' | 'waiting';
+  /**
+   * 'vehicle' (Phase 6): the transport system owns this resident's movement (pulling out, driving, waiting at a bus
+   * stop or riding a bus); `WorldState.transport.trips` holds the details. The route stays empty.
+   */
+  readonly status: 'inside' | 'travelling' | 'waiting' | 'vehicle';
   /** Unit heading in tile coordinates, or {x:0,y:0} when stationary. */
   readonly heading: Position;
   readonly currentBuildingId: string | null;
@@ -283,6 +460,8 @@ export interface WorldState {
   readonly player?: PlayerCharacter;
   /** Phase 5 economy. Absent in older saves; enabled explicitly, never retroactively billed. */
   readonly economy?: EconomyState;
+  /** Phase 6 transportation. Absent in older saves; enabled explicitly, with no vehicles until trips start. */
+  readonly transport?: TransportState;
 }
 
 export type PlayerHairStyle = 'short' | 'long' | 'bun' | 'curly' | 'cap' | 'buzz';
@@ -451,6 +630,16 @@ export type SimulationEvent =
   | { readonly type: 'economy.policy-changed'; readonly tick: number; readonly policy: EconomyPolicy }
   | { readonly type: 'economy.alert'; readonly tick: number; readonly alert: EconomyAlert }
   | { readonly type: 'economy.command-rejected'; readonly tick: number; readonly commandType: EconomyCommand['type']; readonly reason: EconomyRejectionReason }
+  | { readonly type: 'transport.enabled'; readonly tick: number }
+  | { readonly type: 'transport.trip-started'; readonly tick: number; readonly citizenId: string; readonly mode: TripMode; readonly destinationBuildingId: string; readonly estimatedMinutes: number }
+  | { readonly type: 'transport.trip-completed'; readonly tick: number; readonly citizenId: string; readonly mode: TripMode; readonly minutes: number }
+  | { readonly type: 'transport.trip-cancelled'; readonly tick: number; readonly citizenId: string; readonly mode: TripMode; readonly reason: 'road-removed' | 'unreachable' | 'stop-removed' | 'line-removed' | 'gave-up' | 'stalled' | 'destination-changed' }
+  | { readonly type: 'transport.boarded'; readonly tick: number; readonly citizenId: string; readonly vehicleId: string; readonly stopId: string }
+  | { readonly type: 'transport.alighted'; readonly tick: number; readonly citizenId: string; readonly vehicleId: string; readonly stopId: string }
+  | { readonly type: 'transport.bus-full'; readonly tick: number; readonly vehicleId: string; readonly stopId: string; readonly left: number }
+  | { readonly type: 'transport.vehicle-stalled'; readonly tick: number; readonly vehicleId: string }
+  | { readonly type: 'transport.line-changed'; readonly tick: number; readonly lineId: string; readonly status: BusLine['status'] | 'created' | 'deleted'; readonly reason: BusLine['suspendedReason'] }
+  | { readonly type: 'transport.command-rejected'; readonly tick: number; readonly commandType: TransportCommand['type']; readonly reason: TransportRejectionReason }
   | { readonly type: 'clock.ticked'; readonly tick: number; readonly day: number; readonly minuteOfDay: number };
 
 export interface SimulationResult {
@@ -468,6 +657,13 @@ export interface CityCommandResult extends SimulationResult {
 export interface EconomyCommandResult extends SimulationResult {
   readonly applied: boolean;
   readonly reason: EconomyRejectionReason | null;
+}
+
+export interface TransportCommandResult extends SimulationResult {
+  readonly applied: boolean;
+  readonly reason: TransportRejectionReason | null;
+  /** The line a create command made. */
+  readonly lineId: string | null;
 }
 
 export interface LifeCommandResult extends SimulationResult {

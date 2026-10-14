@@ -1,5 +1,5 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
-import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, EconomyCommand, EconomyCommandResult, EconomyOptions, EconomyRejectionReason, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
+import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, EconomyCommand, EconomyCommandResult, EconomyOptions, EconomyRejectionReason, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, TransportCommand, TransportCommandResult, WorldCommand, WorldState } from './types.js';
 import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
 import { applyCityCommand, applyCityCommandBatch, copyCityCommand } from './cityCommands.js';
 import { compareTiles, OccupancyGrid } from './grid.js';
@@ -10,6 +10,9 @@ import { advanceDailyLife, scheduledEntry } from './life.js';
 import { advancePlayer, applyLifeCommand, reconcilePlayer } from './player.js';
 import { restoreConstruction } from './budget.js';
 import { createEconomy, isValidPolicy, recordVisit, settleEconomyDay } from './economy.js';
+import { applyTransportCommand, createTransport, reconcileTransport, TripPlanner } from './transport.js';
+import { advanceTransport } from './transportStep.js';
+import { TransportNetwork } from './transportGraph.js';
 
 function copyCommand(command: WorldCommand): WorldCommand {
   switch (command.type) {
@@ -26,11 +29,15 @@ function copyCommand(command: WorldCommand): WorldCommand {
   }
 }
 
-/** City data is validated before the player's references into it are reconciled. */
+/**
+ * City data is validated before the player's (and transport's) references into it are reconciled. Residents in
+ * transport are checked as plain walkers here; transport reconciliation decides what happens to their trips.
+ */
 function withoutPlayer(world: WorldState): WorldState {
-  const { player: _player, ...rest } = world;
+  const { player: _player, transport: _transport, ...rest } = world;
   return rest;
 }
+const asWalkers = (citizens: readonly Citizen[]): Citizen[] => citizens.map((c) => c.movement?.status === 'vehicle' ? { ...c, movement: { ...c.movement, status: 'waiting' } } : c);
 
 /** Headless deterministic runner. Event delivery belongs to the caller. */
 export class Simulation {
@@ -45,6 +52,8 @@ export class Simulation {
   private citizenIndexPlan: CityPlan | null = null;
   private citizenIndex = new Map<string,Citizen>();
   private buildingOccupancies = new Map<string,BuildingOccupancy>();
+  private network: TransportNetwork | null = null;
+  private networkKey: { plan: CityPlan; routing: Readonly<Record<string, number>> } | null = null;
 
   constructor(initialState: WorldState) {
     validateWorld(initialState);
@@ -73,6 +82,39 @@ export class Simulation {
     this.state = freeze(cloneWorld(next));
     return freeze({ state: this.state, events: [{ type: 'economy.enabled', tick: this.state.clock.tick, firstDay: economy.lastSettledDay + 1 }],
       steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /**
+   * Phase 6: starts transportation. No vehicles exist until residents start trips (nothing is created retroactively);
+   * bus lines are added with `executeTransport`. Idempotent.
+   */
+  enableTransport(): SimulationResult {
+    if (this.state.transport) return freeze({ state: this.state, events: [], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    const next = { ...this.state, transport: createTransport(this.state) };
+    validateWorld(next);
+    this.state = freeze(cloneWorld(next));
+    return freeze({ state: this.state, events: [{ type: 'transport.enabled', tick: this.state.clock.tick }], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /** The vehicle network for the current roads and routing snapshot (rebuilt when either changes). */
+  getTransportNetwork(): TransportNetwork {
+    const routing = this.state.transport?.routing ?? {};
+    if (!this.network || this.networkKey?.plan !== this.state.plan || this.networkKey.routing !== routing) {
+      this.network = new TransportNetwork(this.getNavigator(), routing);
+      this.networkKey = { plan: this.state.plan, routing };
+    }
+    return this.network;
+  }
+
+  /** Bus line management applies immediately (not city history: undo/redo never removes or restores a line). */
+  executeTransport(command: TransportCommand): TransportCommandResult {
+    const change = applyTransportCommand(this.state, command, this.getTransportNetwork());
+    if (change.reason === null && change.state !== this.state) {
+      validateWorld(change.state);
+      this.state = freeze(cloneWorld(change.state));
+    }
+    return freeze({ state: this.state, events: change.events, steps: 0, applied: change.reason === null, reason: change.reason, lineId: change.lineId,
+      alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
   /** Economy commands apply immediately and affect future settlements only. They are not part of city history. */
@@ -169,7 +211,7 @@ export class Simulation {
           return home ? { ...c, position: buildingCenter(home), activity: 'home' as const, targetBuildingId: home.id,
             movement: insideMovement(home.id,next.revision) } : c;
         });
-        validateWorld({ ...withoutPlayer(next), citizens: restored });
+        validateWorld({ ...withoutPlayer(next), citizens: asWalkers(restored) });
         const current = new Map(this.state.citizens.map(c => [c.id,c]));
         next = { ...next, citizens: restored.map(c => {
           const live=current.get(c.id);
@@ -181,18 +223,22 @@ export class Simulation {
       next = population.state;
       const life = reconcilePlayer(next, this.state);
       next = life.state;
+      const transport = reconcileTransport(next, this.state);
+      next = transport.state;
       validateWorld(next);
       this.state = freeze(cloneWorld(next));
-      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events, ...life.events],
+      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events, ...life.events, ...transport.events],
         steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
     }
     // Validate the city before reconciling the player's references into it.
-    validateWorld(withoutPlayer(next));
+    validateWorld({ ...withoutPlayer(next), citizens: asWalkers(next.citizens) });
     const life = reconcilePlayer(next, this.state);
     next = life.state;
+    const transport = reconcileTransport(next, this.state);
+    next = transport.state;
     validateWorld(next);
     this.state = freeze(cloneWorld(next));
-    return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...life.events],
+    return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...life.events, ...transport.events],
       steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
@@ -325,8 +371,11 @@ export class Simulation {
     }
     this.commands = [];
     const lifeEvents = events.length;
-    const citizens = this.state.population ? (() => {
-      const life=advanceDailyLife(this.state,this.getNavigator(),time.minuteOfDay);
+    // Phase 6: residents leaving a building may drive or take the bus (decided during Life, applied by transport).
+    const network = this.state.transport && this.state.population ? this.getTransportNetwork() : null;
+    const planner = network ? new TripPlanner(this.state, network) : undefined;
+    let citizens: readonly Citizen[] = this.state.population ? (() => {
+      const life=advanceDailyLife(this.state,this.getNavigator(),time.minuteOfDay,planner);
       events.push(...life.events); return life.state.citizens;
     })() : this.state.citizens.map((citizen) => {
       const entry = scheduledEntry(citizen, time.minuteOfDay);
@@ -335,6 +384,12 @@ export class Simulation {
         activity: entry.activity, targetBuildingId: entry.targetBuildingId });
       return { ...citizen, activity: entry.activity, targetBuildingId: entry.targetBuildingId };
     });
+    if (network) {
+      const moved = advanceTransport({ ...this.state, clock, citizens }, network, planner ?? null);
+      events.push(...moved.events);
+      citizens = moved.state.citizens;
+      this.state = freeze({ ...this.state, transport: moved.state.transport!, ...(moved.state.economy ? { economy: moved.state.economy } : {}) });
+    }
     if (this.state.player) {
       // The player shares the one fixed step and reads the residents' positions for this tick.
       const life = advancePlayer({ ...this.state, clock, citizens }, this.getNavigator());

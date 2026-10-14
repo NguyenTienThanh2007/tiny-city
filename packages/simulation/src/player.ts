@@ -559,7 +559,7 @@ export function reconcilePlayer(world: WorldState, previous: WorldState | undefi
   }
   if (player.acquaintances.some((id) => !citizens.has(id))) player = { ...player, acquaintances: player.acquaintances.filter((id) => citizens.has(id)) };
   if (!isPlayerPlaced(player)) return { state: withPlayer(world, player), events };
-  const planChanged = previous !== undefined && previous.plan !== world.plan;
+  const planChanged = previous !== undefined && (previous.plan !== world.plan || previous.revision !== world.revision);
   const relocate = (reason: 'building-removed' | 'building-moved' | 'road-removed') => {
     const road = nav.nearestRoad(player!.position, PLAYER_LIMITS.relocationRadius);
     const position = road ? { x: road.x + 0.5, y: road.y + 0.5 } : player!.position;
