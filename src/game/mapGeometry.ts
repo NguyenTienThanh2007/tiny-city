@@ -6,7 +6,6 @@ export type Point = { x: number; y: number };
 export const TILE_W = 56;
 export const TILE_H = 28;
 export const MIN_SCALE = 0.08;
-export const MAX_SCALE = 1.55;
 /** Closest zoom the home view uses (3.0B frames the built city more prominently than 2.0's 0.86). */
 export const HOME_MAX_SCALE = 1.0;
 const HALF_W = TILE_W / 2;
