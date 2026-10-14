@@ -7,13 +7,14 @@ export const TRANSPORT = Object.freeze({
   version: 1 as const,
   unitsPerTile: 100,
   /**
-   * Vehicle dynamics. Lengths are the body along the lane (a car is half a tile, a bus most of one); `brake` limits
+   * Vehicle dynamics. Lengths are the body along the lane (a car is just over half a tile, a bus most of one; never
+   * more than 96, so a bus queued at an intersection never reaches back into the previous one); `brake` limits
    * speed so a vehicle can always stop within the free distance ahead (v ≤ √(2·brake·distance)).
    */
   vehicles: Object.freeze({
-    car: Object.freeze({ maxSpeed: 60, accel: 20, brake: 30, length: 50 }),
-    van: Object.freeze({ maxSpeed: 55, accel: 15, brake: 25, length: 54 }),
-    bus: Object.freeze({ maxSpeed: 50, accel: 12, brake: 20, length: 90 }),
+    car: Object.freeze({ maxSpeed: 60, accel: 20, brake: 30, length: 56 }),
+    van: Object.freeze({ maxSpeed: 55, accel: 15, brake: 25, length: 60 }),
+    bus: Object.freeze({ maxSpeed: 50, accel: 12, brake: 20, length: 92 }),
   }),
   /** Minimum free space kept to the vehicle ahead. */
   gap: 10,

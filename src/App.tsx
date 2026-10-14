@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, validateRoadPlacement } from '@tiny-city/simulation';
+import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, TRANSPORT, validateRoadPlacement } from '@tiny-city/simulation';
 import type { EconomyPolicy, LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { Building as SimBuilding, CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
@@ -29,6 +29,11 @@ import { residentsWithoutJobs, summarizeActivities } from './simulation/citizenV
 import { emptyLifeFeed, reduceLifeFeed, type LifeFeedState } from './simulation/lifeFeed';
 import { ArchitectClientError, checkPlannerConnection, createPlanningRequest, plannerWorld, requestCityPlan, requestPlanValidation } from './aiArchitect/client';
 import { EconomyPanel } from './ui/EconomyPanel';
+import { TransportPanel, type LineDraft } from './ui/TransportPanel';
+import { VehicleInspector } from './ui/VehicleInspector';
+import { lineViews, rejectionText as transportRejectionText, stopTileProblem, transportOverview, vehicleView } from './simulation/transportView';
+import type { TrafficOverlay } from './game/transportLayer';
+import type { TransportDebug } from './game/CityViewport';
 import { BuildingEconomyCard, CitizenEconomyCard, PlanEconomyCard } from './ui/EconomyCards';
 import { alertText, buildingEconomy, citizenEconomy, economyOverview, planEconomy, signedMoney } from './simulation/economyView';
 import { ConnectionBadge, isRecoverablePlannerError, PlannerRecovery, type ConnectionView } from './ui/PlannerConnection';
@@ -41,7 +46,7 @@ import { useAuth } from './auth/AuthProvider';
 import { navigate, usePathname } from './auth/navigation';
 
 type HistoryEntry = { snapshot: CitySnapshot; city: CityState };
-type BaseMode = 'build' | 'live' | 'life' | 'economy';
+type BaseMode = 'build' | 'live' | 'life' | 'economy' | 'transport';
 /** Life Mode onboarding: look & name in the creator, then a home chosen on the map. */
 type LifeFlow = { step: 'identity'; draft: CharacterDraft; editing: boolean } |
   { step: 'home'; draft: CharacterDraft | null; purpose: 'create' | 'move'; selectedId: string | null };
@@ -121,11 +126,16 @@ function App() {
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
   const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity } = useCitySimulation(loaded.city, loaded.world);
+    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity, executeTransport } = useCitySimulation(loaded.city, loaded.world);
   const [baseMode, setBaseMode] = useState<BaseMode>('build');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCitizenId, setSelectedCitizenId] = useState<string | null>(null);
   const [followCitizenId, setFollowCitizenId] = useState<string | null>(null);
+  // Phase 6: selected/followed vehicle, the map overlay and the bus-line editor.
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [followVehicleId, setFollowVehicleId] = useState<string | null>(null);
+  const [trafficOverlay, setTrafficOverlay] = useState<TrafficOverlay>('off');
+  const [lineDraft, setLineDraft] = useState<LineDraft | null>(null);
   const [feed, setFeed] = useState<LifeFeedState>(emptyLifeFeed);
   const feedRef = useRef<LifeFeedState>(emptyLifeFeed);
   const [unseenFeed, setUnseenFeed] = useState(0);
@@ -450,7 +460,7 @@ function App() {
         ...Object.fromEntries(buildingKinds.map((kind, index) => [String(index + 1), kind])) };
       const next = shortcuts[key];
       if (next) { setTool(next); if (next !== 'move') setMovingBuildingId(null); }
-      if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); setMovingBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); }
+      if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); setMovingBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setSelectedVehicleId(null); setFollowVehicleId(null); }
       if (event.key === ' ' && target?.tagName !== 'BUTTON') { event.preventDefault(); togglePause(); setSaved(false); }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -831,11 +841,16 @@ function App() {
 
   const selectBuilding = useCallback((id: string | null) => {
     setSelectedBuildingId(id);
-    if (id !== null) { setSelectedCitizenId(null); setFollowCitizenId(null); }
+    if (id !== null) { setSelectedCitizenId(null); setFollowCitizenId(null); setSelectedVehicleId(null); setFollowVehicleId(null); }
+  }, []);
+  const selectVehicle = useCallback((id: string | null) => {
+    setSelectedVehicleId(id);
+    if (id !== null) { setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null); }
+    setFollowVehicleId((current) => current === id ? current : null);
   }, []);
   const selectCitizen = useCallback((id: string | null) => {
     setSelectedCitizenId(id);
-    if (id !== null) { setSelectedBuildingId(null); setMovingBuildingId(null); setMetResident(true); }
+    if (id !== null) { setSelectedBuildingId(null); setMovingBuildingId(null); setMetResident(true); setSelectedVehicleId(null); setFollowVehicleId(null); }
     setFollowCitizenId((current) => current === id ? current : null);
   }, []);
   const focusCitizen = (id: string) => {
@@ -844,8 +859,10 @@ function App() {
   };
   const zoomCamera = (factor: number) => requestCamera({ action: 'zoom', factor });
 
-  const chooseMode = (next: 'build' | 'plan' | 'live' | 'life' | 'economy') => {
+  const chooseMode = (next: 'build' | 'plan' | 'live' | 'life' | 'economy' | 'transport') => {
     setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setMovingBuildingId(null); setLifePlaceId(null);
+    setSelectedVehicleId(null); setFollowVehicleId(null);
+    if (next !== 'transport') setLineDraft(null);
     if (next === 'plan') {
       setArchitectPanelOpen((open) => compact ? !open : true);
       setSheetOpen(false);
@@ -865,6 +882,7 @@ function App() {
   const playerWaiting = !!player && !isPlayerPlaced(player);
   const lifeActive = mode === 'life';
   const economyActive = mode === 'economy';
+  const transportActive = mode === 'transport';
   const runLife = useCallback((command: LifeCommand, success?: string) => {
     const result = executeLife(command);
     if (!result.applied) { if (result.reason) showNotice(rejectionText[result.reason], 'warn'); return result; }
@@ -1087,14 +1105,63 @@ function App() {
   };
   const selectedBuildingEconomy = selectedBuilding ? buildingEconomy(world, selectedBuilding.id) : null;
   const selectedCitizenEconomy = selectedCitizen ? citizenEconomy(world, selectedCitizen.id) : null;
+  // Phase 6: a selected vehicle that parks (or a bus withdrawn) leaves the selection; nothing is shown for it afterwards.
+  useEffect(() => {
+    if (selectedVehicleId && !world.transport?.vehicles.some((v) => v.id === selectedVehicleId && v.state !== 'departing')) {
+      setSelectedVehicleId(null); setFollowVehicleId(null);
+    }
+  }, [world.transport, selectedVehicleId]);
+  // A line that stops running (a stop's road removed, or its loop cut) is announced once.
+  useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
+    const change = events.find((event) => event.type === 'transport.line-changed' && event.status === 'suspended');
+    if (change?.type === 'transport.line-changed') {
+      const line = state.transport?.lines.find((l) => l.id === change.lineId);
+      showNotice(`${line?.name ?? 'A bus line'} is suspended: ${change.reason === 'stop-removed' ? 'a stop was removed' : 'the roads no longer connect its stops'}. Its buses are back at the depot.`, 'warn');
+    }
+  }), [subscribe, showNotice]);
+  // ---------- Phase 6 bus-line editor ----------
+  const startLine = () => { setLineDraft({ stops: [], buses: 3, problem: null }); setTrafficOverlay('transit'); setTool('select'); };
+  const pickStopTile = useCallback((cell: Cell) => {
+    setLineDraft((draft) => {
+      if (!draft) return draft;
+      const existing = draft.stops.findIndex((t) => t.x === cell.x && t.y === cell.y);
+      if (existing >= 0) return { ...draft, stops: draft.stops.filter((_, i) => i !== existing), problem: null };
+      const problem = stopTileProblem(getSnapshot(), cell);
+      if (problem) return { ...draft, problem: transportRejectionText[problem] };
+      if (draft.stops.length >= TRANSPORT.maxStopsPerLine) return { ...draft, problem: transportRejectionText['too-many-stops'] };
+      return { ...draft, stops: [...draft.stops, { x: cell.x, y: cell.y }], problem: null };
+    });
+  }, [getSnapshot]);
+  const createLine = () => {
+    if (!lineDraft) return;
+    const result = executeTransport({ type: 'transport.create-line', stops: lineDraft.stops, buses: lineDraft.buses });
+    if (!result.applied) { setLineDraft({ ...lineDraft, problem: result.reason ? transportRejectionText[result.reason] : 'The line could not be created.' }); return; }
+    setLineDraft(null);
+    setSaved(false);
+    const line = result.state.transport?.lines.find((l) => l.id === result.lineId);
+    showNotice(`${line?.name ?? 'The new line'} is running: ${lineDraft.buses} bus${lineDraft.buses === 1 ? '' : 'es'}, ${lineDraft.stops.length} stops. Residents ride when it beats walking or driving.`);
+  };
+  const runTransport = (command: Parameters<typeof executeTransport>[0], success?: string) => {
+    const result = executeTransport(command);
+    if (!result.applied) { if (result.reason) showNotice(transportRejectionText[result.reason], 'warn'); return; }
+    setSaved(false);
+    if (success) showNotice(success);
+  };
+
   const proposalEconomy = useMemo(() => currentProposal && currentProposal.status !== 'REJECTED' && currentProposal.commands.length && world.economy
     ? planEconomy(getSnapshot(), currentProposal.commands) : null,
   [currentProposal, world.revision, world.economy, getSnapshot]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = history.length > 0 || redoHistory.length > 0 || world.clock.tick !== loaded.world.clock.tick || populationEnabled !== (loaded.world.population !== undefined) || lifeEdits > 0;
-  const view = selectedCitizen ? 'citizen' : selectedBuilding && !movingBuildingId && mode !== 'life' ? 'building' : mode;
+  const selectedVehicle = useMemo(() => selectedVehicleId ? vehicleView(world, selectedVehicleId) : null, [world, selectedVehicleId]);
+  const view = selectedCitizen ? 'citizen' : selectedVehicle ? 'vehicle' : selectedBuilding && !movingBuildingId && mode !== 'life' ? 'building' : mode;
+  const transportSummary = useMemo(() => transportActive && !selectedCitizen && !selectedVehicle ? transportOverview(world) : null,
+    [transportActive, selectedCitizen, selectedVehicle, world]);
+  const transportLines = useMemo(() => transportActive ? lineViews(world) : [], [transportActive, world]);
+  const vehiclesOnStreet = world.transport ? world.transport.vehicles.filter((v) => v.state !== 'departing').length : 0;
+  const suspendedLines = world.transport?.lines.filter((l) => l.status !== 'active').length ?? 0;
   const lifeSheet = view === 'life' && (lifeFlow?.step === 'home' || !!lifePlace);
-  const sheetVisible = compact && (view === 'citizen' || view === 'building' || architectPanelOpen || sheetOpen || lifeSheet);
+  const sheetVisible = compact && (view === 'citizen' || view === 'building' || view === 'vehicle' || architectPanelOpen || sheetOpen || lifeSheet);
   // Collapsing hides only the Build/Live/Life overview; inspectors, the AI panel and home selection still open when relevant.
   const panelHidden = !compact && panelCollapsed && (view === 'build' || view === 'live' || view === 'life' && !lifeSheet);
   const togglePanel = (collapsed: boolean) => { setPanelCollapsed(collapsed); writeFlag(PANEL_KEY, collapsed); };
@@ -1136,7 +1203,13 @@ function App() {
           followCitizenId={followCitizenId}
           onSelectBuilding={selectBuilding}
           onSelectCitizen={populationEnabled ? selectCitizen : undefined}
-          onFollowEnd={() => { setFollowCitizenId(null); setFollowPlayer(false); }}
+          selectedVehicleId={selectedVehicleId}
+          onSelectVehicle={lifeActive ? undefined : selectVehicle}
+          followVehicleId={followVehicleId}
+          trafficOverlay={trafficOverlay}
+          onPickStopTile={lineDraft && transportActive ? pickStopTile : undefined}
+          draftStops={lineDraft?.stops}
+          onFollowEnd={() => { setFollowCitizenId(null); setFollowPlayer(false); setFollowVehicleId(null); }}
           onPlaceBuilding={placeBuilding}
           onBeginMoveBuilding={beginMoveBuilding}
           onMoveBuilding={moveBuilding}
@@ -1185,6 +1258,11 @@ function App() {
             <Icon name="coin" size={15} /><strong>${city.funds.toLocaleString()}</strong><small>Funds{lastEconomyNet !== null && <i className={lastEconomyNet >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(lastEconomyNet)}/d</i>}</small>
             {economyAlertCount > 0 && <b className="tab-badge" aria-hidden="true">{economyAlertCount}</b>}
             {fundsDelta && <span key={fundsDelta.id} className={`funds-delta ${fundsDelta.amount < 0 ? 'is-spend' : 'is-gain'}`} aria-hidden="true">{fundsDelta.amount < 0 ? '−' : '+'}${Math.abs(fundsDelta.amount).toLocaleString()}</span>}</button>
+          <button className={`hud-stat transport ${transportActive ? 'is-active' : ''}`} aria-label="City transport" aria-pressed={transportActive}
+            title={`${vehiclesOnStreet} vehicles on the street · open city transport`}
+            onClick={() => transportActive ? chooseMode('build') : chooseMode('transport')}>
+            <Icon name="car" size={15} /><strong data-testid="hud-vehicles">{vehiclesOnStreet}</strong><small>Vehicles</small>
+            {suspendedLines > 0 && <b className="tab-badge" aria-hidden="true">{suspendedLines}</b>}</button>
           <div className="hud-stat" title={populationEnabled ? 'Residents living in the city' : 'Residents have not moved in yet'}><Icon name="people" size={15} /><strong>{populationEnabled ? citizens.length : '—'}</strong><small>Residents</small></div>
           <div className="hud-stat" title="Home buildings"><Icon name="home" size={15} /><strong>{villas}</strong><small>Homes</small></div>
         </div>
@@ -1446,6 +1524,22 @@ function App() {
             setDesignChoices((current) => applyCollectionToAll(current, collection));
             showNotice(`New buildings will use ${architectureCollection(collection)?.name ?? collection} where it has models. Existing buildings keep their look.`);
           }} />}
+
+        {view === 'vehicle' && selectedVehicle && <VehicleInspector view={selectedVehicle} following={followVehicleId === selectedVehicle.id}
+          onFollow={() => setFollowVehicleId((current) => current === selectedVehicle.id ? null : selectedVehicle.id)}
+          onFocus={() => { const debug = (window as unknown as { __tinyCityTransport?: TransportDebug }).__tinyCityTransport?.vehicles.find((v) => v.id === selectedVehicle.id);
+            if (debug && Number.isFinite(debug.x)) requestCamera({ action: 'goto', cell: { x: debug.x, y: debug.y }, zoom: 1.3 }); }}
+          onClose={() => { setSelectedVehicleId(null); setFollowVehicleId(null); }} />}
+
+        {view === 'transport' && transportSummary && <TransportPanel overview={transportSummary} lines={transportLines} overlay={trafficOverlay} draft={lineDraft}
+          onOverlay={setTrafficOverlay} onStartLine={startLine} onCancelLine={() => setLineDraft(null)}
+          onRemoveDraftStop={(index) => setLineDraft((draft) => draft && { ...draft, stops: draft.stops.filter((_, i) => i !== index), problem: null })}
+          onDraftBuses={(buses) => setLineDraft((draft) => draft && { ...draft, buses })}
+          onCreateLine={createLine}
+          onSetBuses={(lineId, buses) => runTransport({ type: 'transport.set-buses', lineId, buses })}
+          onDeleteLine={(lineId) => runTransport({ type: 'transport.delete-line', lineId }, 'Line deleted. Its riders walk on; unused stops were removed.')}
+          onFocusStop={(tile) => requestCamera({ action: 'goto', cell: { x: tile.x + 0.5, y: tile.y + 0.5 }, zoom: 1.3 })}
+          onClose={() => chooseMode('build')} />}
 
         {view === 'economy' && overview && <EconomyPanel world={world} overview={overview} onApplyPolicy={applyPolicy}
           onSelectBuilding={(id) => { selectBuilding(id); if (compact) setSheetOpen(true); }}

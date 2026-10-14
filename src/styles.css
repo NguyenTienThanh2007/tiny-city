@@ -1412,3 +1412,69 @@ button.funds-chip:hover { background: var(--sand-200); }
   .treasury-card > strong { font-size: 28px; }
 }
 .plan-economy-note { margin: 6px 0 0; color: #7a4b16; font-weight: 600; }
+
+/* ───────── Phase 6: transportation ───────── */
+.transport-panel h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.transport-badge { background: linear-gradient(145deg, #dcefee, #bfdedd); color: #2f6f6c; box-shadow: inset 0 0 0 1px rgba(47, 111, 108, .2); }
+.mode-share { margin: 10px 0 0; display: grid; gap: 5px; }
+.mode-share-bar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--sand-100); }
+.mode-share-bar i, .mode-share-keys i { display: block; }
+.mode-share-keys { display: flex; gap: 12px; font-size: 11px; color: var(--muted); font-weight: 700; }
+.mode-share-keys span { display: inline-flex; align-items: center; gap: 5px; }
+.mode-share-keys i { width: 8px; height: 8px; border-radius: 3px; }
+.is-walk { background: #8fb48a; } .is-car { background: #e09a6f; } .is-bus { background: #3f9a92; }
+.overlay-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 12px 0 0; padding: 3px; border-radius: var(--radius-sm); background: var(--sand-100); }
+.overlay-switch button { border: 0; background: transparent; border-radius: 8px; padding: 7px 4px; font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.overlay-switch button.is-active { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-sm); }
+.congestion-legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 2px 0; font-size: 11px; color: var(--muted); font-weight: 700; }
+.congestion-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.congestion-legend i { width: 12px; height: 6px; border-radius: 3px; }
+.level-0 { background: #62c797; } .level-1 { background: #f2c14e; } .level-2 { background: #e8873f; } .level-3 { background: #d2484a; }
+.level-text-0 { color: var(--forest-500); } .level-text-1 { color: #a8801f; } .level-text-2 { color: #b7612a; } .level-text-3 { color: var(--danger); }
+.transport-health { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 0; }
+.transport-health > div { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); display: grid; gap: 2px; }
+.transport-health > div span { color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.transport-health > div strong { font-size: 15px; }
+.transport-health > div small { color: var(--faint); font-size: 10.5px; font-weight: 600; }
+.transport-health p { grid-column: 1 / -1; margin: 0; }
+.transport-lines { margin: 16px 0 0; display: grid; gap: 8px; }
+.transport-lines .section-head { display: flex; justify-content: space-between; align-items: baseline; }
+.transport-lines h3 { margin: 0; font-size: 14px; }
+.transport-lines .section-head span { color: var(--muted); font-size: 11.5px; font-weight: 700; }
+.line-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.line-card { padding: 10px 12px; border-radius: var(--radius-md); background: var(--paper); border: 1px solid var(--line); display: grid; gap: 8px; }
+.line-card.is-suspended { border-color: rgba(181, 72, 62, .35); background: #fff8f5; }
+.line-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.line-title i { width: 14px; height: 14px; border-radius: 4px; }
+.line-title em { margin-left: auto; font-style: normal; font-size: 11px; color: var(--muted); font-weight: 700; }
+.line-stops { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.line-stops li { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; }
+.line-stops li + li::before { content: '→'; color: var(--faint); }
+.line-stops button { border: 0; background: var(--sea-100); color: #2f6f6c; border-radius: 99px; padding: 2px 8px; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.line-stops small { color: var(--terracotta-600); font-weight: 700; }
+.line-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 0; }
+.line-stats div { display: grid; }
+.line-stats dt { color: var(--faint); font-size: 10px; font-weight: 700; }
+.line-stats dd { margin: 0; font-size: 12.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.line-actions { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.line-actions .primary-action { flex: 1; }
+.text-button.danger { color: var(--danger); }
+.stepper { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.stepper button { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--paper); cursor: pointer; color: var(--ink); }
+.stepper button:disabled { opacity: .4; cursor: default; }
+.line-editor { padding: 12px; border-radius: var(--radius-md); background: var(--sea-100); border: 1px dashed #7fb6b2; display: grid; gap: 8px; }
+.line-editor p { margin: 0; font-size: 12px; line-height: 1.4; }
+.draft-stops { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: stop; }
+.draft-stops li { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-radius: 8px; background: var(--paper); font-size: 12px; font-weight: 700; }
+.draft-stops button { border: 0; background: transparent; cursor: pointer; color: var(--muted); }
+.line-problem { color: var(--danger); font-weight: 700; }
+.new-line { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.transport-note { margin: 12px 0 0; }
+.trip-line { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--sea-100); color: #2f5e5b; font-size: 12px; font-weight: 700; }
+.vehicle-inspector .vehicle-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 0; }
+.vehicle-inspector .vehicle-facts div { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); }
+.vehicle-inspector .vehicle-facts dt { color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.vehicle-inspector .vehicle-facts dd { margin: 2px 0 0; font-size: 13px; font-weight: 800; }
+.hud-stat.transport .tab-badge { top: -6px; right: -6px; background: var(--danger); }
+.mode-switch[data-mode='transport'] .mode-indicator { opacity: 0; }
+@media (max-width: 720px) { .line-stats { grid-template-columns: repeat(3, 1fr); } .transport-health { grid-template-columns: 1fr; } }

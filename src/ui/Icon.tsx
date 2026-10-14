@@ -41,6 +41,8 @@ const paths: Record<string, ReactNode> = {
   center: <><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /><circle cx="12" cy="12" r="2.5" /></>,
   check: <><path d="m5 12 4.5 4.5L19 7" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  car: <><path d="M5 16V12l2-5h10l2 5v4" /><path d="M3 16h18v2H3zM7 12h10" /><circle cx="7.5" cy="18.5" r="1.5" /><circle cx="16.5" cy="18.5" r="1.5" /></>,
+  bus: <><rect x="4" y="3" width="16" height="15" rx="3" /><path d="M4 11h16M8 3v8M16 3v8" /><circle cx="8" cy="20" r="1.5" /><circle cx="16" cy="20" r="1.5" /></>,
   route: <><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="6" r="2.5" /><path d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5" /></>,
   warning: <><path d="M12 3 2 20h20L12 3Z" /><path d="M12 10v4m0 3h.01" /></>,
   layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></>,

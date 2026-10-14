@@ -82,12 +82,15 @@ function isArchitectError(value: unknown): value is ArchitectErrorResponse {
 }
 
 /**
- * The world as the planner sees it: the city without its Phase 5 economy (accounts and ledger would only enlarge the
- * request). The plan fingerprint covers the plan and budget, which are sent unchanged.
+ * The world as the planner sees it: the city without its Phase 5 economy or Phase 6 transportation (accounts,
+ * ledger, vehicles and trips would only enlarge the request). Residents in a vehicle or at a stop are sent as
+ * waiting walkers, which the planner treats the same. The plan fingerprint covers the plan and budget, which are
+ * sent unchanged.
  */
 export function plannerWorld(snapshot: WorldState): WorldState {
-  const { economy: _economy, ...world } = snapshot;
-  return world;
+  const { economy: _economy, transport: _transport, ...world } = snapshot;
+  if (!snapshot.citizens.some((c) => c.movement?.status === 'vehicle')) return world;
+  return { ...world, citizens: snapshot.citizens.map((c) => c.movement?.status === 'vehicle' ? { ...c, movement: { ...c.movement, status: 'waiting' } } : c) };
 }
 
 export function createPlanningRequest(

@@ -1,5 +1,5 @@
 import {
-  ECONOMY, computeEconomyDay, estimateEconomyImpact, financialCondition, getGameTime, officeDemandRate, operatingNet, projectEconomyDay, residentAccount,
+  ECONOMY, TRANSPORT, computeEconomyDay, estimateEconomyImpact, financialCondition, getGameTime, officeDemandRate, operatingNet, projectEconomyDay, residentAccount,
 } from '@tiny-city/simulation';
 import type {
   BuildingFinance, CityCommand, EconomyAlert, EconomyDayReport, EconomyImpactEstimate, EconomyPolicy, FinancialCondition, WorldState,
@@ -42,6 +42,9 @@ export function treasuryRows(report: EconomyDayReport): { income: FlowRow[]; exp
     { key: 'amenities', label: 'Parks, pools & clubhouses', amount: report.expenses.amenities, hint: 'Daily upkeep of public amenities' },
     { key: 'support', label: 'Unemployment support', amount: report.expenses.unemploymentSupport, hint: `$${ECONOMY.unemploymentSupport} per resident without a job` },
   ];
+  // Phase 6: shown once the city has transportation (older reports have no transit fields).
+  if (report.income.transitFares !== undefined) income.push({ key: 'fares', label: 'Bus fares', amount: report.income.transitFares, hint: `$${TRANSPORT.fare} per boarding · ${report.transitRides ?? 0} rides` });
+  if (report.expenses.transit !== undefined) expenses.push({ key: 'transit', label: 'Bus operations', amount: report.expenses.transit, hint: `$${TRANSPORT.busDailyCost} per bus per day` });
   if (report.income.constructionRefunds > 0) income.push({ key: 'refunds', label: 'Construction undone', amount: report.income.constructionRefunds, hint: 'Refunded by undo' });
   if (report.expenses.construction > 0) expenses.push({ key: 'construction', label: 'Construction', amount: report.expenses.construction, hint: 'Charged when built' });
   return { income, expenses };

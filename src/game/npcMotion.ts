@@ -60,12 +60,45 @@ export function toCss(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
-/** Residents inside a building (or on its private entrance leg) are not drawn on the street. */
-export function isCitizenOutdoors(citizen: Citizen): boolean {
+/**
+ * Residents inside a building (or on its private entrance leg) are not drawn on the street. Phase 6: residents in a
+ * car or on a bus are drawn as that vehicle, not as walkers; residents waiting at a stop stand at its shelter.
+ */
+export function isCitizenOutdoors(citizen: Citizen, waiting?: ReadonlyMap<string, StopPlace>): boolean {
   const movement = citizen.movement;
   if (!movement) return false;
+  if (movement.status === 'vehicle') return waiting?.has(citizen.id) ?? false;
   return movement.status !== 'inside' && movement.currentBuildingId === null;
 }
+
+/** Where a waiting resident stands: offset from their stop's tile centre onto the shelter's curb, spread along it. */
+export interface StopPlace { readonly offset: Position }
+const waitingCache = new WeakMap<object, Map<string, StopPlace>>();
+/** Residents waiting at bus stops (real trips in the waiting phase), with their place at the shelter. */
+export function waitingAtStops(world: WorldState): ReadonlyMap<string, StopPlace> {
+  const t = world.transport;
+  if (!t || !t.trips.some((trip) => trip.phase === 'waiting')) return EMPTY_WAITING;
+  let map = waitingCache.get(t.trips);
+  if (map) return map;
+  map = new Map();
+  const roads = new Set(world.plan.roads.map((tile) => `${tile.x},${tile.y}`));
+  const stops = new Map(t.stops.map((stop) => [stop.id, stop]));
+  const counts = new Map<string, number>();
+  for (const trip of t.trips) {
+    if (trip.phase !== 'waiting' || !trip.boardStopId) continue;
+    const stop = stops.get(trip.boardStopId);
+    if (!stop) continue;
+    const index = counts.get(stop.id) ?? 0;
+    counts.set(stop.id, index + 1);
+    const free = (dx: number, dy: number) => !roads.has(`${stop.tile.x + dx},${stop.tile.y + dy}`);
+    const out = free(0, -1) ? { x: 0, y: -1 } : free(-1, 0) ? { x: -1, y: 0 } : free(0, 1) ? { x: 0, y: 1 } : { x: 1, y: 0 };
+    const along = (index % 6 - 2.5) * 0.13, row = Math.floor(index / 6) * 0.1;
+    map.set(trip.citizenId, { offset: { x: out.x * (0.3 - row) + out.y * along, y: out.y * (0.3 - row) + out.x * along } });
+  }
+  waitingCache.set(t.trips, map);
+  return map;
+}
+const EMPTY_WAITING: ReadonlyMap<string, StopPlace> = new Map();
 
 /** Right-hand perpendicular of a tile heading in a y-down grid. */
 export function laneOffset(heading: Position, lane: number): Position {
@@ -100,7 +133,7 @@ const MAX_TILES_PER_TICK = 0.45;
  * (editor relocation, structural edit, re-entry from a building) and the sprite should snap.
  */
 export function receiveSnapshot(sample: MotionSample | undefined, citizen: Citizen, world: WorldState): { sample: MotionSample; snapped: boolean } {
-  const outdoors = isCitizenOutdoors(citizen);
+  const outdoors = isCitizenOutdoors(citizen, waitingAtStops(world));
   const heading = citizen.movement?.heading ?? { x: 0, y: 0 };
   if (!sample) {
     return { snapped: true, sample: {
