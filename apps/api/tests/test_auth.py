@@ -234,6 +234,29 @@ def test_cloud_saves_keep_architectural_designs_verbatim(client):
     assert loaded['buildings'][0]['design'] == {'collection': 'luxury-minimalist', 'model': 'lm.villa.glass-pavilion'}
 
 
+def test_cloud_saves_keep_the_phase_5_economy_verbatim_and_still_reject_invalid_budgets(client):
+    """Phase 5: the economy is part of the simulation snapshot (operating totals on the budget, accounts, history,
+    ledger, policy). Cloud saves store it unchanged; the existing budget checks still apply (never weakened)."""
+    register_and_verify(client, 'economy@example.com')
+    assert sign_in(client, 'economy@example.com').status_code == 200
+    snapshot = valid_snapshot()
+    simulation = snapshot['simulation']
+    simulation['budget'] = {'openingBalance': 1000, 'balance': 1036, 'totalSpent': 0, 'operatingIncome': 120, 'operatingExpenses': 84}
+    simulation['economy'] = {'version': 1, 'policy': {'residentialTaxRate': 12, 'commercialTaxRate': 6}, 'lastSettledDay': 0,
+        'nextTransactionId': 3, 'constructionSpentAtSettlement': 0, 'today': {'day': 1, 'visits': {}, 'fees': {}},
+        'residents': {'npc-1': {'balance': 130, 'income': 26, 'taxes': 3, 'spending': 13}}, 'buildings': {},
+        'history': [], 'ledger': [{'id': 'tx-1', 'day': 0, 'tick': 1440, 'category': 'tax.residential', 'amount': 120,
+            'from': 'residents', 'to': 'treasury', 'buildingId': None, 'count': 40}], 'totals': {'tax.residential': 120}, 'alerts': []}
+    created = client.post('/v1/users/me/cities', json={'name': 'Economy', 'snapshot': snapshot}, headers=csrf(client))
+    assert created.status_code == 201
+    loaded = client.get(f"/v1/users/me/cities/{created.json()['id']}").json()['snapshot']
+    assert loaded['simulation']['economy'] == simulation['economy']
+    assert loaded['simulation']['budget'] == simulation['budget']
+    broken = valid_snapshot()
+    broken['simulation']['budget']['balance'] = -5
+    assert client.post('/v1/users/me/cities', json={'name': 'Broken', 'snapshot': broken}, headers=csrf(client)).status_code == 422
+
+
 def test_cors_credentials_are_explicit_and_account_deletion_cascades(client):
     cors = client.options('/v1/auth/me', headers={'Origin': ORIGIN, 'Access-Control-Request-Method': 'POST',
         'Access-Control-Request-Headers': 'content-type,x-csrf-token'})

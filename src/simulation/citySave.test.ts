@@ -5,6 +5,40 @@ import { createCityWorld, projectCity } from './cityAdapter';
 import { loadCitySave, saveCity, SAVE_KEY } from './citySave';
 
 describe('compatible browser saves', () => {
+  it('Phase 5: the economy (treasury totals, accounts, history, ledger, policy) survives save and reload exactly', () => {
+    const sim = new Simulation(createCityWorld(initialCity));
+    sim.enablePopulation({ maxCitizens: 100 });
+    sim.executeEconomy({ type: 'economy.set-policy', policy: { residentialTaxRate: 12, commercialTaxRate: 7 } });
+    sim.step(1440 * 2 + 300);
+    const before = sim.getState();
+    expect(before.economy!.history).toHaveLength(2);
+    saveCity(localStorage, projectCity(before, initialCity), before);
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.notice).toBeUndefined();
+    expect(loaded.world).toEqual(before);
+    expect(loaded.city.funds).toBe(before.budget.balance);
+    // No settlement is repeated after the reload; the next midnight settles the next day only.
+    const resumed = new Simulation(loaded.world);
+    resumed.step(1440);
+    expect(resumed.getState().economy!.history.map((r) => r.day)).toEqual([0, 1, 2]);
+    expect(resumed.getState()).toEqual(sim.step(1440).state);
+  });
+  it('Phase 5: saves from before the economy load unchanged (no economy, original budget shape)', () => {
+    const sim = new Simulation(createCityWorld(initialCity));
+    sim.step(700);
+    const { economy: _economy, ...old } = JSON.parse(JSON.stringify(sim.getState()));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...initialCity, saveVersion: 3, simulation: old }));
+    const loaded = loadCitySave(localStorage);
+    expect(loaded.notice).toBeUndefined();
+    expect(loaded.world.economy).toBeUndefined();
+    expect(loaded.world.budget).toEqual({ openingBalance: initialCity.funds, balance: initialCity.funds, totalSpent: 0 });
+    // Enabling it on load starts from the next full day: the 700 minutes already played are never billed.
+    const resumed = new Simulation(loaded.world);
+    expect(resumed.enableEconomy().events[0]).toMatchObject({ type: 'economy.enabled', firstDay: 1 });
+    resumed.step(1440 - 700);
+    expect(resumed.getState().budget.balance).toBe(initialCity.funds);
+    expect(resumed.getState().economy!.history).toEqual([]);
+  });
   it('restores managed NPC snapshots without silently dropping the population', () => {
     const sim=new Simulation(createCityWorld(initialCity));sim.enablePopulation({maxCitizens:100});sim.step(460);
     expect(sim.getPopulationCount()).toBeGreaterThan(0);
@@ -32,6 +66,7 @@ describe('compatible browser saves', () => {
   it('migrates Phase 0 schema-1 snapshots in v2 envelopes without losing time or editor metadata', () => {
     const legacy = JSON.parse(JSON.stringify(createCityWorld(initialCity)));
     legacy.schemaVersion = 1;
+    delete legacy.economy;
     delete legacy.budget; delete legacy.revision; delete legacy.nextBuildingId;
     delete legacy.plan.roads; delete legacy.plan.blockedTiles;
     for (const building of legacy.plan.buildings) delete building.type;

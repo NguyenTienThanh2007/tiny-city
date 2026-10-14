@@ -5,9 +5,10 @@ import type CityViewport from './game/CityViewport';
 import type { ComponentProps } from 'react';
 import { createProposal, interpretLocally, PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { ArchitectIntent, PlanningRequest } from '@tiny-city/ai-architect';
-import { CONSTRUCTION_COSTS } from '@tiny-city/simulation';
+import { CONSTRUCTION_COSTS, Simulation } from '@tiny-city/simulation';
+import type { WorldState } from '@tiny-city/simulation';
 import { initialCity } from './data/initialCity';
-import { createCityWorld, toCityPlan } from './simulation/cityAdapter';
+import { createCityWorld, projectCity, toCityPlan } from './simulation/cityAdapter';
 import { SAVE_KEY, saveCity } from './simulation/citySave';
 import App from './App';
 
@@ -238,7 +239,9 @@ describe('frontend city/simulation integration', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentRequest?.contractVersion).toBe(1);
     expect(sentRequest?.prompt).toBe('Xây 3 biệt thự gần công viên');
-    expect(sentRequest?.world).toEqual(initial);
+    // The planner gets the live city without its economy (Phase 5); nothing else is changed or rebuilt.
+    const { economy: _economy, ...city } = initial;
+    expect(sentRequest?.world).toEqual(city);
     expect(sentRequest?.sourceRevision).toBe(initial.revision);
     expect(sentRequest?.constraints).toMatchObject({ allowPartial: false, allowDestructive: false, maxOperations: 128 });
     expect(sentRequest?.constraints?.preserveBuildingIds).toHaveLength(initial.plan.buildings.length);
@@ -794,5 +797,38 @@ describe('AI Architect 2.0 target choice and authorization', () => {
     expect((await screen.findAllByText(/There is no apartment building in this city/)).length).toBeGreaterThan(0);
     expect(world()).toEqual(before);
   });
-});
 
+  it('Phase 5: the treasury opens the city economy; tax rates apply to future days and midnight settles once', () => {
+    const sim = new Simulation(createCityWorld(initialCity));
+    sim.enablePopulation({ maxCitizens: 100 });
+    sim.step(1430);
+    const seeded = sim.getState();
+    localStorage.clear();
+    saveCity(localStorage, projectCity(seeded, initialCity), seeded);
+    render(<App />);
+    const simulationWorld = () => JSON.parse(screen.getByTestId('simulation-world').textContent!) as WorldState;
+    fireEvent.click(screen.getByRole('button', { name: 'City economy' }));
+    expect(screen.getByRole('heading', { name: 'City economy' })).toBeInTheDocument();
+    expect(screen.getByTestId('economy-treasury')).toHaveTextContent(`$${seeded.budget.balance.toLocaleString('en-US')}`);
+    expect(screen.getByText(/first day settles at midnight/i)).toBeInTheDocument();
+    // A policy change shows its estimate first and applies only when confirmed.
+    fireEvent.change(screen.getByRole('slider', { name: 'Residential tax' }), { target: { value: '14' } });
+    expect(screen.getByRole('status', { name: 'Policy estimate' })).toHaveTextContent('Estimated effect per day');
+    expect(simulationWorld().economy!.policy.residentialTaxRate).toBe(10);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply tax rates' }));
+    expect(simulationWorld().economy!.policy).toEqual({ residentialTaxRate: 14, commercialTaxRate: 6 });
+    expect(screen.getByRole('status', { name: 'City notice' })).toHaveTextContent('Tax rates updated');
+    // Time crosses midnight: one settlement, the treasury and HUD follow it, history appears.
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    for (let i = 0; i < 12; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Test frame' }));
+    const settled = simulationWorld();
+    expect(settled.economy!.history.map((r) => r.day)).toEqual([0]);
+    expect(settled.economy!.history[0]!.treasuryClose).toBe(settled.budget.balance);
+    expect(screen.getByTestId('economy-treasury')).toHaveTextContent(`$${settled.budget.balance.toLocaleString('en-US')}`);
+    expect(screen.getByRole('button', { name: 'City economy' })).toHaveTextContent(`$${settled.budget.balance.toLocaleString()}`);
+    expect(JSON.parse(screen.getByTestId('editor-city').textContent!).funds).toBe(settled.budget.balance);
+    expect(screen.getByRole('table', { name: 'Recent days' })).toHaveTextContent('Day 01');
+    fireEvent.click(screen.getByRole('button', { name: 'Close city economy' }));
+    expect(screen.queryByRole('heading', { name: 'City economy' })).not.toBeInTheDocument();
+  });
+});

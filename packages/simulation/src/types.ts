@@ -33,11 +33,160 @@ export interface CityPlan {
 /** Allows Phase 0 authored fixtures to omit newly introduced tile collections. */
 export type CityPlanInput = Omit<CityPlan, 'roads' | 'blockedTiles'> & Partial<Pick<CityPlan, 'roads' | 'blockedTiles'>>;
 
+/**
+ * The city treasury in whole dollars. `totalSpent` is construction spending (what undo/redo rewinds). Phase 5 adds the
+ * running totals of operating income and expenses (absent in older saves, meaning 0), so
+ * `balance + totalSpent + operatingExpenses === openingBalance + operatingIncome` always holds.
+ */
 export interface CityBudget {
   readonly openingBalance: number;
   readonly balance: number;
   readonly totalSpent: number;
+  readonly operatingIncome?: number;
+  readonly operatingExpenses?: number;
 }
+
+/** Phase 5 economy. Whole dollars and integer percents throughout; see `economyConfig.ts`. */
+export interface EconomyPolicy {
+  /** Percent of each resident's wage. */
+  readonly residentialTaxRate: number;
+  /** Percent of each business's revenue. */
+  readonly commercialTaxRate: number;
+}
+
+/** A resident's money: their savings and what happened to them on the last settled day. */
+export interface ResidentAccount {
+  readonly balance: number;
+  /** Wage plus city support. */
+  readonly income: number;
+  readonly taxes: number;
+  /** Housing, shopping and venue fees. */
+  readonly spending: number;
+}
+
+export type BusinessStatus = 'profitable' | 'loss' | 'understaffed' | 'weak-demand' | 'unstaffed';
+
+/** The last settled day of one economically active building (a business or a public amenity). */
+export interface BuildingFinance {
+  readonly buildingId: string;
+  readonly role: 'office' | 'mall' | 'park' | 'pool' | 'clubhouse';
+  readonly workers: number;
+  readonly jobs: number;
+  readonly revenue: number;
+  readonly payroll: number;
+  /** A business's own operating costs, or the city's upkeep for an amenity. */
+  readonly upkeep: number;
+  readonly tax: number;
+  readonly profit: number;
+  /** Amenities: leisure visits that day and the fees charged for them. */
+  readonly visits: number;
+  readonly fees: number;
+  /** Malls: the shopping demand directed to this mall that day. */
+  readonly demand: number;
+  readonly status: BusinessStatus | 'public';
+  /** Consecutive settled days with a loss. */
+  readonly lossStreak: number;
+}
+
+export type EconomyAccountKind = 'treasury' | 'residents' | 'business' | 'external';
+export type LedgerCategory =
+  | 'resident.arrival' | 'resident.departure' | 'business.services' | 'business.sales' | 'business.wages'
+  | 'tax.residential' | 'tax.commercial' | 'city.support' | 'resident.housing' | 'resident.shopping-outside'
+  | 'resident.venue-fees' | 'business.upkeep' | 'business.profit' | 'business.loss-cover' | 'city.public-services'
+  | 'city.road-upkeep' | 'city.amenity-upkeep' | 'city.construction' | 'city.construction-refund';
+
+/** One recorded money movement. Internal transfers move money between city actors; `external` creates or removes it. */
+export interface LedgerEntry {
+  readonly id: string;
+  readonly day: number;
+  readonly tick: number;
+  readonly category: LedgerCategory;
+  readonly amount: number;
+  readonly from: EconomyAccountKind;
+  readonly to: EconomyAccountKind;
+  readonly buildingId: string | null;
+  /** Residents (or buildings) the entry aggregates. */
+  readonly count: number;
+}
+
+export interface EconomyDayReport {
+  readonly day: number;
+  readonly treasuryOpen: number;
+  readonly treasuryClose: number;
+  /** Treasury inflows. */
+  readonly income: { readonly residentialTax: number; readonly commercialTax: number; readonly venueFees: number; readonly constructionRefunds: number };
+  /** Treasury outflows. */
+  readonly expenses: { readonly publicServices: number; readonly roads: number; readonly amenities: number; readonly unemploymentSupport: number; readonly construction: number };
+  /** City costs the treasury could not pay (never owed later). */
+  readonly unpaid: { readonly upkeep: number; readonly support: number };
+  readonly population: number;
+  readonly employed: number;
+  readonly jobs: number;
+  readonly wages: number;
+  readonly housing: number;
+  /** What residents wanted to spend shopping, and where it went. */
+  readonly shoppingDemand: number;
+  readonly shoppingLocal: number;
+  readonly shoppingOutside: number;
+  readonly feesWaived: number;
+  readonly residentSavings: number;
+  readonly arrivals: number;
+  readonly departures: number;
+  readonly businesses: number;
+  readonly profitableBusinesses: number;
+  readonly businessRevenue: number;
+  readonly businessProfit: number;
+  readonly confidence: number;
+  readonly amenityCoverage: number;
+  readonly localShoppingRate: number;
+}
+
+export type EconomyAlertKind = 'treasury-low' | 'deficit' | 'upkeep-unpaid' | 'unemployment' | 'understaffed' |
+  'business-loss' | 'shopping-demand' | 'improving';
+export interface EconomyAlert {
+  /** Stable deduplication key (kind, plus the building for building alerts). */
+  readonly id: string;
+  readonly kind: EconomyAlertKind;
+  readonly severity: 'info' | 'warning';
+  readonly day: number;
+  readonly buildingId: string | null;
+  readonly value: number;
+}
+
+/** What has happened so far on the current (unsettled) day. */
+export interface EconomyToday {
+  readonly day: number;
+  /** Leisure venue → visits today. */
+  readonly visits: Readonly<Record<string, number>>;
+  /** Resident → venue fees owed for today's visits, collected at settlement. */
+  readonly fees: Readonly<Record<string, number>>;
+}
+
+export interface EconomyState {
+  readonly version: 1;
+  readonly policy: EconomyPolicy;
+  /** The last day whose settlement ran (or was skipped because the economy began mid-day). Settlement is idempotent on it. */
+  readonly lastSettledDay: number;
+  readonly nextTransactionId: number;
+  /** `budget.totalSpent` at the last settlement, so construction since then is recorded exactly once. */
+  readonly constructionSpentAtSettlement: number;
+  readonly today: EconomyToday;
+  readonly residents: Readonly<Record<string, ResidentAccount>>;
+  readonly buildings: Readonly<Record<string, BuildingFinance>>;
+  /** Newest last, at most `ECONOMY.historyDays`. */
+  readonly history: readonly EconomyDayReport[];
+  /** Newest last, at most `ECONOMY.ledgerEntries`. */
+  readonly ledger: readonly LedgerEntry[];
+  /** Lifetime total per ledger category, kept when old entries leave the bounded ledger. */
+  readonly totals: Readonly<Partial<Record<LedgerCategory, number>>>;
+  /** Conditions that are currently true (an alert is announced once, when it becomes active). */
+  readonly alerts: readonly EconomyAlert[];
+}
+
+export interface EconomyOptions { readonly policy?: Partial<EconomyPolicy> }
+
+export type EconomyCommand = { readonly type: 'economy.set-policy'; readonly policy: EconomyPolicy };
+export type EconomyRejectionReason = 'economy-disabled' | 'invalid-policy' | 'unchanged-policy';
 
 export interface CitySnapshot {
   readonly plan: CityPlan;
@@ -132,6 +281,8 @@ export interface WorldState {
   readonly population?: PopulationState;
   /** Phase 4 Life Mode character. Absent until a player is explicitly created; never auto-created on load. */
   readonly player?: PlayerCharacter;
+  /** Phase 5 economy. Absent in older saves; enabled explicitly, never retroactively billed. */
+  readonly economy?: EconomyState;
 }
 
 export type PlayerHairStyle = 'short' | 'long' | 'bun' | 'curly' | 'cap' | 'buzz';
@@ -295,6 +446,11 @@ export type SimulationEvent =
   | { readonly type: 'player.interaction'; readonly tick: number; readonly citizenId: string; readonly kind: 'greet' | 'socialize'; readonly topic: PlayerSocialTopic; readonly firstMeeting: boolean }
   | { readonly type: 'player.need-changed'; readonly tick: number; readonly need: PlayerNeed; readonly level: PlayerNeedLevel; readonly previous: PlayerNeedLevel; readonly value: number }
   | { readonly type: 'player.command-rejected'; readonly tick: number; readonly commandType: LifeCommand['type']; readonly reason: LifeRejectionReason }
+  | { readonly type: 'economy.enabled'; readonly tick: number; readonly firstDay: number }
+  | { readonly type: 'economy.day-settled'; readonly tick: number; readonly day: number; readonly report: EconomyDayReport }
+  | { readonly type: 'economy.policy-changed'; readonly tick: number; readonly policy: EconomyPolicy }
+  | { readonly type: 'economy.alert'; readonly tick: number; readonly alert: EconomyAlert }
+  | { readonly type: 'economy.command-rejected'; readonly tick: number; readonly commandType: EconomyCommand['type']; readonly reason: EconomyRejectionReason }
   | { readonly type: 'clock.ticked'; readonly tick: number; readonly day: number; readonly minuteOfDay: number };
 
 export interface SimulationResult {
@@ -307,6 +463,11 @@ export interface SimulationResult {
 
 export interface CityCommandResult extends SimulationResult {
   readonly applied: boolean;
+}
+
+export interface EconomyCommandResult extends SimulationResult {
+  readonly applied: boolean;
+  readonly reason: EconomyRejectionReason | null;
 }
 
 export interface LifeCommandResult extends SimulationResult {

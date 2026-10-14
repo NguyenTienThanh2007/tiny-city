@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { BuildingOccupancy, Citizen, PlayerCharacter } from '@tiny-city/simulation';
 import { homeOccupancy, residentWhereabouts } from '../simulation/housingView';
 import { BUILDINGS, type Building } from '../types';
@@ -8,7 +9,7 @@ import { Icon } from './Icon';
 
 const roleLabels = { home: 'Residential', workplace: 'Workplace', park: 'Leisure' } as const;
 
-export function BuildingInspector({ building, roadConnected, occupancy, citizens, populationEnabled, player,
+export function BuildingInspector({ building, roadConnected, occupancy, citizens, populationEnabled, player, economy,
   onClose, onDetails, onMove, onBulldoze, onSelectCitizen, onSelectPlayer }: {
   building: Building;
   roadConnected: boolean;
@@ -17,6 +18,8 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
   populationEnabled: boolean;
   /** The Life Mode character; their room in their own home counts exactly once. */
   player: PlayerCharacter | null;
+  /** Phase 5: the building's economic activity (businesses and public amenities). */
+  economy?: ReactNode;
   onSelectPlayer: () => void;
   onClose: () => void;
   onDetails: () => void;
@@ -66,6 +69,7 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
         {people.length > 8 && <li className="muted">+{people.length - 8} more</li>}
       </ul> : rooms?.player ? null : <p className="muted small">{home ? 'No residents yet.' : jobs ? 'No workers assigned yet.' : 'Nobody is visiting right now.'}</p>}
     </div>}
+    {economy}
     <div className="building-details">
       <div className="detail-line"><span>Type</span><strong>{spec.label}</strong></div>
       <div className="detail-line"><span>Footprint</span><strong>{spec.width} × {spec.height} tiles</strong></div>

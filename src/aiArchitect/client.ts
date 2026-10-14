@@ -81,6 +81,15 @@ function isArchitectError(value: unknown): value is ArchitectErrorResponse {
     typeof value.error.retryable === 'boolean';
 }
 
+/**
+ * The world as the planner sees it: the city without its Phase 5 economy (accounts and ledger would only enlarge the
+ * request). The plan fingerprint covers the plan and budget, which are sent unchanged.
+ */
+export function plannerWorld(snapshot: WorldState): WorldState {
+  const { economy: _economy, ...world } = snapshot;
+  return world;
+}
+
 export function createPlanningRequest(
   prompt: string,
   snapshot: WorldState,
@@ -89,7 +98,7 @@ export function createPlanningRequest(
   return {
     contractVersion: 1,
     prompt,
-    world: snapshot,
+    world: plannerWorld(snapshot),
     sourceRevision: snapshot.revision,
     constraints,
   };

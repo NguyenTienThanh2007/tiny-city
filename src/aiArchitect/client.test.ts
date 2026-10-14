@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCityWorld } from '../simulation/cityAdapter';
 import { initialCity } from '../data/initialCity';
-import { createPlanningRequest, requestCityPlan } from './client';
+import { createPlanningRequest, plannerWorld, requestCityPlan } from './client';
 import { createProposal } from '@tiny-city/ai-architect';
 import type { ArchitectIntent, PlanProposal, PlanningConstraints } from '@tiny-city/ai-architect';
 
@@ -22,9 +22,14 @@ describe('AI Architect HTTP client', () => {
   it('creates the versioned payload from one canonical snapshot and revision', () => {
     const snapshot = createCityWorld(initialCity);
     const request = createPlanningRequest('Add a park', snapshot, constraints);
-    expect(request).toEqual({ contractVersion: 1, prompt: 'Add a park', world: snapshot,
-      sourceRevision: snapshot.revision, constraints });
-    expect(request.world).toBe(snapshot);
+    // The planner receives the city exactly as it is, without the Phase 5 economy (accounts and ledger).
+    const { economy, ...city } = snapshot;
+    expect(economy).toBeDefined();
+    expect(request).toEqual({ contractVersion: 1, prompt: 'Add a park', world: city, sourceRevision: snapshot.revision, constraints });
+    expect(request.world).toEqual(plannerWorld(snapshot));
+    expect(request.world.economy).toBeUndefined();
+    expect(request.world.plan).toBe(snapshot.plan);
+    expect(request.world.budget).toBe(snapshot.budget);
     expect(request.sourceRevision).toBe(snapshot.revision);
   });
 

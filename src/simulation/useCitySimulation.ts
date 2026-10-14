@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Simulation } from '@tiny-city/simulation';
-import type { CityCommand, CitySnapshot, LifeCommand, PopulationOptions, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
+import type { CityCommand, CitySnapshot, EconomyCommand, LifeCommand, PopulationOptions, SimulationEvent, SimulationResult, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../types';
 import { createCityWorld } from './cityAdapter';
 
@@ -10,13 +10,18 @@ type EventListener = (events: readonly SimulationEvent[], state: WorldState) => 
 
 /** Frequent per-tick bookkeeping that should not, on its own, force a React render of the whole HUD. */
 const ROUTINE_EVENTS = new Set<SimulationEvent['type']>(['clock.ticked', 'citizen.moved']);
+/** Phase 5: older saves start their economy when loaded (from the next full day, so nothing is billed retroactively). */
+function withEconomy(simulation: Simulation): Simulation {
+  simulation.enableEconomy();
+  return simulation;
+}
 /** HUD refresh cadence while only routine movement happens. Pixi reads live state every frame regardless. */
 const HUD_REFRESH_MS = 100;
 /** Hidden-tab time is ignored, and one long frame can never replay more than this much real time. */
 const MAX_FRAME_MS = 250;
 
 export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
-  const [simulation] = useState(() => new Simulation(restoredWorld ?? createCityWorld(city)));
+  const [simulation] = useState(() => withEconomy(new Simulation(restoredWorld ?? createCityWorld(city))));
   const [world, setWorld] = useState(simulation.getState());
   const [lastEvent, setLastEvent] = useState<SimulationEvent | null>(null);
   const [speed, setSpeedState] = useState<SimulationSpeed>(1);
@@ -75,6 +80,13 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
     publish(result);
     return result;
   }, [simulation, publish]);
+  /** Phase 5 policy changes apply immediately to future settlements; they are not city history. */
+  const executeEconomy = useCallback((command: EconomyCommand) => {
+    const result = simulation.executeEconomy(command);
+    publish(result);
+    return result;
+  }, [simulation, publish]);
+  const canRestoreCity = useCallback((snapshot: CitySnapshot) => simulation.canRestoreCity(snapshot), [simulation]);
   const getNavigator = useCallback(() => simulation.getNavigator(), [simulation]);
   const restoreCity = useCallback((snapshot: CitySnapshot) => publish(simulation.restoreCity(snapshot)), [simulation, publish]);
   const getCitySnapshot = useCallback(() => simulation.getCitySnapshot(), [simulation]);
@@ -109,5 +121,5 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   const getBuildingOccupancy = useCallback((id: string) => simulation.getBuildingOccupancy(id), [simulation]);
   const enablePopulation = useCallback((options: PopulationOptions = {}) => publish(simulation.enablePopulation(options)), [simulation, publish]);
   return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy, executeLife, getNavigator };
+    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity };
 }

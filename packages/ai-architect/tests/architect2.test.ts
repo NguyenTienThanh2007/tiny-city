@@ -34,6 +34,11 @@ describe('offline Vietnamese and English interpretation (no AI calls)', () => {
     ['Xây 10 biệt thự và 2 chung cư, thêm đường kết nối.', { connectRoads: true, builds: [{ buildingType: 'villa', quantity: 10, preferredPosition: null }, { buildingType: 'apartment', quantity: 2, preferredPosition: null }] }],
     ['Build a residential neighborhood with eight villas and two parks.', { language: 'en', builds: [{ buildingType: 'villa', quantity: 8, preferredPosition: null }, { buildingType: 'park', quantity: 2, preferredPosition: null }] }],
     ['Remove the two apartment buildings but preserve the roads.', { preserveRoads: true, demolishTargets: [sel({ buildingType: 'apartment', quantity: 2 })] }],
+    // Phase 5 economy prompts.
+    ['Build three office buildings to create more jobs.', { builds: [{ buildingType: 'office', quantity: 3, preferredPosition: null }] }],
+    ['Xây một khu dân cư có đủ việc làm.', { language: 'vi', builds: [{ buildingType: 'apartment', quantity: 1, preferredPosition: null }, { buildingType: 'office', quantity: 1, preferredPosition: null }] }],
+    ['Build a mall and show its estimated economic impact.', { builds: [{ buildingType: 'mall', quantity: 1, preferredPosition: null }] }],
+    ['Xây 3 biệt thự có đủ việc làm', { builds: [{ buildingType: 'villa', quantity: 3, preferredPosition: null }, { buildingType: 'office', quantity: 1, preferredPosition: null }] }],
   ];
   it.each(cases)('%s', (prompt, expected) => {
     const intent = interpretLocally(prompt);

@@ -1,5 +1,5 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
-import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
+import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, EconomyCommand, EconomyCommandResult, EconomyOptions, EconomyRejectionReason, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, WorldCommand, WorldState } from './types.js';
 import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
 import { applyCityCommand, applyCityCommandBatch, copyCityCommand } from './cityCommands.js';
 import { compareTiles, OccupancyGrid } from './grid.js';
@@ -8,6 +8,8 @@ import { buildingCenter, RoadNavigator } from './navigation.js';
 import { initializePopulation, insideMovement, providesLeisure, reconcilePopulation } from './population.js';
 import { advanceDailyLife, scheduledEntry } from './life.js';
 import { advancePlayer, applyLifeCommand, reconcilePlayer } from './player.js';
+import { restoreConstruction } from './budget.js';
+import { createEconomy, isValidPolicy, recordVisit, settleEconomyDay } from './economy.js';
 
 function copyCommand(command: WorldCommand): WorldCommand {
   switch (command.type) {
@@ -57,6 +59,40 @@ export class Simulation {
     const change = initializePopulation(this.state, options);
     if(change.state!==this.state) { validateWorld(change.state); this.state = freeze(cloneWorld(change.state)); }
     return freeze({ state: this.state, events: change.events, steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /**
+   * Phase 5: starts the economy. A city at midnight is billed from that day; otherwise from the next full day, so
+   * enabling it on an older save never bills time that has already passed. Idempotent.
+   */
+  enableEconomy(options: EconomyOptions = {}): SimulationResult {
+    if (this.state.economy) return freeze({ state: this.state, events: [], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    const economy = createEconomy(this.state, options);
+    const next = { ...this.state, economy };
+    validateWorld(next);
+    this.state = freeze(cloneWorld(next));
+    return freeze({ state: this.state, events: [{ type: 'economy.enabled', tick: this.state.clock.tick, firstDay: economy.lastSettledDay + 1 }],
+      steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /** Economy commands apply immediately and affect future settlements only. They are not part of city history. */
+  executeEconomy(command: EconomyCommand): EconomyCommandResult {
+    const tick = this.state.clock.tick;
+    const reject = (reason: EconomyRejectionReason): EconomyCommandResult => freeze({ state: this.state, steps: 0, applied: false, reason,
+      events: [{ type: 'economy.command-rejected', tick, commandType: 'economy.set-policy', reason }], alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    if (!this.state.economy) return reject('economy-disabled');
+    if (command?.type !== 'economy.set-policy' || !isValidPolicy(command.policy)) return reject('invalid-policy');
+    const current = this.state.economy.policy;
+    const policy = { residentialTaxRate: command.policy.residentialTaxRate, commercialTaxRate: command.policy.commercialTaxRate };
+    if (current.residentialTaxRate === policy.residentialTaxRate && current.commercialTaxRate === policy.commercialTaxRate) return reject('unchanged-policy');
+    this.state = freeze(cloneWorld({ ...this.state, economy: { ...this.state.economy, policy } }));
+    return freeze({ state: this.state, steps: 0, applied: true, reason: null, events: [{ type: 'economy.policy-changed', tick, policy }],
+      alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /** Whether `restoreCity(snapshot)` is affordable now (redoing construction after the treasury has changed). */
+  canRestoreCity(snapshot: CitySnapshot): boolean {
+    return restoreConstruction(this.state.budget, snapshot.budget) !== null;
   }
 
   getPlayer(): PlayerCharacter | undefined { return this.state.player; }
@@ -112,11 +148,16 @@ export class Simulation {
       ...(this.state.population === undefined ? {} : { citizens: this.state.citizens }) });
   }
 
-  /** Undo/redo restores city data while time, RNG, and command queues keep progressing. */
+  /**
+   * Undo/redo restores city data while time, RNG, and command queues keep progressing. Only construction spending is
+   * restored from the snapshot; operating money earned or spent since then (Phase 5) is never rewound.
+   */
   restoreCity(snapshot: CitySnapshot): SimulationResult {
     if (!Number.isSafeInteger(snapshot.nextBuildingId) || snapshot.nextBuildingId <= 0) throw new RangeError('invalid snapshot building ID cursor');
     if (this.state.revision === Number.MAX_SAFE_INTEGER) throw new RangeError('revision limit reached');
-    let next = { ...this.state, plan: snapshot.plan, budget: snapshot.budget,
+    const budget = restoreConstruction(this.state.budget, snapshot.budget);
+    if (budget === null) throw new RangeError('insufficient funds to restore this construction');
+    let next = { ...this.state, plan: snapshot.plan, budget,
       nextBuildingId: Math.max(this.state.nextBuildingId, snapshot.nextBuildingId), revision: this.state.revision + 1 };
     if (this.state.population) {
       // Validate city data before attempting to reconcile references into it.
@@ -229,6 +270,13 @@ export class Simulation {
     const { tick } = clock;
     const previousDay = getGameTime(this.state.clock).day;
     const time = getGameTime(clock);
+    if (this.state.economy && time.day > previousDay) {
+      // Phase 5: the finished day settles once, first thing in the new day, from the city as it stood at midnight.
+      const settled = settleEconomyDay(this.state, previousDay, tick);
+      events.push(...settled.events);
+      this.state = freeze({ ...this.state, budget: settled.budget, economy: { ...settled.economy, lastSettledDay: Math.max(settled.economy.lastSettledDay, previousDay),
+        today: { day: time.day, visits: {}, fees: {} } } });
+    }
     this.state = freeze({ ...this.state, clock });
     for (const command of this.commands) {
       if (command.type === 'city.build' || command.type === 'city.demolish' || command.type === 'city.move-building' || command.type === 'city.edit-roads') {
@@ -276,6 +324,7 @@ export class Simulation {
       this.state = freeze({ ...this.state, citizens });
     }
     this.commands = [];
+    const lifeEvents = events.length;
     const citizens = this.state.population ? (() => {
       const life=advanceDailyLife(this.state,this.getNavigator(),time.minuteOfDay);
       events.push(...life.events); return life.state.citizens;
@@ -296,6 +345,20 @@ export class Simulation {
       events.push({ type: 'clock.day-started', tick, day });
     }
     events.push({ type: 'clock.ticked', tick, ...time });
-    this.state = freeze({ ...this.state, clock, citizens });
+    let economy = this.state.economy;
+    if (economy) {
+      // A resident who arrives at a park, pool or clubhouse for leisure has really visited it (fees settle at midnight).
+      let arrived: Map<string, Citizen> | null = null;
+      for (let i = lifeEvents; i < events.length; i += 1) {
+        const event = events[i]!;
+        if (event.type !== 'citizen.arrived') continue;
+        const venue = this.getNavigator().getBuilding(event.buildingId);
+        if (!venue || !providesLeisure(venue)) continue;
+        arrived ??= new Map(citizens.map((c) => [c.id, c]));
+        const citizen = arrived.get(event.citizenId);
+        if (venue && providesLeisure(venue) && citizen?.movement?.arrivalActivity === 'leisure') economy = recordVisit(economy, citizen.id, venue);
+      }
+    }
+    this.state = freeze({ ...this.state, clock, citizens, ...(economy ? { economy } : {}) });
   }
 }

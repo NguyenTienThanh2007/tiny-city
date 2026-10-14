@@ -132,3 +132,38 @@ Demo fixtures consume seeded draws for spawn offsets and retain the resulting `r
 
 
 Phase 1 acceptance extends `CONSTRUCTION_COSTS` to all nine catalog types, keeping the existing dollar amounts. The world remains schema 2 and city command/event payloads remain unchanged. See [acceptance audit](./phase-1-acceptance.md) for coverage and renderer/persistence integration decisions.
+
+## Economy (Phase 5)
+
+`WorldState.economy` is optional (schema 2 unchanged). Enable it with `createWorld({ ..., economy: { policy? } })`,
+which bills from the world's first day, or with `simulation.enableEconomy()`. `enableEconomy` is idempotent and, in the
+middle of a day, bills from the next full day.
+
+| API | Behavior |
+| --- | --- |
+| `simulation.executeEconomy({ type: 'economy.set-policy', policy })` | Immediate; affects future settlements only; `EconomyCommandResult` adds `applied` and `reason` (`economy-disabled`, `invalid-policy`, `unchanged-policy`); not city history |
+| `simulation.canRestoreCity(snapshot)` | Whether `restoreCity` can afford the snapshot's construction now; `restoreCity` throws `RangeError` otherwise |
+| `settleEconomyDay(world, day, tick)` | Pure; settles `day` once (a no-op for a day at or before `lastSettledDay`); returns `{ economy, budget, events }` |
+| `computeEconomyDay(world, economy, day)` | Pure core of a settlement (accounts, building finance, report, ledger lines) |
+| `projectEconomyDay(world, policy?)` | What the current day would settle to now; never authoritative |
+| `estimateEconomyImpact(world, commands)` | Confirmed construction cost and estimated daily changes of a plan; pure |
+| `residentAccount(world, id)`, `financialCondition(account)`, `operatingNet(report)` | Read helpers |
+| `ECONOMY`, `percentOf`, `allocate`, `LEDGER_FLOWS`, `LEDGER_CATEGORIES` | Constants and exact integer helpers |
+
+`CityBudget` gains optional `operatingIncome` and `operatingExpenses`, and
+`balance + totalSpent + operatingExpenses === openingBalance + operatingIncome`. `totalSpent` remains construction
+spending. `restoreCity` restores construction spending only and keeps operating money (see
+`docs/phase-5-economy/persistence-and-migration.md`).
+
+New events:
+
+| Event | Payload |
+| --- | --- |
+| `economy.enabled` | `firstDay` |
+| `economy.day-settled` | `day`, `report: EconomyDayReport` |
+| `economy.policy-changed` | `policy` |
+| `economy.alert` | `alert: EconomyAlert` (emitted once, when it becomes active) |
+| `economy.command-rejected` | `commandType`, `reason` |
+
+The settlement runs at the first tick of each new day, before that tick's commands and movement. See
+`docs/phase-5-economy/`.
