@@ -60,12 +60,18 @@ jobs:
       - run: uv sync --locked --extra dev
       - run: uv run --locked --extra dev python -m pytest -q -W error
 
-  gameplay:
+  gameplay-shard:
+    name: gameplay shard ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
-    # 48 software-rendered browser specs, including multi-hour living-world simulations. The same suite takes
-    # 16–32 min on hosted runners and up to ~2x longer on a slow one (game time follows the frame rate there).
-    # Playwright's own globalTimeout (50 min) stops first, so a slow run still prints its failure report.
+    # 64 software-rendered browser specs, including multi-hour living-world simulations. Run serially, the suite takes
+    # ~30 min on a fast hosted runner and ~60 min on a slow one (SwiftShader is CPU-bound and game time follows the
+    # frame rate), which overran Playwright's 50-minute globalTimeout on main twice. Two shards on separate runners each
+    # take ~15 min (fast) to ~32 min (slow), so the same assertions and timeouts hold on any runner.
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -80,13 +86,25 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
+      # Runner speed varies; record it so a slow run can be told apart from a slow test.
+      - name: Runner CPU
+        run: nproc && lscpu | grep -E '^(Model name|CPU\(s\)|Thread)' || true
       - run: npm ci
       - run: uv sync --locked --extra dev --directory apps/api
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- --shard=${{ matrix.shard }}/2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure() || cancelled()
         with:
-          name: gameplay-failure-traces
+          name: gameplay-failure-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+
+  # The required gameplay result: green only when every shard passed.
+  gameplay:
+    needs: gameplay-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: test "${{ needs.gameplay-shard.result }}" = success
