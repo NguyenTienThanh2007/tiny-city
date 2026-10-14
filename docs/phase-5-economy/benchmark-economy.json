@@ -1,0 +1,94 @@
+{
+ "date": "2026-10-14T06:42:43.367Z",
+ "node": "v24.16.0",
+ "sizes": [
+  {
+   "residents": 20,
+   "buildings": 14,
+   "settlementMs": 0.125,
+   "projectionMs": 0.046,
+   "dayOfTicksMs": {
+    "withEconomy": 26.997,
+    "without": 28.484
+   },
+   "economyTickOverheadPercent": -5.2,
+   "saveBytes": {
+    "withEconomy": 70652,
+    "without": 24933,
+    "economyShare": 64.7
+   },
+   "after60Days": {
+    "saveBytes": 74388,
+    "history": 28,
+    "ledger": 200,
+    "transactions": 855
+   }
+  },
+  {
+   "residents": 100,
+   "buildings": 11,
+   "settlementMs": 0.315,
+   "projectionMs": 0.201,
+   "dayOfTicksMs": {
+    "withEconomy": 138.807,
+    "without": 147.352
+   },
+   "economyTickOverheadPercent": -5.8,
+   "saveBytes": {
+    "withEconomy": 144004,
+    "without": 93078,
+    "economyShare": 35.4
+   },
+   "after60Days": {
+    "saveBytes": 147954,
+    "history": 28,
+    "ledger": 200,
+    "transactions": 1160
+   }
+  },
+  {
+   "residents": 300,
+   "buildings": 27,
+   "settlementMs": 0.501,
+   "projectionMs": 0.496,
+   "dayOfTicksMs": {
+    "withEconomy": 381.196,
+    "without": 359.869
+   },
+   "economyTickOverheadPercent": 5.9,
+   "saveBytes": {
+    "withEconomy": 330973,
+    "without": 266912,
+    "economyShare": 19.4
+   },
+   "after60Days": {
+    "saveBytes": 334975,
+    "history": 28,
+    "ledger": 200,
+    "transactions": 1953
+   }
+  },
+  {
+   "residents": 1000,
+   "buildings": 72,
+   "settlementMs": 1.42,
+   "projectionMs": 1.028,
+   "dayOfTicksMs": {
+    "withEconomy": 1058.532,
+    "without": 1004.474
+   },
+   "economyTickOverheadPercent": 5.4,
+   "saveBytes": {
+    "withEconomy": 983688,
+    "without": 873643,
+    "economyShare": 11.2
+   },
+   "after60Days": {
+    "saveBytes": 987033,
+    "history": 28,
+    "ledger": 200,
+    "transactions": 4181
+   }
+  }
+ ]
+}

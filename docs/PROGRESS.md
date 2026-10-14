@@ -167,4 +167,18 @@ corner (pose ended at world (4439, −894), zoom 0.08).
 - [x] M3 City View / Life View, Focus, Follow, glides, reduced motion, renderer-recreation-safe camera
 - [x] M4 one camera control group, off-screen locator, nearby name tags, drag-to-pan, pinch, phone layout
 - [x] M5 `e2e/phase-4-6-camera.spec.ts` (scenarios A–J), screenshots, benchmark
-- [ ] M6 PR, GitHub Actions 3/3
+- [x] M6 PR #20, GitHub Actions 3/3 (merged as `fe78a9e`)
+
+## Phase 5 living economy (branch `feature/p5-living-economy`, from `origin/main` @ `fe78a9e`)
+
+Docs: `docs/phase-5-economy/`. One deterministic daily settlement in the simulation package (integer dollars, fixed-direction
+ledger, idempotent on `lastSettledDay`); the City economy panel, inspector cards and AI plan estimates read it.
+
+- [x] M1 audit of money systems, `WorldState.economy`, monetary model, accounting invariants, unit + fuzz tests
+- [x] M2 treasury: tax policy, revenue, upkeep, settlement, history, bankruptcy boundary (never below zero)
+- [x] M3 residents: real job assignments, wages with payroll withholding, accounts, support, savings-bounded spending
+- [x] M4 businesses: offices (external clients) and malls (local shopping, staff capacity), pass-through accounts, status
+- [x] M5 City economy panel, history charts, policy estimates, building/resident cards, phone sheet
+- [x] M6 AI plan economics (confirmed vs estimated), economy-aware saves, older saves (no retroactive bill), undo/redo rule
+- [ ] M7 browser acceptance, benchmarks, screenshots, PR #21, GitHub Actions 3/3
+
