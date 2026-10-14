@@ -22,6 +22,7 @@ export default defineConfig({
   // build/move/history/reload workflows need a larger bounded CI deadline.
   timeout: process.env.CI ? 90_000 : 45_000,
   // Below the gameplay job's 60-minute limit, so a slow CI run ends with Playwright's report instead of a bare cancel.
+  // CI runs the suite in two shards (`--shard=N/2`, see the workflow); each shard needs well under this on any runner.
   globalTimeout: process.env.CI ? 50 * 60_000 : 0,
   expect: { timeout: process.env.CI ? 20_000 : 5_000 },
   fullyParallel: false,

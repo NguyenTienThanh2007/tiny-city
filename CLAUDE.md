@@ -35,7 +35,7 @@ uv run --locked --extra dev python -m pytest -q -W error
 uv run uvicorn tiny_city_api.main:app --host 127.0.0.1 --port 8787
 ```
 
-CI (`.github/workflows/phase-0-ci.yml`) runs: typecheck, test:architect, security, test:simulation, test, build; API pytest; Playwright e2e.
+CI (`.github/workflows/phase-0-ci.yml`) runs: typecheck, test:architect, security, test:simulation, test, build; API pytest; Playwright e2e in two parallel shards (`gameplay shard 1/2`, `2/2`), whose combined result is the `gameplay` check. Serially the suite takes ~30 min on a fast hosted runner and ~60 min on a slow one, which overran the 50-minute Playwright budget; keep shards balanced when adding long specs (`npx playwright test --list --shard=1/2`).
 
 ## Architecture
 
