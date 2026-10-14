@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { cameraSettled } from './support/camera';
 import type { WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../src/types';
 import { untilClock } from './support/gameTime';
@@ -34,11 +35,7 @@ async function screenPoint(page: Page, x: number, y: number) {
 /** Frames the neighbourhood and waits until the camera has settled (it glides). */
 async function centerCity(page: Page) {
   await page.getByRole('button', { name: 'Center neighborhood' }).click();
-  let previous = '';
-  await expect.poll(async () => {
-    const current = (await page.getByTestId('minimap-camera').getAttribute('points')) ?? '';
-    const settled = current === previous; previous = current; return settled;
-  }, { intervals: [250], timeout: 10_000 }).toBe(true);
+  await cameraSettled(page);
 }
 async function hoverTile(page: Page, x: number, y: number) {
   const point = await screenPoint(page, x + 0.5, y + 0.5);

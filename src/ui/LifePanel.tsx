@@ -149,20 +149,17 @@ export function HomePicker({ options, selectedId, purpose, populationEnabled, we
 
 export interface NearbyResident { readonly citizen: Citizen; readonly where: string }
 
-export function LifePanel({ player, world, actions, log, paused, following, place, nearby, onSelectCitizen, onAction, onCancel, onFocus, onFollow, onEdit, onChangeHome, onResume, onClosePlace }: {
+export function LifePanel({ player, world, actions, log, paused, place, nearby, onSelectCitizen, onAction, onCancel, onEdit, onChangeHome, onResume, onClosePlace }: {
   player: PlayerCharacter;
   world: WorldState;
   actions: readonly PlayerActionAvailability[];
   log: readonly PlayerLogEntry[];
   paused: boolean;
-  following: boolean;
   place: ReactNode;
   nearby: readonly NearbyResident[];
   onSelectCitizen: (id: string) => void;
   onAction: (action: Exclude<ActionId, 'cancel' | 'greet' | 'socialize'>) => void;
   onCancel: () => void;
-  onFocus: () => void;
-  onFollow: () => void;
   onEdit: () => void;
   onChangeHome: () => void;
   onResume: () => void;
@@ -202,10 +199,6 @@ export function LifePanel({ player, world, actions, log, paused, following, plac
         {(['go-home', 'rest', 'eat', 'visit'] as const).map((id) => <ActionButton key={id} {...ACTION_META[id]} availability={byAction.get(id)} onClick={() => onAction(id)} />)}
       </div>
     </>}
-    {!place && <div className="citizen-actions">
-      <button className="outline-action" onClick={onFocus}><Icon name="target" size={15} /> Focus</button>
-      <button className={`outline-action ${following ? 'is-active' : ''}`} aria-pressed={following} onClick={onFollow}><Icon name="follow" size={15} /> {following ? 'Following' : 'Follow'}</button>
-    </div>}
     {!place && <div className="walkers nearby">
       <div className="section-heading"><span>NEARBY RESIDENTS</span><small>{nearby.length ? 'Click to meet' : 'Nobody close by'}</small></div>
       {nearby.length > 0 ? <ul aria-label="Nearby residents">{nearby.map(({ citizen, where }) => <li key={citizen.id}>
@@ -233,12 +226,13 @@ export function PlaceCard({ name, kind, detail, actions }: { name: string; kind:
 }
 
 /** Compact always-visible HUD: who you are, what you're doing, and how you feel. */
-export function LifeStrip({ player, world, following, onOpen, onFollow, onCancel }: {
-  player: PlayerCharacter; world: WorldState; following: boolean; onOpen: () => void; onFollow: () => void; onCancel: () => void;
+/** Compact character HUD: who, what they are doing and their needs. Camera controls live in the camera group. */
+export function LifeStrip({ player, world, onOpen, onCancel }: {
+  player: PlayerCharacter; world: WorldState; onOpen: () => void; onCancel: () => void;
 }) {
   const status = describePlayer(player, world);
   const busy = player.activity.kind !== 'idle' || player.movement.status === 'travelling';
-  return <div className="life-strip" role="region" aria-label="Life HUD">
+  return <div className="life-strip" role="region" aria-label="Life HUD" data-camera-inset="bottom">
     <button className="life-strip-id" onClick={onOpen} aria-label={`Open ${player.name}'s profile`}>
       <PlayerPortrait appearance={player.appearance} size={40} />
       <span><strong>{player.name}</strong><small>{status.headline}</small></span>
@@ -246,7 +240,6 @@ export function LifeStrip({ player, world, following, onOpen, onFollow, onCancel
     <NeedBars player={player} compact />
     <div className="life-strip-actions">
       {busy && <button className="icon-button" aria-label="Cancel current action" title="Cancel" onClick={onCancel}><Icon name="close" size={16} /></button>}
-      <button className={`icon-button ${following ? 'is-on' : ''}`} aria-label={following ? 'Stop following your character' : 'Follow your character'} aria-pressed={following} title="Follow camera" onClick={onFollow}><Icon name="follow" size={16} /></button>
     </div>
   </div>;
 }
