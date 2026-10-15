@@ -25,9 +25,12 @@ export const MOVEMENT = Object.freeze({
   turn: 0.07,
   /** Collision radius (tiles): the capsule's footprint, ≈ 0.45 m wide. */
   radius: 0.07,
-  /** Fixed integration step (s) and the most real time one frame may replay (a stalled tab never teleports). */
+  /**
+   * Fixed integration step (s) and the most real time one frame may replay: the simulation clock's own 250 ms cap, so
+   * a slow (software-rendered) frame keeps real-time speed while a stalled tab never jumps more than a fifth of a tile.
+   */
   step: 1 / 120,
-  maxFrame: 0.1,
+  maxFrame: 0.25,
   /** Below this speed (tiles/s) the character counts as standing. */
   still: 0.02,
   /** Distance covered by one full walk cycle (two steps), tiles. Running strides are longer. */

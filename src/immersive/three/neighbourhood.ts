@@ -23,7 +23,12 @@ import { createSky, skyState, type SkyState } from './atmosphere';
 
 export type Quality = 'high' | 'low';
 export const VIEW_DISTANCE = { high: 30, low: 20 } as const;
-const CHUNK = 8;
+const CHUNK = 12;
+/** Low ground cover (flowers, grass tufts, pebbles) is only drawn this close: it is invisible further out anyway. */
+const DETAIL_DISTANCE = 13;
+const FLAT = new Set(['flowers', 'grass', 'stones']);
+/** Props too small to throw a readable shadow skip the shadow pass. */
+const NO_SHADOW = new Set(['flowers', 'grass', 'stones', 'bin', 'bikes']);
 const MARGIN = 26;
 
 export interface NeighbourhoodStats {
@@ -43,7 +48,7 @@ export interface NeighbourhoodStats {
 interface BuildingEntry { readonly building: Building; readonly group: THREE.Group; readonly centre: Position; readonly windows: THREE.MeshStandardMaterial[]; readonly assetId: string | null; readonly facing: Facing }
 
 const designOf = (designs: ReadonlyMap<string, BuildingDesign>, id: string) => designs.get(id);
-const chunkKey = (x: number, y: number) => `${Math.floor(x / CHUNK)},${Math.floor(y / CHUNK)}`;
+const chunkKey = (x: number, y: number, layer = '') => `${layer}${Math.floor(x / CHUNK)},${Math.floor(y / CHUNK)}`;
 function hash(text: string) { let h = 0x811c9dc5; for (let i = 0; i < text.length; i += 1) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
 
 function radialTexture(inner: string, outer: string): THREE.Texture | null {
@@ -79,7 +84,7 @@ export class Neighbourhood {
   private readonly sky = createSky();
   private readonly fog = new THREE.Fog(0xd6ebf5, 14, 30);
   private readonly buildings: BuildingEntry[] = [];
-  private readonly chunks = new Map<string, { group: THREE.Group; centre: Position }>();
+  private readonly chunks = new Map<string, { group: THREE.Group; centre: Position; detail: boolean }>();
   private readonly owned: { dispose(): void }[] = [];
   private poolMaterial: THREE.MeshBasicMaterial | null = null;
   private lastWindowCheck = -Infinity;
@@ -102,14 +107,14 @@ export class Neighbourhood {
     }
   }
 
-  private chunk(x: number, y: number): THREE.Group {
-    const key = chunkKey(x, y);
+  private chunk(x: number, y: number, detail = false): THREE.Group {
+    const key = chunkKey(x, y, detail ? 'detail:' : '');
     let entry = this.chunks.get(key);
     if (!entry) {
       const group = new THREE.Group();
       group.name = `chunk ${key}`;
-      const [cx, cy] = key.split(',').map(Number) as [number, number];
-      entry = { group, centre: { x: (cx + 0.5) * CHUNK, y: (cy + 0.5) * CHUNK } };
+      const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK);
+      entry = { group, centre: { x: (cx + 0.5) * CHUNK, y: (cy + 0.5) * CHUNK }, detail };
       this.chunks.set(key, entry);
       this.scene.add(group);
     }
@@ -117,12 +122,16 @@ export class Neighbourhood {
   }
 
   /** Places instanced copies of a model's parts, one InstancedMesh per part per chunk. */
-  private instance(asset: BuiltAsset, placements: readonly { x: number; y: number; matrix: THREE.Matrix4 }[], shadows: boolean) {
-    const byChunk = new Map<string, THREE.Matrix4[]>();
-    for (const p of placements) { const key = chunkKey(p.x, p.y); byChunk.set(key, [...(byChunk.get(key) ?? []), p.matrix]); }
-    for (const [key, matrices] of byChunk) {
-      const [cx, cy] = key.split(',').map(Number) as [number, number];
-      const group = this.chunk(cx * CHUNK, cy * CHUNK);
+  private instance(asset: BuiltAsset, placements: readonly { x: number; y: number; matrix: THREE.Matrix4 }[], shadows: boolean, detail = false) {
+    const byChunk = new Map<string, { x: number; y: number; matrices: THREE.Matrix4[] }>();
+    for (const p of placements) {
+      const key = chunkKey(p.x, p.y);
+      const entry = byChunk.get(key) ?? { x: p.x, y: p.y, matrices: [] };
+      entry.matrices.push(p.matrix);
+      byChunk.set(key, entry);
+    }
+    for (const { x, y, matrices } of byChunk.values()) {
+      const group = this.chunk(x, y, detail);
       for (const part of asset.parts) {
         const mesh = new THREE.InstancedMesh(part.geometry, part.material, matrices.length);
         matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -266,6 +275,7 @@ export class Neighbourhood {
   private async landscaping(slice: () => Promise<void>) {
     const { index, ids } = runtimeArtIndex();
     const byAsset = new Map<string, { x: number; y: number; matrix: THREE.Matrix4 }[]>();
+    const kinds = new Map<string, Decor['kind']>();
     let count = 0;
     for (const d of this.decor) {
       if (this.quality === 'low' && !TALL_DECOR.has(d.kind)) continue;
@@ -277,11 +287,13 @@ export class Neighbourhood {
       const matrix = new THREE.Matrix4().compose(new THREE.Vector3(d.at.x, 0, d.at.y), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn),
         new THREE.Vector3(d.size, d.size, d.size));
       byAsset.set(id, [...(byAsset.get(id) ?? []), { x: d.at.x, y: d.at.y, matrix }]);
+      kinds.set(id, d.kind);
       count += 1;
     }
     for (const [id, placements] of byAsset) {
       const asset = buildAsset(id);
-      if (asset) this.instance(asset, placements, true);
+      const kind = kinds.get(id)!;
+      if (asset) this.instance(asset, placements, !NO_SHADOW.has(kind), FLAT.has(kind));
       await slice();
     }
     this.stats.decor = count;
@@ -361,7 +373,7 @@ export class Neighbourhood {
     }
     // Distance culling (fog hides the edge); the frustum culls the rest.
     const far = VIEW_DISTANCE[this.quality] + 4;
-    for (const { group, centre } of this.chunks.values()) group.visible = Math.hypot(centre.x - focus.x, centre.y - focus.y) < far + CHUNK * 0.75;
+    for (const { group, centre, detail } of this.chunks.values()) group.visible = Math.hypot(centre.x - focus.x, centre.y - focus.y) < (detail ? DETAIL_DISTANCE : far) + CHUNK * 0.75;
     for (const entry of this.buildings) entry.group.visible = Math.hypot(entry.centre.x - focus.x, entry.centre.y - focus.y) < far + 3;
   }
 

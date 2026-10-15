@@ -101,4 +101,8 @@ export function sampleFront(sample: VehicleSample, alpha: number): number {
 /** Body colours of residents' cars (palette index from the simulation) and of bus lines and vans. */
 export const CAR_COLORS = [0xe88b74, 0x5fb0aa, 0xf3efe6, 0x3d464b, 0x8ec5d6, 0xc96f4f, 0xa3bb8c, 0xf1c45f] as const;
 export const LINE_COLORS = [0x2f8f83, 0xd9603f, 0x4a73b8, 0xc4952a, 0x8a5bb0, 0x3f9d4f, 0xc9506e, 0x5a6b78] as const;
+/** Body colour of a vehicle: its car palette index, or its bus line's colour (shared by the City View and the 3D view). */
+export function vehicleColor(vehicle: Vehicle): number {
+  return vehicle.kind === 'car' ? CAR_COLORS[vehicle.color % CAR_COLORS.length]! : LINE_COLORS[vehicle.color % LINE_COLORS.length]!;
+}
 export const lineColorCss = (index: number) => `#${LINE_COLORS[index % LINE_COLORS.length]!.toString(16).padStart(6, '0')}`;

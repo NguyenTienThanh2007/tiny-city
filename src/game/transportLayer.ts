@@ -6,7 +6,7 @@ import { currentArt, type ArtLibrary } from './art/artLibrary';
 import { congestionLevel, networkFor } from '../simulation/transportView';
 import type { LocalBounds } from './npcLayer';
 import {
-  CAR_COLORS, directionFrame, frontOf, LINE_COLORS, lengthOf, nextSample, sampleFront, vehiclePose,
+  directionFrame, vehicleColor, frontOf, LINE_COLORS, lengthOf, nextSample, sampleFront, vehiclePose,
   type VehiclePose, type VehicleSample,
 } from './vehicleMotion';
 
@@ -375,9 +375,7 @@ export class TransportLayer {
   }
 }
 
-export function vehicleColor(vehicle: Vehicle): number {
-  return vehicle.kind === 'car' ? CAR_COLORS[vehicle.color % CAR_COLORS.length]! : LINE_COLORS[vehicle.color % LINE_COLORS.length]!;
-}
+export { vehicleColor };
 function multiply(a: number, b: number): number {
   const c = (shift: number) => Math.round(((a >> shift) & 0xff) * ((b >> shift) & 0xff) / 255);
   return (c(16) << 16) | (c(8) << 8) | c(0);

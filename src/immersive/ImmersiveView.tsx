@@ -116,12 +116,12 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
           <button type="button" className="immersive-return" onClick={exit}><Icon name="layers" size={16} />Return to City</button>
         </div>
       </header>
-      <div className="immersive-card immersive-needs"><NeedBars player={player} compact /></div>
+      <div className="immersive-card immersive-needs"><NeedBars player={player} /></div>
       {props.paused && <div className="immersive-paused" role="status">Time is paused · press Space or Resume to move</div>}
       <div className="immersive-hints" aria-hidden="true">
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
         <span><kbd>Shift</kbd> run</span>
-        <span><Icon name="mouse" size={13} /> {hud?.pointerLocked ? 'look · Esc releases the mouse' : 'drag to look · click to capture the mouse'}</span>
+        <span><Icon name="mouse" size={13} /> {hud?.pointerLocked ? 'look · Esc frees the mouse' : 'drag or click to look'}</span>
         <span>scroll zoom</span>
         <span><kbd>Esc</kbd> menu</span>
       </div>

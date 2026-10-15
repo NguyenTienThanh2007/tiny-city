@@ -86,6 +86,36 @@ function glowMaterial(color: number) {
   return m;
 }
 
+/**
+ * Painted surfaces that differ only in colour share one material: the colour moves into a vertex attribute (it
+ * multiplies the detail map exactly as `material.color` did), so a model's dozens of tints merge into a handful of
+ * draw calls. Glossy physical materials (glass, water) keep their own material.
+ */
+const signatureMaterials = new Map<string, THREE.MeshStandardMaterial>();
+function signature(m: THREE.Material): string | null {
+  if (m.type !== 'MeshStandardMaterial') return null;
+  const s = m as THREE.MeshStandardMaterial;
+  // Roughness and metalness are bucketed (steps of 0.2 / 0.4): at eye level the difference between 0.82 and 0.9
+  // matte paint is invisible, and the buckets halve the draw calls again.
+  const rough = Math.round(s.roughness * 5) / 5, metal = Math.round(s.metalness * 2.5) / 2.5;
+  return [s.map?.uuid ?? '-', rough, metal, s.emissive.getHexString(), s.emissiveIntensity, s.transparent, s.opacity, s.side, s.flatShading, s.envMapIntensity, s.userData.texScale ?? 1].join('|');
+}
+function signatureMaterial(key: string, original: THREE.MeshStandardMaterial) {
+  let m = signatureMaterials.get(key);
+  if (!m) {
+    m = original.clone(); m.color.set(0xffffff); m.vertexColors = true; m.name = `shared ${key}`;
+    const [, rough, metal] = key.split('|');
+    m.roughness = Number(rough); m.metalness = Number(metal);
+    signatureMaterials.set(key, m);
+  }
+  return m;
+}
+function withColor(g: THREE.BufferGeometry, color: THREE.Color) {
+  const n = g.attributes.position!.count, data = new Float32Array(n * 3);
+  for (let i = 0; i < n; i += 1) { data[i * 3] = color.r; data[i * 3 + 1] = color.g; data[i * 3 + 2] = color.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(data, 3));
+}
+
 const isFoliage = (m: THREE.Material) => { const map = (m as THREE.MeshStandardMaterial).map; return !!map && map === detailTexture('leaves'); };
 
 /** Positions, normals and UVs only, non-indexed, transformed into the model root's space. */
@@ -132,6 +162,10 @@ export function buildAsset(id: string): BuiltAsset | null {
     else if (mesh.userData.window && (mesh.userData.lit ?? random() < LIT_SHARE)) { role = 'window'; material = nightMaterials.windows[Math.floor(random() * WARM.length)]!; }
     else if (isFoliage(original)) role = 'foliage';
     const geometry = normalized(mesh);
+    if (role === 'solid' || role === 'foliage') {
+      const sig = signature(original);
+      if (sig) { material = signatureMaterial(sig, original as THREE.MeshStandardMaterial); withColor(geometry, (original as THREE.MeshStandardMaterial).color); }
+    }
     geometry.computeBoundingBox();
     meshBox.copy(geometry.boundingBox!);
     bounds.union(meshBox);

@@ -1587,7 +1587,7 @@ button.funds-chip:hover { background: var(--sand-200); }
 .immersive-save.is-saved { color: var(--forest-500); }
 .immersive-return { background: linear-gradient(180deg, var(--forest-700), var(--forest-900)); color: var(--ivory); border-color: transparent; }
 .immersive-gear { background: var(--glass-strong); }
-.immersive-needs { position: absolute; left: 14px; bottom: 14px; padding: 10px 12px; width: 230px; }
+.immersive-needs { position: absolute; left: 14px; bottom: 14px; padding: 10px 12px; width: 270px; }
 .immersive-paused { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 99px; background: rgba(34, 53, 43, .82); color: var(--ivory); font-size: 13px; font-weight: 600; }
 .immersive-hints { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 8px 14px; border-radius: 99px;
   background: rgba(25, 48, 42, .62); color: rgba(255, 253, 248, .92); font-size: 12px; font-weight: 600; white-space: nowrap; }

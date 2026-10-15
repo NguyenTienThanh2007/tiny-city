@@ -13,6 +13,7 @@ import { disposeAssetCache } from './assetBuilder';
 import { buildCharacter, type CharacterModel } from './characterModel';
 import { Neighbourhood, VIEW_DISTANCE, type NeighbourhoodStats, type Quality } from './neighbourhood';
 import { ResidentLayer } from './residents';
+import { disposeVehicleTemplates, VehicleLayer } from './vehicles';
 
 /**
  * Phase 8A Character View engine: one Three.js renderer and one requestAnimationFrame loop over the authoritative
@@ -63,7 +64,22 @@ export interface ImmersiveDebug {
   pointerLocked: boolean;
   stats: NeighbourhoodStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; fps: number; frameMs: number; p95Ms: number; initMs: number };
   residents: string[];
+  vehicles: string[];
+  /** The character's composed layers (appearance → rig layers), to prove the same character in both views. */
+  character: readonly string[];
   input: MoveInput;
+}
+
+/** Reads the GPU/renderer name from a throwaway context (released at once), e.g. to spot software rendering. */
+function probeRenderer(): string {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2') ?? document.createElement('canvas').getContext('webgl');
+    if (!gl) return 'unavailable';
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return name;
+  } catch { return 'unavailable'; }
 }
 
 const KEYS: Record<string, 'forward' | 'back' | 'left' | 'right' | 'run'> = {
@@ -79,6 +95,7 @@ export class ImmersiveEngine {
   private neighbourhood: Neighbourhood | null = null;
   private character: CharacterModel | null = null;
   private residents = new ResidentLayer();
+  private vehicles: VehicleLayer | null = null;
   private grid: WalkGrid | null = null;
   private controller: ControllerState | null = null;
   private orbit: OrbitState | null = null;
@@ -123,18 +140,18 @@ export class ImmersiveEngine {
 
   async start(): Promise<void> {
     const started = performance.now();
+    // The graphics preset is chosen before the real context exists (antialiasing cannot change afterwards).
+    this.rendererName = probeRenderer();
+    this.quality = resolveQuality(this.settings.quality, this.rendererName);
     try {
-      this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+      this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.quality === 'high', powerPreference: 'high-performance' });
     } catch (error) {
       this.host.onFailure('webgl', `Your browser could not start 3D graphics (${error instanceof Error ? error.message : 'WebGL unavailable'}).`);
       return;
     }
-    const gl = this.renderer.getContext();
-    const info = gl.getExtension('WEBGL_debug_renderer_info');
-    this.rendererName = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-    this.quality = resolveQuality(this.settings.quality, this.rendererName);
     const r = this.renderer;
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality === 'high' ? 2 : 1));
+    // The light preset renders at three-quarter resolution: software renderers are bound by pixels shaded.
+    r.setPixelRatio(this.quality === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : 0.75);
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.05;
@@ -163,7 +180,8 @@ export class ImmersiveEngine {
     if (this.disposed) return;
     const player = world.player!;
     this.character = buildCharacter(lookFromAppearance(player.appearance));
-    neighbourhood.scene.add(this.character.root, this.residents.group);
+    this.vehicles = new VehicleLayer(this.quality === 'high');
+    neighbourhood.scene.add(this.character.root, this.residents.group, this.vehicles.group);
     this.controller = createController(spawn.position, spawn.yaw);
     // The camera starts behind the character, looking the way they face.
     this.orbit = createOrbit(spawn.position, spawn.yaw);
@@ -350,6 +368,7 @@ export class ImmersiveEngine {
     this.character.root.rotation.y = c.yaw;
     this.character.pose({ moving, stride, runBlend, time: this.time });
     this.residents.sync(world, c.position, paused ? 0 : dt, this.time);
+    this.vehicles?.sync(world, c.position);
     const frameOrbit = updateOrbit(this.orbit, c.position, dt, this.neighbourhood.solids, { reducedMotion: this.host.reducedMotion });
     this.orbit = frameOrbit.state;
     this.camera.position.set(frameOrbit.position.x, frameOrbit.position.y, frameOrbit.position.z);
@@ -391,7 +410,7 @@ export class ImmersiveEngine {
       commits: this.commits, rejected: this.rejected, pointerLocked: document.pointerLockElement === this.canvas,
       stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
         fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs },
-      residents: this.residents.ids(), input,
+      residents: this.residents.ids(), vehicles: this.vehicles?.ids() ?? [], character: this.character?.layers ?? [], input,
     };
     (window as unknown as { __tinyCityImmersive?: ImmersiveDebug }).__tinyCityImmersive = debug;
     // Development builds expose the live scene for inspection in the browser console.
@@ -405,6 +424,8 @@ export class ImmersiveEngine {
     if (document.pointerLockElement === this.canvas) document.exitPointerLock?.();
     this.character?.dispose();
     this.residents.dispose();
+    this.vehicles?.dispose();
+    disposeVehicleTemplates();
     this.neighbourhood?.dispose();
     disposeAssetCache();
     this.environment?.dispose();
