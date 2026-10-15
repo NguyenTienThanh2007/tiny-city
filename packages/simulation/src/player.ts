@@ -32,6 +32,8 @@ export const PLAYER_LIMITS = Object.freeze({
   interactionBreakRange: 3.5,
   /** Re-route toward a moving resident when their position drifts this far from the route goal. */
   retargetDistance: 3,
+  /** Phase 8A direct control: the longest single `player.walk` step (tiles). Clients send several short steps. */
+  walkStep: 1,
 });
 
 /**
@@ -234,6 +236,48 @@ function movementFor(plan: { route: readonly Position[]; enter: string | null },
     destinationBuildingId: plan.enter, route: plan.route, nextWaypoint: 1, plannedRevision: revision };
 }
 
+/** Tiles a straight segment passes through (grid traversal; a segment through a tile corner also counts both side tiles). */
+function tilesAlong(from: Position, to: Position): Position[] {
+  const tiles: Position[] = [];
+  let x = Math.floor(from.x), y = Math.floor(from.y);
+  const endX = Math.floor(to.x), endY = Math.floor(to.y);
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const stepX = Math.sign(dx), stepY = Math.sign(dy);
+  const deltaX = stepX === 0 ? Infinity : Math.abs(1 / dx), deltaY = stepY === 0 ? Infinity : Math.abs(1 / dy);
+  let maxX = stepX === 0 ? Infinity : (stepX > 0 ? x + 1 - from.x : from.x - x) * deltaX;
+  let maxY = stepY === 0 ? Infinity : (stepY > 0 ? y + 1 - from.y : from.y - y) * deltaY;
+  tiles.push({ x, y });
+  for (let guard = 0; (x !== endX || y !== endY) && guard < 64; guard += 1) {
+    if (Math.abs(maxX - maxY) < 1e-12) {
+      tiles.push({ x: x + stepX, y }, { x, y: y + stepY });
+      x += stepX; y += stepY; maxX += deltaX; maxY += deltaY;
+    } else if (maxX < maxY) { x += stepX; maxX += deltaX; } else { y += stepY; maxY += deltaY; }
+    tiles.push({ x, y });
+  }
+  return tiles;
+}
+
+/**
+ * Phase 8A: whether direct (third-person) control may move the player to `to` right now; null when allowed.
+ * Walkable ground is exactly what routes use: road tiles, plus the building the player is using (its entrance leg).
+ * From inside a building the first step goes out through its door onto one of its road access tiles. The renderer
+ * calls this too, so its collision never disagrees with the simulation.
+ */
+export function playerWalkCheck(world: WorldState, nav: RoadNavigator, to: Position): LifeRejectionReason | null {
+  const player = world.player;
+  if (!player) return 'player-not-found';
+  if (!isPlayerPlaced(player)) return 'not-placed';
+  if (!to || !Number.isFinite(to.x) || !Number.isFinite(to.y) || to.x < 0 || to.y < 0 || to.x >= world.plan.width || to.y >= world.plan.height) return 'invalid-destination';
+  const m = player.movement, target = tileOf(to);
+  if (m.status === 'inside') return nav.getAccessPoints(m.currentBuildingId ?? '').some((p) => p.x === target.x && p.y === target.y) ? null : 'not-walkable';
+  if (distance(player.position, to) > PLAYER_LIMITS.walkStep + 1e-9) return 'step-too-long';
+  for (const tile of tilesAlong(player.position, to)) {
+    const cell = nav.grid.get(tile);
+    if (!(cell?.type === 'road' || cell?.type === 'building' && cell.buildingId === m.currentBuildingId)) return 'not-walkable';
+  }
+  return null;
+}
+
 type Change = { state: WorldState; events: SimulationEvent[] };
 type Applied = { readonly state: WorldState; readonly events: readonly SimulationEvent[]; readonly reason: LifeRejectionReason | null };
 
@@ -420,6 +464,26 @@ export function applyLifeCommand(world: WorldState, command: LifeCommand, nav: R
         next = { ...next, activity: resolved.activity, movement: movementFor(plan as { route: readonly Position[]; enter: string | null }, next, revision) };
         events.push({ type: 'player.activity-started', tick, activity: resolved.activity.kind, phase: 'travelling', buildingId: resolved.activity.buildingId, citizenId: resolved.activity.citizenId });
       }
+      return { state: withPlayer(world, next), events, reason: null };
+    }
+    case 'player.walk': {
+      if (!player) return reject('player-not-found');
+      const raw = command.position;
+      const to = raw && Number.isFinite(raw.x) && Number.isFinite(raw.y) ? { x: round(raw.x), y: round(raw.y) } : raw;
+      const reason = playerWalkCheck(world, nav, to);
+      if (reason) return reject(reason);
+      const m = player.movement;
+      if (m.status === 'standing' && player.activity.kind === 'idle' && player.position.x === to.x && player.position.y === to.y) return { state: world, events, reason: null };
+      // Direct control replaces any route or activity, exactly like choosing a new destination.
+      let next = finish(world, player, 'cancelled', null, events);
+      const cell = nav.grid.get(tileOf(to));
+      // Walking tires the character just as routed walking does (energy per tile at the routed walking speed).
+      const walked = m.status === 'inside' ? 0 : distance(player.position, to);
+      const energy = clamp(next.needs.energy - walked * PLAYER_BALANCE.walkingEnergy / PLAYER_BALANCE.walkingSpeed);
+      if (needLevel(energy) !== needLevel(next.needs.energy)) {
+        events.push({ type: 'player.need-changed', tick, need: 'energy', level: needLevel(energy), previous: needLevel(next.needs.energy), value: energy });
+      }
+      next = { ...next, position: to, needs: { ...next.needs, energy }, movement: standing(cell?.type === 'building' ? cell.buildingId : null, revision) };
       return { state: withPlayer(world, next), events, reason: null };
     }
     default:

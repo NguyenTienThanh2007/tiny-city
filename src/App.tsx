@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, TRANSPORT, validateRoadPlacement, VENUES, visitorCapacity } from '@tiny-city/simulation';
 import type { CityEventKind, EconomyPolicy, LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
@@ -38,6 +38,12 @@ import { BuildingEconomyCard, CitizenEconomyCard, PlanEconomyCard } from './ui/E
 import { SocialCard, SocietyOverviewCard, VenueCard } from './ui/SocialCards';
 import { alertText, buildingEconomy, citizenEconomy, economyOverview, planEconomy, signedMoney } from './simulation/economyView';
 import { ConnectionBadge, isRecoverablePlannerError, PlannerRecovery, type ConnectionView } from './ui/PlannerConnection';
+import { buildWalkGrid } from './immersive/collision';
+import { resolveSpawn, SPAWN_FAILURE_TEXT, type SpawnFailure } from './immersive/spawn';
+import { planDecor } from './game/worldDecor';
+
+/** Phase 8A Character View (Three.js), loaded only when the player enters the 3D world. */
+const ImmersiveView = lazy(() => import('./immersive/ImmersiveView'));
 import { rejectionFeedback } from './simulation/feedback';
 import { loadCitySave, saveCity } from './simulation/citySave';
 import { useCitySimulation } from './simulation/useCitySimulation';
@@ -442,6 +448,8 @@ function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (window.location.pathname !== '/') return;
+      // Phase 8A: the Character View owns the keyboard while it is open.
+      if (immersiveRef.current) return;
       const target = event.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
       const key = event.key.toLowerCase();
@@ -918,6 +926,38 @@ function App() {
     if (lifeReady) { if (cameraViewRef.current !== 'life') showLifeView(); }
     else if (cameraViewRef.current === 'life') showCityView();
   }, [lifeReady, showLifeView, showCityView]);
+
+  // ---------- Phase 8A Character View ----------
+  // One world, one character, one simulation: the 3D view reads the same live WorldState, feeds the same clock and
+  // moves the character only through validated `player.walk` commands. The City View stays mounted underneath.
+  const [immersive, setImmersive] = useState(false);
+  const immersiveRef = useRef(false);
+  immersiveRef.current = immersive;
+  const [worldGate, setWorldGate] = useState<SpawnFailure | 'touch' | null>(null);
+  const immersiveYawRef = useRef<number | null>(null);
+  const reducedMotion = useMemo(() => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
+  const buildingDesigns = useMemo(() => new Map(city.buildings.flatMap((b) => b.design ? [[b.id, b.design] as const] : [])), [city.buildings]);
+  const enterWorld = useCallback(() => {
+    const media = (query: string) => typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+    if (media('(any-pointer: coarse)') && !media('(any-pointer: fine)')) { setWorldGate('touch'); return; }
+    const live = getSnapshot();
+    const spawn = resolveSpawn(live, getNavigator(), buildWalkGrid(live.plan, planDecor(live.plan)), immersiveYawRef.current);
+    if (!spawn.ok) { setWorldGate(spawn.reason); return; }
+    setWorldGate(null); setSelectedBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setSelectedVehicleId(null); setFollowVehicleId(null);
+    setImmersive(true);
+  }, [getSnapshot, getNavigator]);
+  const leaveWorld = useCallback((yaw: number | null) => {
+    immersiveYawRef.current = yaw;
+    setImmersive(false);
+    // Back in the City View, frame the character exactly where the 3D view left them.
+    if (baseModeRef.current === 'life') showLifeView(); else requestCamera({ action: 'focus-player' });
+  }, [showLifeView, requestCamera]);
+  const immersiveWalk = useCallback((position: { x: number; y: number }) => {
+    const result = executeLife({ type: 'player.walk', position });
+    if (result.applied) setSaved(false);
+    return result.applied;
+  }, [executeLife]);
+  const immersiveFailure = useCallback((message: string) => { setImmersive(false); showNotice(message, 'warn'); }, [showNotice]);
   useEffect(() => subscribe((events: readonly SimulationEvent[], state: WorldState) => {
     const next = reducePlayerLog(playerLogRef.current, events, state);
     if (next !== playerLogRef.current) { playerLogRef.current = next; setPlayerLog(next); }
@@ -1205,9 +1245,11 @@ function App() {
     : `Click an open lot to place a ${BUILDINGS[tool].label.toLowerCase()}`;
 
   return (
-    <main className={`app-shell mode-${mode} ${compact ? 'is-compact' : ''} ${panelHidden ? 'panel-collapsed' : ''}`}>
+    <><main className={`app-shell mode-${mode} ${compact ? 'is-compact' : ''} ${panelHidden ? 'panel-collapsed' : ''} ${immersive ? 'is-immersive' : ''}`}
+      inert={immersive || undefined} aria-hidden={immersive || undefined}>
       <section className="map-stage" ref={stageRef}>
         <CityViewport
+          suspended={immersive}
           city={city}
           world={world}
           getWorld={getSnapshot}
@@ -1285,6 +1327,10 @@ function App() {
           <div className="hud-stat" title="Home buildings"><Icon name="home" size={15} /><strong>{villas}</strong><small>Homes</small></div>
         </div>
         <div className="top-actions">
+          {/* Phase 8A: the third-person Character View. It lives in the top bar so it never covers the map. */}
+          <button type="button" className="enter-world" aria-label="Enter World" onClick={enterWorld}
+            title={playerPlaced ? `Walk ${player?.name ?? 'your character'} through the neighbourhood in 3D` : player ? `${player.name} needs a home first` : 'Create a character to walk the neighbourhood in 3D'}>
+            <Icon name="cube" size={15} /><span>Enter World</span></button>
           <button className="icon-button" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!history.length}><Icon name="undo" /></button>
           <button className="icon-button" aria-label="Redo" title="Redo (⌘⇧Z)" onClick={redo} disabled={!redoHistory.length}><Icon name="redo" /></button>
           {auth.status === 'authenticated' && <button className="cloud-button" onClick={openCloudSaves} title="Manage account cloud cities">Cloud</button>}
@@ -1611,7 +1657,29 @@ function App() {
           setBaseMode('life'); setArchitectPanelOpen(false); setSelectedCitizenId(null);
           if (panelCollapsed) togglePanel(false);
         }} />}
+      {worldGate && <div className="world-gate" role="dialog" aria-modal="true" aria-labelledby="world-gate-title">
+        <div className="world-gate-card">
+          <Icon name="cube" size={22} />
+          <h2 id="world-gate-title">{worldGate === 'touch' ? 'The 3D world needs a keyboard and mouse' : SPAWN_FAILURE_TEXT[worldGate].title}</h2>
+          <p>{worldGate === 'touch' ? 'Walking in 3D uses W A S D and the mouse or trackpad. Touch controls are not available yet; on this device keep playing in the City View.' : SPAWN_FAILURE_TEXT[worldGate].body}</p>
+          <div className="world-gate-actions">
+            {(worldGate === 'no-character' || worldGate === 'no-home') && <button type="button" className="approve-plan" onClick={() => {
+              const reason = worldGate;
+              setWorldGate(null); chooseMode('life');
+              if (reason === 'no-character') openCreator();
+              else setLifeFlow({ step: 'home', draft: null, purpose: 'create', selectedId: null });
+            }}>{SPAWN_FAILURE_TEXT[worldGate].action}</button>}
+            <button type="button" onClick={() => setWorldGate(null)}>{worldGate === 'stranded' || worldGate === 'touch' ? 'Back to the city' : 'Not now'}</button>
+          </div>
+        </div>
+      </div>}
     </main>
+    {immersive && <Suspense fallback={<div className="immersive immersive-loading" role="status"><div className="immersive-loading-card"><strong>Entering the world</strong><span>Loading the 3D engine…</span></div></div>}>
+      <ImmersiveView world={world} getWorld={getSnapshot} getNavigator={getNavigator} designs={buildingDesigns} advance={advanceSimulation} walk={immersiveWalk}
+        initialYaw={immersiveYawRef.current} day={`DAY ${gameDay}`} clock={gameClock} paused={world.clock.paused} saved={saved} reducedMotion={reducedMotion}
+        onTogglePause={() => { togglePause(); setSaved(false); }} onSave={save} onExit={leaveWorld} onFailure={immersiveFailure} />
+    </Suspense>}
+    </>
   );
 }
 

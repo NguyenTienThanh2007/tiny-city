@@ -37,7 +37,7 @@ export { RoadNavigator, NPC_LIMITS, buildingCenter, containsPosition } from './n
 export type { NavigationStats, RouteResult } from './navigation.js';
 export { createDailyRoutine, providesJobs, providesLeisure } from './population.js';
 export { PLAYER_ID, PLAYER_APPEARANCE_OPTIONS, PLAYER_BALANCE, PLAYER_LIMITS, applyLifeCommand, housingSummary, isPlayerAppearance,
-  isPlayerPlaced, needLevel, normalizePlayerName, playerActionAvailability, playerHomeOptions } from './player.js';
+  isPlayerPlaced, needLevel, normalizePlayerName, playerActionAvailability, playerHomeOptions, playerWalkCheck } from './player.js';
 export type { HomeOption, HousingSummary, PlayerActionAvailability } from './player.js';
 export { TRANSPORT } from './transportConfig.js';
 export { TransportNetwork, DIRECTIONS, STEP, decodePath, encodePath, directionBetween, laneKey, movementMask } from './transportGraph.js';

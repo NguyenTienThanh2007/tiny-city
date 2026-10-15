@@ -1550,3 +1550,64 @@ button.funds-chip:hover { background: var(--sand-200); }
   .trait-list div { grid-template-columns: 92px 1fr; }
   .trait-list dd { grid-template-columns: 1fr 80px; }
 }
+
+/* ---------- Phase 8A: Character View (third-person 3D) ---------- */
+.enter-world {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 13px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; color: var(--ivory); font: 700 13px/1 var(--font-ui); white-space: nowrap; cursor: pointer;
+  background: linear-gradient(180deg, var(--forest-700), var(--forest-900)); box-shadow: var(--shadow-sm); transition: transform .15s var(--ease), box-shadow .15s var(--ease);
+}
+.enter-world:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.enter-world:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+@media (max-width: 1180px) { .enter-world span { display: none; } .enter-world { width: 36px; padding: 0; } }
+/* Phones: the Character View needs a keyboard and a mouse or trackpad (touch controls are not part of Phase 8A). */
+@media (max-width: 760px) { .enter-world { display: none; } }
+.app-shell.is-immersive .city-viewport { visibility: hidden; }
+
+.immersive { position: fixed; inset: 0; z-index: 80; background: #cfe3ee; color: var(--ink); font-family: var(--font-ui); overflow: hidden; }
+.immersive-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; cursor: grab; }
+.immersive-canvas:active { cursor: grabbing; }
+.immersive-loading { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #f6efe2, #d7e6ea 70%); }
+.immersive-loading-card { display: grid; justify-items: center; gap: 8px; padding: 26px 34px; border-radius: var(--radius-lg); background: var(--glass-strong); box-shadow: var(--shadow-lg); color: var(--forest-800); min-width: 280px; }
+.immersive-loading-card strong { font: 600 20px/1.2 var(--font-display); }
+.immersive-loading-card span { color: var(--muted); font-size: 13px; }
+.immersive-progress { width: 220px; height: 6px; border-radius: 99px; background: var(--sage-100); overflow: hidden; }
+.immersive-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--sea), var(--forest-500)); transition: width .25s var(--ease); }
+.immersive-card { background: rgba(255, 253, 248, .86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, .7); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.immersive-top { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; align-items: flex-start; gap: 10px; pointer-events: none; }
+.immersive-top > * { pointer-events: auto; }
+.immersive-identity { display: grid; gap: 2px; padding: 10px 14px; min-width: 200px; max-width: 320px; }
+.immersive-name { font: 600 18px/1.2 var(--font-display); color: var(--forest-900); }
+.immersive-status { font-size: 12px; color: var(--ink-soft); }
+.immersive-motion { justify-self: start; margin-top: 4px; padding: 3px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; background: var(--sage-100); color: var(--forest-700); }
+.immersive-motion.is-running { background: var(--terracotta-100); color: var(--terracotta-600); }
+.immersive-motion.is-inside, .immersive-motion.is-travelling { background: var(--sand-100); color: #7b5b22; }
+.immersive-clock { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; margin-left: auto; font: 700 13px/1 var(--font-ui); letter-spacing: .04em; color: var(--forest-800); }
+.immersive-actions { display: flex; align-items: center; gap: 8px; }
+.immersive-save, .immersive-return, .immersive-menu-actions button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 8px 14px; border-radius: var(--radius-sm); font: 700 13px/1 var(--font-ui); cursor: pointer; border: 1px solid var(--line-strong); background: var(--glass-strong); color: var(--forest-800); box-shadow: var(--shadow-sm); }
+.immersive-save.is-saved { color: var(--forest-500); }
+.immersive-return { background: linear-gradient(180deg, var(--forest-700), var(--forest-900)); color: var(--ivory); border-color: transparent; }
+.immersive-gear { background: var(--glass-strong); }
+.immersive-needs { position: absolute; left: 14px; bottom: 14px; padding: 10px 12px; width: 270px; }
+.immersive-paused { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 99px; background: rgba(34, 53, 43, .82); color: var(--ivory); font-size: 13px; font-weight: 600; }
+.immersive-hints { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 8px 14px; border-radius: 99px;
+  background: rgba(25, 48, 42, .62); color: rgba(255, 253, 248, .92); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.immersive-hints span { display: inline-flex; align-items: center; gap: 4px; }
+.immersive-hints kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px; background: rgba(255, 253, 248, .16); border: 1px solid rgba(255, 253, 248, .28); font: 700 11px/1 var(--font-ui); }
+.immersive-menu, .world-gate { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(25, 48, 42, .35); backdrop-filter: blur(3px); }
+.immersive-menu-card, .world-gate-card { display: grid; gap: 14px; width: min(380px, calc(100vw - 32px)); padding: 22px; border-radius: var(--radius-lg); background: var(--glass-strong); box-shadow: var(--shadow-lg); color: var(--ink); }
+.immersive-menu-card h2, .world-gate-card h2 { margin: 0; font: 600 20px/1.2 var(--font-display); color: var(--forest-900); }
+.world-gate-card p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
+.world-gate-card > svg { color: var(--forest-500); }
+.world-gate-actions, .immersive-menu-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.world-gate-actions button:not(.approve-plan) { min-height: 38px; padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--paper); font: 700 13px/1 var(--font-ui); color: var(--forest-800); cursor: pointer; }
+.immersive-field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.immersive-field small { font-weight: 500; color: var(--muted); }
+.immersive-field select { min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--paper); padding: 0 8px; font: 600 13px var(--font-ui); }
+.immersive-check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+@media (max-width: 760px) {
+  .immersive-hints { display: none; }
+  .immersive-top { flex-wrap: wrap; }
+  .immersive-clock { margin-left: 0; }
+}
+.immersive-stage { position: absolute; inset: 0; }

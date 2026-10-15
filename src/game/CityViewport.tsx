@@ -130,6 +130,8 @@ type Props = {
   /** Phase 6 bus-line editor: clicks pick road tiles as stops instead of selecting; picked stops are marked. */
   onPickStopTile?: (cell: Cell) => void;
   draftStops?: readonly Cell[];
+  /** Phase 8A: the Character View is open. The Pixi ticker stops (the 3D view drives the one simulation clock). */
+  suspended?: boolean;
 };
 export type TargetHighlight = { id: string; tone: 'candidate' | 'selected' | 'remove' | 'move' };
 const TARGET_TONES: Record<TargetHighlight['tone'], [number, number]> = {
@@ -635,6 +637,14 @@ export default function CityViewport(props: Props) {
     if (props.cameraRequest) cameraRef.current?.(props.cameraRequest);
   }, [props.cameraRequest]);
 
+  // Phase 8A: never two frame drivers. While the Character View is open the City View neither renders nor advances
+  // the simulation; it resumes exactly where it was.
+  useEffect(() => {
+    const app = appRef.current;
+    if (!app) return;
+    if (props.suspended) app.ticker.stop(); else app.ticker.start();
+  }, [props.suspended]);
+
   const safe = props.safeArea ?? NO_SAFE_AREA;
   useEffect(() => { safeAreaRef.current?.(); }, [safe.left, safe.right, safe.top, safe.bottom]);
 
@@ -656,6 +666,7 @@ export default function CityViewport(props: Props) {
       });
       if (disposed) { app.destroy(true); return; }
       appRef.current = app;
+      if (propsRef.current.suspended) app.ticker.stop();
       app.canvas.className = 'city-canvas';
       host.appendChild(app.canvas);
 

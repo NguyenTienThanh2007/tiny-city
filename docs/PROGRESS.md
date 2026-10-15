@@ -204,4 +204,17 @@ road tiles, integer movement, junction reservations, congestion from lost progre
 - [x] M4 city calendar, player events, capacity, attendance, cancellation, event costs
 - [x] M5 baked venue art, venue crowds and lights, resident/venue/society UI, feed, spread hiring
 - [x] M6 Life Mode venues (visit, eat out, events), AI Architect venue types (EN/VI, entertainment district)
-- [ ] M7 benchmarks, captures, docs, full e2e, PR and GitHub Actions
+- [x] M7 benchmarks, captures, docs, full e2e, PR #24 and GitHub Actions (merged as `45bbea7`)
+
+## Phase 8A immersive third-person Character View (branch `feature/p8a-immersive-third-person`, from `origin/main` @ `45bbea7`)
+
+Docs: `docs/phase-8a-immersive/`. A Three.js Character View over the same live world; movement through the validated
+`player.walk` command; the bake's procedural models built in real time.
+
+- [x] M1 audit, hybrid renderer boundary, coordinate convention and tests, `player.walk` in the simulation
+- [x] M2 real 3D neighbourhood: roads, sidewalks, villas (exact City View models), landscaping, sea, sky and lighting
+- [x] M3 character from the bake rig and appearance mapping, WASD/run controller, animation, collision
+- [x] M4 orbit camera: follow, orbit, zoom, limits, obstruction, pointer lock, settings
+- [x] M5 Enter World / Return to City, spawn and recovery, authority bridge, save/load, nearby residents and vehicles
+- [x] M6 draw-call reduction, light preset, shader warm-up, leak fixes (per-step world clone, renderer retention)
+- [x] M7 unit + browser acceptance, screenshots and videos, benchmarks, docs, PR #25 (CI on the final commit)

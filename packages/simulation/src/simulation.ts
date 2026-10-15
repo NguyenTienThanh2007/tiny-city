@@ -1,13 +1,13 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
 import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, EconomyCommand, EconomyCommandResult, EconomyOptions, EconomyRejectionReason, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, SocietyCommand, SocietyCommandResult, TransportCommand, TransportCommandResult, WorldCommand, WorldState } from './types.js';
-import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
+import { cloneWorld, freeze, isPositionInPlan, validatePlayerOnly, validateSchedule, validateWorld } from './world.js';
 import { applyCityCommand, applyCityCommandBatch, copyCityCommand } from './cityCommands.js';
 import { compareTiles, OccupancyGrid } from './grid.js';
 import { RoadGraph } from './roads.js';
 import { buildingCenter, RoadNavigator } from './navigation.js';
 import { initializePopulation, insideMovement, providesLeisure, reconcilePopulation } from './population.js';
 import { advanceDailyLife, scheduledEntry } from './life.js';
-import { advancePlayer, applyLifeCommand, reconcilePlayer } from './player.js';
+import { advancePlayer, applyLifeCommand, clonePlayer, reconcilePlayer } from './player.js';
 import { restoreConstruction } from './budget.js';
 import { createEconomy, isValidPolicy, recordVisit, settleEconomyDay } from './economy.js';
 import { applyTransportCommand, createTransport, reconcileTransport, TripPlanner } from './transport.js';
@@ -170,8 +170,17 @@ export class Simulation {
   executeLife(command: LifeCommand): LifeCommandResult {
     const change = applyLifeCommand(this.state, command, this.getNavigator());
     if (change.reason === null && change.state !== this.state) {
-      validateWorld(change.state);
-      this.state = freeze(cloneWorld(change.state));
+      // Life commands change only the player. Everything else keeps its identity (no deep clone of the city), so
+      // plan-keyed indexes, the road navigator and renderers' caches stay valid; Phase 8A sends several steps a second.
+      const next = change.state, keys = Object.keys(next) as (keyof WorldState)[];
+      const playerOnly = next.player !== undefined && keys.length === Object.keys(this.state).length && keys.every((key) => key === 'player' || next[key] === this.state[key]);
+      if (playerOnly) {
+        validatePlayerOnly(next);
+        this.state = freeze({ ...this.state, player: clonePlayer(next.player!) });
+      } else {
+        validateWorld(next);
+        this.state = freeze(cloneWorld(next));
+      }
     }
     return freeze({ state: this.state, events: change.events, steps: 0, applied: change.reason === null, reason: change.reason,
       alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
