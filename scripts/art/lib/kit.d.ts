@@ -1,0 +1,10 @@
+import type { Material, MeshStandardMaterial, MeshPhysicalMaterial, Object3D, Mesh } from 'three';
+export const PALETTE: Readonly<Record<string, number>>;
+export function mat(color: number, options?: { rough?: number; metal?: number; emissive?: number; flat?: boolean; tex?: string | null; texScale?: number }): MeshStandardMaterial;
+export function waterMat(color?: number): MeshPhysicalMaterial;
+export function lawnMat(color?: number): MeshStandardMaterial;
+export function pavingMat(color?: number): MeshStandardMaterial;
+export function rng(seed: number): () => number;
+export function box(parent: Object3D, x: number, y: number, z: number, w: number, h: number, d: number, material: Material, radius?: number): Mesh;
+export function cylinder(parent: Object3D, x: number, y: number, z: number, radiusTop: number, radiusBottom: number, h: number, material: Material, segments?: number): Mesh;
+export function sphere(parent: Object3D, x: number, y: number, z: number, radius: number, material: Material, detail?: number): Mesh;
