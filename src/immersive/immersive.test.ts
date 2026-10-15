@@ -144,6 +144,15 @@ describe('walkable ground and collision', () => {
       for (let i = 0; i < 900; i += 1) s = advanceController(s, { forward: 1, right: 0, run: false }, Math.PI / 2, 1 / 60, posts);
       expect(s.position.x).toBeGreaterThan(9.5);
     }
+    // Strafing along a lot edge past a curb lamp (the lamp stands between the character and the wall): it slides by.
+    const lamp = buildWalkGrid(plan, [{ kind: 'lamp', tile: { x: 8, y: 5 }, at: { x: 8.5, y: 5.92 }, variant: 0, size: 1 }]);
+    let s = createController({ x: 9.6, y: 5.86 }, -Math.PI / 2);
+    for (let i = 0; i < 900; i += 1) {
+      s = advanceController(s, { forward: 0, right: 1, run: true }, 0, 1 / 60, lamp);
+      // Never faster than running, even while sliding around the post.
+      expect(Math.hypot(s.velocity.x, s.velocity.y)).toBeLessThanOrEqual(MOVEMENT.runSpeed + 1e-6);
+    }
+    expect(s.position.x).toBeLessThan(7.5);
   });
 
   it('every position the controller reaches is accepted by the simulation walk check', () => {

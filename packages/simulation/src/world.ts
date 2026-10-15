@@ -203,6 +203,9 @@ export function cloneWorld(world: WorldState): WorldState {
 }
 
 /** Runtime immutability mirrors the readonly public interfaces. */
+/** Validates only the player against an otherwise already-valid world (Life commands change nothing else). */
+export function validatePlayerOnly(world: WorldState): void { validatePlayer(world, assert); }
+
 export function freeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freeze(child);

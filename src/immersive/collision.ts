@@ -79,7 +79,7 @@ function pushOutOfBox(x: number, y: number, r: number, minX: number, minY: numbe
   return { x, y: maxY + r };
 }
 
-function resolve(grid: WalkGrid, p: Position, r: number): Position {
+function resolve(grid: WalkGrid, p: Position, r: number, motion: Position | null = null): Position {
   let { x, y } = p;
   for (let iteration = 0; iteration < 4; iteration += 1) {
     let moved = false;
@@ -100,11 +100,14 @@ function resolve(grid: WalkGrid, p: Position, r: number): Position {
           const dx = x - o.x, dy = y - o.y, d = Math.hypot(dx, dy), min = r + o.r;
           if (d < min) {
             let ux = d > 1e-9 ? dx / d : 1, uy = d > 1e-9 ? dy / d : 0;
-            // Head-on into a post: lean the push slightly toward the middle of the tile (the street side), so the
-            // character slides around it instead of stopping dead. Deterministic.
-            const cx = Math.floor(o.x) + 0.5, cy = Math.floor(o.y) + 0.5;
-            if (Math.abs(uy) < 0.05 && Math.abs(ux) > 0.9) { uy += 0.12 * (Math.sign(cy - o.y) || 1); }
-            else if (Math.abs(ux) < 0.05 && Math.abs(uy) > 0.9) { ux += 0.12 * (Math.sign(cx - o.x) || 1); }
+            // Walking straight into a post: lean the push sideways (perpendicular to the motion, toward the middle
+            // of the tile), so the character slides around it instead of stopping dead. Deterministic.
+            if (motion && ux * motion.x + uy * motion.y < -0.97) {
+              let lx = -motion.y, ly = motion.x;
+              const cx = Math.floor(o.x) + 0.5 - o.x, cy = Math.floor(o.y) + 0.5 - o.y;
+              if (lx * cx + ly * cy < 0) { lx = -lx; ly = -ly; }
+              ux += lx * 0.15; uy += ly * 0.15;
+            }
             const n = Math.hypot(ux, uy);
             x = o.x + (ux / n) * min; y = o.y + (uy / n) * min; moved = true;
           }
@@ -129,7 +132,11 @@ export function moveCircle(grid: WalkGrid, from: Position, delta: Position, r: n
   let p = from, blocked = false;
   for (let i = 0; i < steps; i += 1) {
     const wanted = { x: p.x + delta.x / steps, y: p.y + delta.y / steps };
-    const next = resolve(grid, wanted, r);
+    const motion = length > 1e-9 ? { x: delta.x / length, y: delta.y / length } : null;
+    let next = resolve(grid, wanted, r, motion);
+    // Sliding never covers more ground than was asked for: speed limits hold even around obstacles.
+    const step = length / steps, moved = Math.hypot(next.x - p.x, next.y - p.y);
+    if (moved > step + 1e-12) next = resolve(grid, { x: p.x + (next.x - p.x) * step / moved, y: p.y + (next.y - p.y) * step / moved }, r, motion);
     if (Math.abs(next.x - wanted.x) + Math.abs(next.y - wanted.y) > 1e-9) blocked = true;
     if (!isWalkablePoint(grid, next)) return { position: p, blocked: true };
     p = next;

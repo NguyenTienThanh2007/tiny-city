@@ -13,7 +13,7 @@ import { disposeAssetCache } from './assetBuilder';
 import { buildCharacter, type CharacterModel } from './characterModel';
 import { Neighbourhood, VIEW_DISTANCE, type NeighbourhoodStats, type Quality } from './neighbourhood';
 import { ResidentLayer } from './residents';
-import { disposeVehicleTemplates, VehicleLayer } from './vehicles';
+import { disposeVehicleTemplates, VehicleLayer, vehicleWarmup } from './vehicles';
 
 /**
  * Phase 8A Character View engine: one Three.js renderer and one requestAnimationFrame loop over the authoritative
@@ -207,6 +207,14 @@ export class ImmersiveEngine {
     this.character = buildCharacter(lookFromAppearance(player.appearance));
     this.vehicles = new VehicleLayer(this.quality === 'high');
     neighbourhood.scene.add(this.character.root, this.residents.group, this.vehicles.group);
+    // Compile every shader the session can need now (scene, vehicles, a resident's look), not mid-walk.
+    const warm = vehicleWarmup();
+    warm.position.set(spawn.position.x, -5, spawn.position.y);
+    neighbourhood.scene.add(warm);
+    neighbourhood.update(getGameTime(world.clock).minuteOfDay, spawn.position, this.camera.position);
+    await this.renderer.compileAsync(neighbourhood.scene, this.camera);
+    neighbourhood.scene.remove(warm);
+    if (this.disposed) return;
     this.controller = createController(spawn.position, spawn.yaw);
     // The camera starts behind the character, looking the way they face.
     this.orbit = createOrbit(spawn.position, spawn.yaw);

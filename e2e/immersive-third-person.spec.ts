@@ -289,7 +289,8 @@ test('switching views repeatedly releases the 3D view each time, and the City Vi
   test.setTimeout(process.env.CI ? 420_000 : 180_000);
   const errors = await openCity(page, lmSave());
   const cdp = await page.context().newCDPSession(page);
-  const heap = async () => { await cdp.send('HeapProfiler.collectGarbage'); return page.evaluate(() => (performance as unknown as { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize); };
+  // Precise heap after a forced GC (performance.memory is bucketed in Chrome, so it could not show growth).
+  const heap = async () => { await cdp.send('HeapProfiler.collectGarbage'); return (await cdp.send('Runtime.getHeapUsage')).usedSize; };
   const samples: { heap: number; geometries: number; textures: number }[] = [];
   // O. Five round trips: each entry builds the same scene, each return removes the canvas and frees the renderer.
   for (let i = 0; i < 5; i += 1) {

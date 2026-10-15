@@ -99,6 +99,18 @@ export class VehicleLayer {
   dispose() { this.clear(); }
 }
 
+/**
+ * One mesh of every vehicle model and paint kind, for compiling their shaders while the view loads (otherwise the
+ * first car to drive into view would stall a frame compiling its glossy paint).
+ */
+export function vehicleWarmup(): THREE.Group {
+  const group = new THREE.Group();
+  for (const model of Object.keys(VEHICLE_MODELS) as VehicleModel[]) {
+    for (const part of template(model).parts) group.add(new THREE.Mesh(part.geometry, part.body ? paint(part.material, 0xffffff) : part.material));
+  }
+  return group;
+}
+
 /** Frees the shared vehicle models (called when the Character View closes). */
 export function disposeVehicleTemplates() {
   for (const t of templates.values()) for (const p of t.parts) p.geometry.dispose();

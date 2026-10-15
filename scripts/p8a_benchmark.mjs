@@ -63,7 +63,8 @@ async function enter(page) {
   await page.waitForFunction(() => window.__tinyCityImmersive?.ready === true && document.querySelector('.immersive')?.getAttribute('data-ready') === 'ready', null, { timeout: 90_000 });
   return Date.now() - started;
 }
-async function heap(page, cdp) { await cdp.send('HeapProfiler.collectGarbage'); return page.evaluate(() => performance.memory.usedJSHeapSize); }
+/** Precise JS heap in use after a forced GC (CDP; performance.memory is bucketed in Chrome). */
+async function heap(page, cdp) { await cdp.send('HeapProfiler.collectGarbage'); return (await cdp.send('Runtime.getHeapUsage')).usedSize; }
 /** Samples the renderer's per-frame stats every 250 ms for `seconds` while `action` runs. */
 async function sample(page, seconds, action) {
   const rows = [];

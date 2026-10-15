@@ -586,6 +586,22 @@ describe('direct control (Phase 8A player.walk)', () => {
     expect(loaded.player).toEqual(a.getPlayer());
   });
 
+  it('changes only the player: the rest of the world keeps its identity (no deep clone per step)', () => {
+    const sim = withPlayer({ home: 'flat' });
+    sim.enablePopulation();
+    expect(sim.executeLife(walk(5.5, 5.5)).reason).toBeNull();
+    const before = sim.getState();
+    expect(sim.executeLife(walk(6.3, 5.5)).reason).toBeNull();
+    const after = sim.getState();
+    expect(after.citizens.length).toBeGreaterThan(0);
+    expect(after).not.toBe(before);
+    for (const key of Object.keys(after) as (keyof WorldState)[]) if (key !== 'player') expect(after[key]).toBe(before[key]);
+    expect(Object.isFrozen(after.player)).toBe(true);
+    expect(after.player!.position).toEqual({ x: 6.3, y: 5.5 });
+    expect(deserializeWorld(serializeWorld(after))).toEqual(after);
+    valid(sim);
+  });
+
   it('needs a placed character', () => {
     const sim = new Simulation(lifeWorld());
     expect(sim.executeLife(walk(2.5, 5.5)).reason).toBe('player-not-found');
