@@ -1,5 +1,5 @@
 // Phase 8A Character View benchmark: node scripts/p8a_benchmark.mjs [url] [--quick]
-// Hardware-accelerated Chromium against the dev server. For a small street, the dense Palm Terrace villa neighbourhood
+// Hardware-accelerated Chromium (or SwiftShader with --software) against the dev server. For a small street, the dense Palm Terrace villa neighbourhood
 // (scripts/p8a_city.mjs) and the large Coral Bay Nights city (scripts/p7_city.mjs, 62 buildings, ~240 residents), it
 // measures entering the 3D view (click → first playable frame), then samples the renderer's own stats while idle,
 // walking/running with WASD + Shift, and orbiting with mouse drags. Then repeated view switching (heap after a forced
@@ -11,8 +11,10 @@ import { coralBayNights } from './p7_city.mjs';
 
 const base = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'http://127.0.0.1:5173';
 const quick = process.argv.includes('--quick');
+/** --software: SwiftShader (the software WebGL CI runners use), automatic quality picks the light preset. */
+const software = process.argv.includes('--software');
 const SAVE_KEY = 'tiny-city-imagine-save-v1';
-const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=metal', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: software ? ['--enable-webgl', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--enable-webgl', '--use-angle=metal', '--ignore-gpu-blocklist'] });
 
 function smallStreet() {
   const roads = [];
@@ -102,7 +104,7 @@ async function orbitLoop(page, seconds) {
 
 const results = [];
 for (const scenario of scenarios) {
-  for (const quality of quick ? [null] : [null, 'low']) {
+  for (const quality of quick || software ? [null] : [null, 'low']) {
     const { context, page, cdp } = await open(scenario.save, quality);
     const heapBefore = await heap(page, cdp);
     const enterMs = await enter(page);

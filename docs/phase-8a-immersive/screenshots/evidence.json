@@ -1,0 +1,582 @@
+{
+  "14-city-view-before": {
+    "note": "City View (Life Mode) before entering: the Glass Pavilion and the character at home."
+  },
+  "01-third-person-behind": {
+    "note": "Spawn: on the sidewalk in front of the Glass Pavilion door, camera behind the character, facing the street and Palm Park.",
+    "player": {
+      "x": 12.5,
+      "y": 20.13,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.5,
+      "y": 19.5,
+      "status": "inside",
+      "tick": 600
+    },
+    "camera": {
+      "yaw": 0,
+      "pitch": 0.3,
+      "distance": 0.92
+    },
+    "fps": 60,
+    "drawCalls": 762,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "04-luxury-villa-closeup": {
+    "note": "Glass Pavilion Villa (lm.villa.glass-pavilion), the same model the City View shows, built in real time.",
+    "player": {
+      "x": 12.5,
+      "y": 20.13,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.5,
+      "y": 19.5,
+      "status": "inside",
+      "tick": 600
+    },
+    "camera": {
+      "yaw": 3.142,
+      "pitch": 0.22,
+      "distance": 1.221
+    },
+    "fps": 60,
+    "drawCalls": 533,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "07-sidewalk-entrance": {
+    "note": "Sidewalk and building entrance: the lot gap, the stepping-stone path and the pivot door.",
+    "player": {
+      "x": 12.5,
+      "y": 20.13,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.5,
+      "y": 19.5,
+      "status": "inside",
+      "tick": 600
+    },
+    "camera": {
+      "yaw": 2.392,
+      "pitch": 0.42,
+      "distance": 0.8
+    },
+    "fps": 60,
+    "drawCalls": 675,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "09-camera-behind-player": {
+    "note": "Third-person camera behind the walking character (W).",
+    "player": {
+      "x": 13.138,
+      "y": 20.13,
+      "motion": "walking",
+      "speed": 0.32,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.0549,
+      "y": 20.13,
+      "status": "standing",
+      "tick": 631
+    },
+    "camera": {
+      "yaw": 1.571,
+      "pitch": 0.3,
+      "distance": 0.95
+    },
+    "fps": 57,
+    "drawCalls": 1152,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "02-walking-sidewalk": {
+    "note": "Walking on the sidewalk past the villas (camera to the side).",
+    "player": {
+      "x": 13.326,
+      "y": 20.248,
+      "motion": "walking",
+      "speed": 0.319,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.2787,
+      "y": 20.2141,
+      "status": "standing",
+      "tick": 648
+    },
+    "camera": {
+      "yaw": 2.521,
+      "pitch": 0.18,
+      "distance": 0.95
+    },
+    "fps": 59,
+    "drawCalls": 641,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "03-running": {
+    "note": "Running (Shift + W): longer strides, bent arms, forward lean; 0.78 tiles/s.",
+    "player": {
+      "x": 14.372,
+      "y": 20.07,
+      "motion": "running",
+      "speed": 0.733,
+      "blocked": true
+    },
+    "authority": {
+      "x": 14.2373,
+      "y": 20.07,
+      "status": "standing",
+      "tick": 676
+    },
+    "camera": {
+      "yaw": 1.921,
+      "pitch": 0.25,
+      "distance": 1.05
+    },
+    "fps": 59,
+    "drawCalls": 1052,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "05-villa-variants": {
+    "note": "Several Luxury Minimalist villa models along Terrace Road (each building keeps its City View model).",
+    "player": {
+      "x": 19.718,
+      "y": 20.503,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 19.7179,
+      "y": 20.503,
+      "status": "standing",
+      "tick": 807
+    },
+    "camera": {
+      "yaw": 3.833,
+      "pitch": 0.12,
+      "distance": 0.742
+    },
+    "fps": 60,
+    "drawCalls": 624,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "06-tree-lined-street": {
+    "note": "Terrace Road at eye level: sidewalks, curb lamps, street trees, villas and the park.",
+    "player": {
+      "x": 19.718,
+      "y": 20.503,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 19.7179,
+      "y": 20.503,
+      "status": "standing",
+      "tick": 825
+    },
+    "camera": {
+      "yaw": 1.451,
+      "pitch": 0.08,
+      "distance": 1.2
+    },
+    "fps": 59,
+    "drawCalls": 1090,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "08-camera-orbit-side": {
+    "note": "Camera orbited to the side of the character (mouse drag); the character did not move.",
+    "player": {
+      "x": 19.718,
+      "y": 20.503,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 19.7179,
+      "y": 20.503,
+      "status": "standing",
+      "tick": 842
+    },
+    "camera": {
+      "yaw": 3.142,
+      "pitch": 0.2,
+      "distance": 0.569
+    },
+    "fps": 60,
+    "drawCalls": 613,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "10-collision": {
+    "note": "Collision: W held toward the Palm House across the street; the character stops at its lot edge (blocked) and never enters the lot.",
+    "player": {
+      "x": 19.923,
+      "y": 20.93,
+      "motion": "walking",
+      "speed": 0.167,
+      "blocked": true
+    },
+    "authority": {
+      "x": 19.9151,
+      "y": 20.93,
+      "status": "standing",
+      "tick": 887
+    },
+    "camera": {
+      "yaw": 6.833,
+      "pitch": 0.4,
+      "distance": 1.094
+    },
+    "fps": 60,
+    "drawCalls": 954,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "13-character-view-hud": {
+    "note": "Character View HUD: name, activity and motion, clock and pause, Save, settings, Return to City, needs, control hints.",
+    "player": {
+      "x": 20.256,
+      "y": 20.93,
+      "motion": "walking",
+      "speed": 0.32,
+      "blocked": false
+    },
+    "authority": {
+      "x": 20.2343,
+      "y": 20.93,
+      "status": "standing",
+      "tick": 908
+    },
+    "camera": {
+      "yaw": 7.854,
+      "pitch": 0.3,
+      "distance": 0.95
+    },
+    "fps": 60,
+    "drawCalls": 1109,
+    "residents": 0,
+    "vehicles": 0,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "15-city-view-after": {
+    "note": "City View after returning: Life View frames the character on Terrace Road, exactly where they stopped in 3D."
+  },
+  "11-golden-hour": {
+    "note": "Terrace Road at golden hour (18:25): low western sun, warm sky, windows starting to glow.",
+    "player": {
+      "x": 12.5,
+      "y": 20.13,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.5,
+      "y": 19.5,
+      "status": "inside",
+      "tick": 1105
+    },
+    "camera": {
+      "yaw": 2.592,
+      "pitch": 0.18,
+      "distance": 1.324
+    },
+    "fps": 60,
+    "drawCalls": 830,
+    "residents": 2,
+    "vehicles": 3,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "12-night": {
+    "note": "Night (21:50): lit windows, street lamps and their light pools under a moonlit sky.",
+    "player": {
+      "x": 12.5,
+      "y": 20.13,
+      "motion": "standing",
+      "speed": 0,
+      "blocked": false
+    },
+    "authority": {
+      "x": 13.5,
+      "y": 19.5,
+      "status": "inside",
+      "tick": 1310
+    },
+    "camera": {
+      "yaw": 2.592,
+      "pitch": 0.18,
+      "distance": 1.32
+    },
+    "fps": 60,
+    "drawCalls": 268,
+    "residents": 1,
+    "vehicles": 1,
+    "models": [
+      "lm.duplex.courtyard.S",
+      "lm.duplex.twin-glass.S",
+      "lm.duplex.urban-terrace.S",
+      "lm.office.architectural-concrete.S",
+      "lm.townhouse.rooftop-terrace.S",
+      "lm.townhouse.urban-glass.S",
+      "lm.townhouse.vertical-minimalist.S",
+      "lm.townhouse.warm-timber.S",
+      "lm.villa.glass-pavilion.S",
+      "lm.villa.linear-modern.S",
+      "lm.villa.minimal-courtyard.S",
+      "lm.villa.sculptural-concrete.S",
+      "lm.villa.sky-terrace.S",
+      "lm.villa.tropical-minimalist.S",
+      "park.v1.S",
+      "pool.v0.S"
+    ]
+  },
+  "motion-walk-turn": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session driven by keyboard and mouse."
+  },
+  "motion-run": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session driven by keyboard and mouse."
+  },
+  "motion-orbit": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session driven by keyboard and mouse."
+  },
+  "motion-collision": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session driven by keyboard and mouse."
+  },
+  "motion-view-switch": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session driven by keyboard and mouse."
+  }
+}
