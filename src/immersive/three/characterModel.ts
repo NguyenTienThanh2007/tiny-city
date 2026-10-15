@@ -21,6 +21,12 @@ function tint(color: number) {
   return m;
 }
 
+/** Releases the shared tint materials from the GPU (they stay cached and re-upload next time). */
+export function releaseCharacterMaterials() {
+  for (const m of tinted.values()) m.dispose();
+  CONTACT_MATERIAL.dispose(); CONTACT_MATERIAL.map?.dispose();
+}
+
 export interface CharacterModel {
   readonly root: THREE.Group;
   readonly skeleton: Skeleton;

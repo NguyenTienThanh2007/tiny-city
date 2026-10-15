@@ -113,7 +113,7 @@ export function vehicleWarmup(): THREE.Group {
 
 /** Frees the shared vehicle models (called when the Character View closes). */
 export function disposeVehicleTemplates() {
-  for (const t of templates.values()) for (const p of t.parts) p.geometry.dispose();
+  for (const t of templates.values()) for (const p of t.parts) { p.geometry.dispose(); p.material.dispose(); }
   templates.clear();
   for (const m of paints.values()) m.dispose();
   paints.clear();

@@ -10,7 +10,7 @@ import { createOrbit, orbitBy, updateOrbit, zoomBy, type OrbitState } from '../o
 import { resolveSpawn, type Spawn } from '../spawn';
 import { resolveQuality, type ImmersiveSettings } from '../settings';
 import { disposeAssetCache } from './assetBuilder';
-import { buildCharacter, type CharacterModel } from './characterModel';
+import { buildCharacter, releaseCharacterMaterials, type CharacterModel } from './characterModel';
 import { Neighbourhood, VIEW_DISTANCE, type NeighbourhoodStats, type Quality } from './neighbourhood';
 import { ResidentLayer } from './residents';
 import { disposeVehicleTemplates, VehicleLayer, vehicleWarmup } from './vehicles';
@@ -72,6 +72,23 @@ export interface ImmersiveDebug {
   /** The character's composed layers (appearance → rig layers), to prove the same character in both views. */
   character: readonly string[];
   input: MoveInput;
+}
+
+function releaseGpuResources(scene: THREE.Object3D) {
+  const materials = new Set<THREE.Material>(), geometries = new Set<THREE.BufferGeometry>(), textures = new Set<THREE.Texture>();
+  scene.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    geometries.add(mesh.geometry);
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      materials.add(m);
+      for (const value of Object.values(m)) if ((value as THREE.Texture)?.isTexture) textures.add(value as THREE.Texture);
+    }
+  });
+  if ((scene as THREE.Scene).environment) textures.add((scene as THREE.Scene).environment!);
+  for (const m of materials) m.dispose();
+  for (const g of geometries) g.dispose();
+  for (const t of textures) t.dispose();
 }
 
 /** Vertex buffers (instance matrices included) and textures of a scene, counted once each. */
@@ -144,6 +161,7 @@ export class ImmersiveEngine {
   private time = 0;
   private readonly cleanups: (() => void)[] = [];
   private environment: THREE.Texture | null = null;
+  private warmup: THREE.Group | null = null;
 
   /** Each engine owns a fresh canvas (a released WebGL context can never be reused, e.g. after a StrictMode remount). */
   readonly canvas: HTMLCanvasElement;
@@ -214,6 +232,7 @@ export class ImmersiveEngine {
     neighbourhood.update(getGameTime(world.clock).minuteOfDay, spawn.position, this.camera.position);
     await this.renderer.compileAsync(neighbourhood.scene, this.camera);
     neighbourhood.scene.remove(warm);
+    this.warmup = warm;
     if (this.disposed) return;
     this.controller = createController(spawn.position, spawn.yaw);
     // The camera starts behind the character, looking the way they face.
@@ -459,6 +478,12 @@ export class ImmersiveEngine {
     cancelAnimationFrame(this.raf);
     for (const cleanup of this.cleanups.splice(0)) cleanup();
     if (document.pointerLockElement === this.canvas) document.exitPointerLock?.();
+    // Release every GPU resource the scene used before the renderer goes. Shared materials, textures and models are
+    // module-level caches that outlive this view; three registers a dispose listener (holding the renderer) on each,
+    // so without this every closed view would stay reachable through them.
+    if (this.neighbourhood) releaseGpuResources(this.neighbourhood.scene);
+    if (this.warmup) releaseGpuResources(this.warmup);
+    releaseCharacterMaterials();
     this.character?.dispose();
     this.residents.dispose();
     this.vehicles?.dispose();
