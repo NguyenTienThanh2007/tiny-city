@@ -150,6 +150,8 @@ export interface VehicleView {
   readonly capacity: number | null;
   readonly minutes: number;
   readonly remainingTiles: number;
+  /** A bus serving the stop named in `nextStop`. */
+  readonly dwelling: boolean;
 }
 
 export function vehicleView(world: WorldState, id: string): VehicleView | null {
@@ -159,7 +161,7 @@ export function vehicleView(world: WorldState, id: string): VehicleView | null {
   const route = decodePath(v.origin, v.path);
   const remainingTiles = Math.max(0, route.length - 1 - Math.round((v.edge * U + v.offset) / U));
   const minutes = world.clock.tick - v.departedTick;
-  const common = { id, model: MODEL_LABELS[v.model], state: STATE_LABELS[v.state], speed: v.speed, minutes, remainingTiles };
+  const common = { id, model: MODEL_LABELS[v.model], state: STATE_LABELS[v.state], speed: v.speed, minutes, remainingTiles, dwelling: v.state === 'dwelling' };
   if (v.kind === 'bus') {
     const line = t.lines.find((l) => l.id === v.lineId);
     const stop = t.stops.find((s) => s.id === line?.stopIds[v.stopIndex]);

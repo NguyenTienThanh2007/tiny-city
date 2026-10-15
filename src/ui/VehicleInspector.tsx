@@ -25,14 +25,14 @@ export function VehicleInspector({ view, following, onFollow, onFocus, onClose }
     <dl className="vehicle-facts">
       {view.line ? <>
         <div><dt>Line</dt><dd>{view.line}</dd></div>
-        <div><dt>Next stop</dt><dd>{view.nextStop ?? '—'}</dd></div>
+        <div><dt>{view.dwelling ? 'At stop' : 'Next stop'}</dt><dd>{view.nextStop ?? '—'}</dd></div>
         <div><dt>Passengers</dt><dd data-testid="vehicle-passengers">{view.passengers} / {view.capacity}</dd></div>
       </> : <>
         <div><dt>Journey</dt><dd>{view.from} → {view.to}</dd></div>
         {view.driver && <div><dt>Driver</dt><dd>{view.driver}</dd></div>}
       </>}
       <div><dt>Speed</dt><dd>{(view.speed * 60 / 100).toFixed(0)} tiles / hour</dd></div>
-      <div><dt>On the road</dt><dd>{view.minutes} min</dd></div>
+      <div><dt>{view.line ? 'In service' : 'On the road'}</dt><dd>{view.minutes} min</dd></div>
       <div><dt>Route left</dt><dd>{view.remainingTiles} tiles</dd></div>
     </dl>
   </section>;

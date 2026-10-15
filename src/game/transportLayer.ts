@@ -309,8 +309,8 @@ export class TransportLayer {
         const value = worst.get(`${road.x},${road.y}`) ?? 0;
         const level = congestionLevel(value);
         const color = CONGESTION_COLORS[level]![1];
-        diamond(g, road.x, road.y, 0.82);
-        g.fill({ color, alpha: level === 0 ? 0.22 : 0.42 + level * 0.1 });
+        diamond(g, road.x, road.y, 0.86);
+        g.fill({ color, alpha: level === 0 ? 0.5 : 0.7 + level * 0.08 });
       }
       // Roads cut off from the main network (vehicles cannot reach them): dashed red outlines.
       const components = networkFor(world).navigator.graph.getComponents();
@@ -330,12 +330,16 @@ export class TransportLayer {
         if (!plan || line.status !== 'active') return;
         const offset = (i % 3 - 1) * 0.12;
         const color = LINE_COLORS[line.color % LINE_COLORS.length]!;
+        // A white casing under the line colour, so the route reads as a line on top of the streets.
+        const transit = this.overlayMode === 'transit';
         for (const leg of plan.legs) polyline(g, leg, offset);
-        g.stroke({ color, width: 3.2, alpha: this.overlayMode === 'transit' ? 0.85 : 0.5, cap: 'round', join: 'round' });
+        g.stroke({ color: 0xffffff, width: transit ? 10 : 6, alpha: transit ? 0.95 : 0.6, cap: 'round', join: 'round' });
+        for (const leg of plan.legs) polyline(g, leg, offset);
+        g.stroke({ color, width: transit ? 5.5 : 3, alpha: transit ? 1 : 0.7, cap: 'round', join: 'round' });
       });
       for (const stop of t.stops) {
         const at = iso(stop.tile.x + 0.5, stop.tile.y + 0.5);
-        g.circle(at.x, at.y, 6).fill({ color: 0xffffff, alpha: 0.95 }).circle(at.x, at.y, 6).stroke({ color: 0x2f8f83, width: 2.4 });
+        g.circle(at.x, at.y, 9).fill({ color: 0xffffff, alpha: 0.95 }).circle(at.x, at.y, 9).stroke({ color: 0x2f8f83, width: 3.5 });
       }
     }
     if (this.draft?.length) {

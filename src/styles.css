@@ -1478,3 +1478,6 @@ button.funds-chip:hover { background: var(--sand-200); }
 .hud-stat.transport .tab-badge { top: -6px; right: -6px; background: var(--danger); }
 .mode-switch[data-mode='transport'] .mode-indicator { opacity: 0; }
 @media (max-width: 720px) { .line-stats { grid-template-columns: repeat(3, 1fr); } .transport-health { grid-template-columns: 1fr; } }
+
+.panel-topline .transport-chip { margin-left: 6px; }
+.panel-topline > span:first-child { margin-right: auto; }

@@ -180,5 +180,18 @@ ledger, idempotent on `lastSettledDay`); the City economy panel, inspector cards
 - [x] M4 businesses: offices (external clients) and malls (local shopping, staff capacity), pass-through accounts, status
 - [x] M5 City economy panel, history charts, policy estimates, building/resident cards, phone sheet
 - [x] M6 AI plan economics (confirmed vs estimated), economy-aware saves, older saves (no retroactive bill), undo/redo rule
-- [ ] M7 browser acceptance, benchmarks, screenshots, PR #21, GitHub Actions 3/3
+- [x] M7 browser acceptance, benchmarks, screenshots, PR #21 (merged `a38ae68`); CI sharding recovery PR #22 (merged `3e81022`)
 
+
+## Phase 6 living transportation (branch `feature/p6-living-transportation`, from `origin/main` @ `3e81022`)
+
+Docs: `docs/phase-6-transportation/`. Vehicles are simulation entities (`WorldState.transport`): lane network from the
+road tiles, integer movement, junction reservations, congestion from lost progress, bus lines, mode choice, economy bridge.
+
+- [x] M1 audit, lane network, contracts, graph tests
+- [x] M2 vehicles, movement, merging, junctions, reconciliation after edits/undo (fixed identical-plan undo on main)
+- [x] M3 congestion, routing penalties, remembered slowdown, traffic overlay
+- [x] M4 stops, lines, dispatch, boarding/alighting, capacity, Transport panel line editor
+- [x] M5 baked vehicle art (5 models × 16 headings, night lamps), renderer, shelters
+- [x] M6 fares / car costs / bus operations, inspectors, Life Mode compatibility
+- [ ] M7 browser e2e, captures, benchmarks, acceptance, PR, GitHub Actions (all 5 checks)

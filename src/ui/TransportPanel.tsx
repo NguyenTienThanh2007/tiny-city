@@ -83,7 +83,7 @@ export function TransportPanel({ overview, lines, overlay, draft, onOverlay, onS
       <ul className="line-list">{lines.map((view) => <li key={view.line.id} className={`line-card is-${view.line.status}`} aria-label={`${view.line.name}`}>
         <div className="line-title"><i style={{ background: lineColorCss(view.line.color) }} aria-hidden="true" /><strong>{view.line.name}</strong>
           <em>{view.line.status === 'active' ? `${view.onStreet} of ${view.line.buses} buses running` : view.line.suspendedReason === 'stop-removed' ? 'Suspended · a stop was removed' : 'Suspended · roads cannot connect its stops'}</em></div>
-        <ol className="line-stops">{view.stops.map((stop) => <li key={stop.id}><button onClick={() => onFocusStop(stop.tile)} title={`Show ${stop.name}`}>{stop.name}</button>{stop.waiting > 0 && <small>{stop.waiting} waiting</small>}</li>)}</ol>
+        <ol className="line-stops">{view.stops.map((stop) => <li key={stop.id}><button onClick={() => onFocusStop(stop.tile)} aria-label={`Show ${stop.name}`} title={`Show ${stop.name} on the map`}>{stop.name}</button>{stop.waiting > 0 && <small>{stop.waiting} waiting</small>}</li>)}</ol>
         <dl className="line-stats">
           <div><dt>Riders</dt><dd>{view.riders} / {view.capacity}</dd></div>
           <div><dt>Waiting</dt><dd>{view.waiting}</dd></div>

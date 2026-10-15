@@ -1518,6 +1518,7 @@ function App() {
           onChoose={(kind) => { setMovingBuildingId(null); setTool(kind); if (compact) setSheetOpen(false); }}
           onWelcome={welcomeResidents} populationEnabled={populationEnabled}
           dailyNet={lastEconomyNet} onOpenEconomy={() => chooseMode('economy')}
+          vehicles={vehiclesOnStreet} onOpenTransport={() => chooseMode('transport')}
           designChoices={designChoices}
           onDesignChange={(kind, choice) => setDesignChoices((current) => ({ ...current, [kind]: choice }))}
           onApplyCollection={(collection) => {
