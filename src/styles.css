@@ -133,7 +133,7 @@ kbd { font-family: var(--font-ui); }
 /* ---------- Top bar ---------- */
 .topbar {
   position: absolute; z-index: 6; top: 0; left: 0; right: 0; height: var(--topbar-h);
-  display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 16px;
+  display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(max-content, 1fr) auto; align-items: center; gap: 16px;
   padding: 0 16px 0 14px; background: linear-gradient(180deg, rgba(251, 247, 238, .97), rgba(251, 247, 238, .88));
   border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 rgba(255, 255, 255, .6) inset;
 }
@@ -1005,13 +1005,17 @@ kbd { font-family: var(--font-ui); }
 .toast.tone-warn .toast-check { background: #f3c7b8; color: #8d3229; }
 /* Four mode tabs: keep the top bar on one line down to tablet widths. */
 @media (max-width: 1240px) {
-  .topbar { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  .topbar { grid-template-columns: auto auto minmax(max-content, 1fr) auto; }
   .brand-copy .city-line { display: none; }
   .mode-tab { padding: 0 12px; }
 }
 @media (max-width: 1080px) {
   .brand-copy { display: none; }
   .hud-stat:nth-child(3) { display: none; }
+}
+/* Phase 6: the vehicles stat makes four HUD stats; the homes count yields first so the stats never slide under the mode tabs. */
+@media (max-width: 1360px) {
+  .hud-stat:nth-child(4) { display: none; }
 }
 @media (max-width: 1099px) {
   .need { grid-template-columns: 84px 1fr 76px; }

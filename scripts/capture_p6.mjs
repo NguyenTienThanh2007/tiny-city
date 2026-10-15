@@ -50,7 +50,7 @@ const minute = async (page) => {
 };
 const transport = (page) => page.getByRole('region', { name: 'Transportation' });
 async function openTransport(page) {
-  if (!(await transport(page).isVisible())) await page.getByRole('button', { name: 'City transport' }).click();
+  if (!(await transport(page).isVisible())) await page.getByRole('button', { name: 'City transport', exact: true }).click();
   await transport(page).waitFor();
 }
 /** Residents move in and a 7-stop line with `buses` buses is drawn on the map through the Transport panel. */

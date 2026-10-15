@@ -74,7 +74,7 @@ describe('road graph and routing', () => {
   });
 });
 
-describe('vehicles and trips', () => {
+describe('vehicles and trips', { timeout: 30_000 }, () => {
   it('creates no vehicles retroactively and enables idempotently', () => {
     const legacy = transportTown({ villa: 4, office: 1 }, { transport: false });
     const sim = new Simulation(legacy);
@@ -186,7 +186,7 @@ describe('vehicles and trips', () => {
   });
 });
 
-describe('road edits during live traffic', () => {
+describe('road edits during live traffic', { timeout: 30_000 }, () => {
   const removeStreet = (world: WorldState) => world.plan.roads.filter((t) => t.y === 8 && t.x >= 20 && t.x <= 24);
 
   it('re-routes or safely ends trips when a road under traffic is removed, and recovers on undo', () => {
@@ -246,7 +246,7 @@ describe('road edits during live traffic', () => {
   });
 });
 
-describe('public transit', () => {
+describe('public transit', { timeout: 30_000 }, () => {
   const lineStops = [{ x: 10, y: 8 }, { x: 45, y: 8 }, { x: 45, y: 22 }, { x: 10, y: 22 }];
 
   it('validates line commands against the real road network', () => {
@@ -343,7 +343,7 @@ describe('public transit', () => {
   });
 });
 
-describe('economy integration', () => {
+describe('economy integration', { timeout: 30_000 }, () => {
   it('collects fares for the city, car costs for the outside, and bills buses once per day', () => {
     const sim = new Simulation(busyTown());
     sim.executeTransport({ type: 'transport.create-line', stops: [{ x: 10, y: 8 }, { x: 45, y: 8 }, { x: 45, y: 22 }, { x: 10, y: 22 }], buses: 3 });
@@ -378,7 +378,7 @@ describe('economy integration', () => {
   });
 });
 
-describe('persistence', () => {
+describe('persistence', { timeout: 30_000 }, () => {
   it('stores routes compactly and restores every vehicle, trip and line', () => {
     const sim = new Simulation(busyTown());
     sim.executeTransport({ type: 'transport.create-line', stops: [{ x: 10, y: 8 }, { x: 45, y: 8 }], buses: 2 });

@@ -135,7 +135,11 @@ test('residents recover when a road under their commute is removed and restored'
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.locator('.life-feed')).toContainText(/linked to Harbor Office|can't find a road to Harbor Office/);
   const waiting = await save(page);
-  expect(waiting.simulation.citizens.some((citizen) => citizen.activity === 'work')).toBe(false);
+  // Phase 6: commuters drive, so some may already be at the office when the road is cut, and a car already past the cut
+  // still has a road there and arrives. Nobody else can reach work.
+  const pastTheCut = new Set([...severed.simulation.citizens.filter((citizen) => citizen.activity === 'work').map((citizen) => citizen.id),
+    ...(severed.simulation.transport?.vehicles ?? []).filter((vehicle) => vehicle.destinationBuildingId === 'office').map((vehicle) => vehicle.ownerId)]);
+  expect(waiting.simulation.citizens.filter((citizen) => citizen.activity === 'work' && !pastTheCut.has(citizen.id)).map((citizen) => citizen.id)).toEqual([]);
 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();

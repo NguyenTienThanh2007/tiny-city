@@ -12,6 +12,7 @@ type EventListener = (events: readonly SimulationEvent[], state: WorldState) => 
 const ROUTINE_EVENTS = new Set<SimulationEvent['type']>(['clock.ticked', 'citizen.moved',
   // Phase 6: trips start and end every few ticks at rush hour; the HUD refresh cadence covers them.
   'transport.trip-started', 'transport.trip-completed', 'transport.boarded', 'transport.alighted']);
+const CONSEQUENCE_EVENTS = new Set<SimulationEvent['type']>(['transport.trip-cancelled']);
 /**
  * Phase 5: older saves start their economy when loaded (from the next full day, so nothing is billed retroactively).
  * Phase 6: every city has transportation; older saves start with no vehicles (they appear as residents travel).
@@ -42,8 +43,10 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   }, []);
 
   const rememberEvent = useCallback((events: readonly SimulationEvent[]) => {
-    const event = [...events].reverse().find((entry) => !ROUTINE_EVENTS.has(entry.type) &&
-      entry.type !== 'city.road-network-changed' && entry.type !== 'city.budget-changed') ?? events.at(-1);
+    const shown = (entry: SimulationEvent) => !ROUTINE_EVENTS.has(entry.type) && entry.type !== 'city.road-network-changed' && entry.type !== 'city.budget-changed';
+    // A cancelled trip is a consequence (a road edit, a removed line): show what caused it when that happened in the same batch.
+    const event = [...events].reverse().find((entry) => shown(entry) && !CONSEQUENCE_EVENTS.has(entry.type))
+      ?? [...events].reverse().find(shown) ?? events.at(-1);
     if (event) pendingEventRef.current = event;
   }, []);
 

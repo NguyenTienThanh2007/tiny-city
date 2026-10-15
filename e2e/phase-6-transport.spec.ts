@@ -115,7 +115,7 @@ test('vehicles on screen are exactly the simulated ones, stay on roads, pause ex
   expect(serializeWorld(deserializeWorld(JSON.stringify(stepped.simulation)))).toBe(serializeWorld(replay.getState()));
   // The HUD counts the vehicles on the street; the transport panel shows the authoritative figures.
   await expect(page.getByTestId('hud-vehicles')).toHaveText(String(replay.getState().transport!.vehicles.filter((v) => v.state !== 'departing').length));
-  await page.getByRole('button', { name: 'City transport' }).click();
+  await page.getByRole('button', { name: 'City transport', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Transportation' });
   await expect(panel.getByTestId('transport-vehicles')).toContainText(String(replay.getState().transport!.vehicles.filter((v) => v.state !== 'departing').length));
   expect(errors).toEqual([]);
@@ -123,7 +123,7 @@ test('vehicles on screen are exactly the simulated ones, stay on roads, pause ex
 
 test('a bus line drawn on the map carries real residents; the overlays and dashboard follow the simulation', async ({ page }) => {
   const errors = await openCity(page, snapshotAt(6 * 60 + 30));
-  await page.getByRole('button', { name: 'City transport' }).click();
+  await page.getByRole('button', { name: 'City transport', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Transportation' });
   await panel.getByRole('button', { name: 'New bus line' }).click();
   // An intersection is refused with a reason; road tiles become stops in order.
