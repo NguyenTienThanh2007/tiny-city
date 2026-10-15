@@ -1,7 +1,7 @@
 # Acceptance: Phase 6
 
 **Baseline:** `main` at `3e8102253e3ffe6a1fce0d9e60aa527c0a891795` (Phase 5 + CI sharding PR #22; main CI green).
-**Branch:** `feature/p6-living-transportation`. **PR:** draft until GitHub Actions passes every check; never merged automatically.
+**Branch:** `feature/p6-living-transportation`. **PR:** [#23](https://github.com/NguyenTienThanh2007/tiny-city/pull/23); never merged automatically.
 
 ## Criteria
 
@@ -26,8 +26,8 @@
 | 17 | Premium architecture and character art remain intact | Met | Visual World 3.0C/3.1 suites in the full run; renderer reports 0 vector buildings; vehicles composite from one extra atlas page. |
 | 18 | Performance is acceptable | Met | ≈ 0.9 ms per tick at 956 residents and 388 vehicles; 57–60 fps in the browser at rush hour ([performance.md](performance.md)). |
 | 19 | Browser evidence shows a living city | Met | 12 real-UI captures (`screenshots/`). |
-| 20 | Full tests pass | See below | |
-| 21 | GitHub Actions passes all required checks | Pending | Recorded on the PR. |
+| 20 | Full tests pass | Met | See below. |
+| 21 | GitHub Actions passes all required checks | Met | Run 38679755378 on `60daed4`: api, frontend-and-simulation, gameplay shard 1/2 (12m53s), gameplay shard 2/2 (19m03s), gameplay — all pass. |
 
 ## Local results
 
@@ -40,7 +40,9 @@
 | API (pytest `-W error`) | 81 passed |
 | Production build, secret scan | Pass; 0 findings |
 | Playwright `e2e/phase-6-transport.spec.ts` | 4 / 4 passed |
-| Playwright full suite (CI mode, 2 shards) | PENDING |
+| Playwright full suite (CI mode, 2 shards) | Shard 1/2: 34 / 34 passed (8.1 min). Shard 2/2: 32 / 34 passed in one 58.6 min run, plus 1 not run; the 2 failures were timeouts late in the run on a slowed laptop and pass on re-run (2 / 2, 1.1 min). Both shards pass on GitHub Actions. |
+
+The first CI run found four integration issues, all fixed in `60daed4`. The fourth stat overlapped the mode tabs at 1280 px, which blocked the economy tests' clicks. Fresh cities created transport only on load, so a save differed from the loaded city. A road edit showed its trip cancellations as the latest event. The new Build panel chip made the `City transport` locator ambiguous. The road-cut test now accounts for commuters who drove to the office before the cut.
 
 ## Screenshots
 

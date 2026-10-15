@@ -194,4 +194,4 @@ road tiles, integer movement, junction reservations, congestion from lost progre
 - [x] M4 stops, lines, dispatch, boarding/alighting, capacity, Transport panel line editor
 - [x] M5 baked vehicle art (5 models × 16 headings, night lamps), renderer, shelters
 - [x] M6 fares / car costs / bus operations, inspectors, Life Mode compatibility
-- [ ] M7 browser e2e, captures, benchmarks, acceptance, PR, GitHub Actions (all 5 checks)
+- [x] M7 browser e2e, captures, benchmarks, acceptance, PR #23, GitHub Actions (all 5 checks green on `60daed4`)
