@@ -111,6 +111,7 @@ const buildingKinds = Object.keys(BUILDINGS) as BuildingKind[];
 const toolLabels: Record<BuildingKind, string> = {
   villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt',
   park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office',
+  cafe: 'Café', shops: 'Shops', market: 'Market', cinema: 'Cinema', nightclub: 'Club', stage: 'Stage', plaza: 'Plaza', amusement: 'Fun park',
 };
 const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
   { id: 'select', label: 'Select', shortcut: 'V' },

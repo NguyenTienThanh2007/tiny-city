@@ -11,8 +11,17 @@ const palettes: Record<BuildingKind, Palette> = {
   pool: { wall: '#eee2c6', side: '#d8ccb0', roof: '#4fb3c2' },
   mall: { wall: '#e9e2d2', side: '#cfc7b4', roof: '#d8d4c6', accent: '#7fb7bb' },
   office: { wall: '#c9d6d8', side: '#a9babd', roof: '#aebfc3', accent: '#5d93a6' },
+  cafe: { wall: '#f3e2c4', side: '#d8c4a0', roof: '#c8714f', accent: '#e9b27a' },
+  shops: { wall: '#f0dcc6', side: '#d4bea4', roof: '#cfa38d', accent: '#3f8d8a' },
+  market: { wall: '#e6d2b0', side: '#c9b28e', roof: '#e8925f', accent: '#f1c45f' },
+  cinema: { wall: '#e9d9df', side: '#cdb8c0', roof: '#8a5a6e', accent: '#f1c45f' },
+  nightclub: { wall: '#6f6378', side: '#56495e', roof: '#3d3346', accent: '#d94f8a' },
+  stage: { wall: '#eeeae0', side: '#d4cfc2', roof: '#f6f3ec', accent: '#3d464b' },
+  plaza: { wall: '#e8dcc2', side: '#cfc2a6', roof: '#d9cbb0', accent: '#6fb6bf' },
+  amusement: { wall: '#f3dcc8', side: '#d8bfa9', roof: '#e07d6a', accent: '#5fb0aa' },
 };
-const heights: Record<BuildingKind, number> = { villa: 10, duplex: 12, townhouse: 15, apartment: 22, park: 3, clubhouse: 11, pool: 3, mall: 11, office: 27 };
+const heights: Record<BuildingKind, number> = { villa: 10, duplex: 12, townhouse: 15, apartment: 22, park: 3, clubhouse: 11, pool: 3, mall: 11, office: 27,
+  cafe: 9, shops: 11, market: 5, cinema: 16, nightclub: 12, stage: 9, plaza: 3, amusement: 14 };
 
 /** Tiny isometric glyph echoing the in-world art, used on catalog cards. */
 export function BuildingThumb({ kind }: { kind: BuildingKind }) {
@@ -20,7 +29,7 @@ export function BuildingThumb({ kind }: { kind: BuildingKind }) {
   const h = heights[kind];
   const base = 40;
   const pitched = kind === 'villa' || kind === 'duplex' || kind === 'townhouse';
-  const flat = kind === 'park' || kind === 'pool';
+  const flat = kind === 'park' || kind === 'pool' || kind === 'plaza';
   const left = `M8 ${base - 8} L24 ${base} L24 ${base - h} L8 ${base - 8 - h} Z`;
   const right = `M24 ${base} L40 ${base - 8} L40 ${base - 8 - h} L24 ${base - h} Z`;
   const top = `M8 ${base - 8 - h} L24 ${base - 16 - h} L40 ${base - 8 - h} L24 ${base - h} Z`;

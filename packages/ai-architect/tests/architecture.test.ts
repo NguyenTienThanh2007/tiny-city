@@ -26,7 +26,9 @@ describe('architecture registry (Visual World 3.1)', () => {
   });
 
   it('keeps every classic 3.0B variant as a classic model, so cities from before 3.1 keep their exact look', () => {
-    const variants: Record<BuildingType, number> = { villa: 4, duplex: 3, townhouse: 3, apartment: 3, park: 3, clubhouse: 3, pool: 2, mall: 2, office: 3 };
+    const variants: Record<BuildingType, number> = { villa: 4, duplex: 3, townhouse: 3, apartment: 3, park: 3, clubhouse: 3, pool: 2, mall: 2, office: 3,
+      // Phase 7 venues.
+      cafe: 2, shops: 1, market: 1, cinema: 1, nightclub: 1, stage: 1, plaza: 1, amusement: 1 };
     for (const type of TYPES) {
       const classic = modelsFor(type, 'classic');
       expect(classic.map((model) => model.classicVariant).sort()).toEqual(Array.from({ length: variants[type] }, (_, i) => i));

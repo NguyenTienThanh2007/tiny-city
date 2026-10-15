@@ -2,6 +2,8 @@ import { applyOperating } from './budget.js';
 import { getGameTime } from './clock.js';
 import { ECONOMY, percentOf } from './economyConfig.js';
 import { TRANSPORT } from './transportConfig.js';
+import { BUSINESS_VENUES, isBusinessVenue } from './catalog.js';
+import { VENUES } from './societyConfig.js';
 import { providesJobs, providesLeisure } from './population.js';
 import type {
   Building, BuildingFinance, BusinessStatus, CityBudget, EconomyAccountKind, EconomyAlert, EconomyDayReport, EconomyOptions,
@@ -42,17 +44,23 @@ export const LEDGER_FLOWS: Readonly<Record<LedgerCategory, readonly [EconomyAcco
   'transit.fares': ['residents', 'treasury'],
   'resident.car-costs': ['residents', 'external'],
   'city.transit-operations': ['treasury', 'external'],
+  // Phase 7: the city pays performers and crews for the events it hosts (tickets are venue fees; business venues sell).
+  'city.events': ['treasury', 'external'],
 });
 export const LEDGER_CATEGORIES = Object.freeze(Object.keys(LEDGER_FLOWS) as LedgerCategory[]);
 
-type BusinessRole = 'office' | 'mall';
-type AmenityRole = 'park' | 'pool' | 'clubhouse';
+type BusinessRole = 'office' | 'mall' | typeof BUSINESS_VENUES[number];
+type AmenityRole = 'park' | 'pool' | 'clubhouse' | 'stage' | 'plaza';
+const ROLES: readonly BuildingFinance['role'][] = ['office', 'mall', 'park', 'pool', 'clubhouse', 'stage', 'plaza', ...BUSINESS_VENUES];
 const byId = <T extends { readonly id: string }>(a: T, b: T) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 /** Jobs are offered by malls and offices (and legacy authored workplaces, treated as offices). */
-export const businessRole = (b: Building): BusinessRole | null => providesJobs(b) ? b.type === 'mall' ? 'mall' : 'office' : null;
+export const businessRole = (b: Building): BusinessRole | null =>
+  !providesJobs(b) ? null : b.type === 'mall' ? 'mall' : isBusinessVenue(b.type) ? b.type : 'office';
 export const amenityRole = (b: Building): AmenityRole | null =>
-  !providesLeisure(b) ? null : b.type === 'pool' ? 'pool' : b.type === 'clubhouse' ? 'clubhouse' : 'park';
+  !providesLeisure(b) ? null : b.type === 'pool' ? 'pool' : b.type === 'clubhouse' ? 'clubhouse' : b.type === 'stage' ? 'stage' : b.type === 'plaza' ? 'plaza' : 'park';
+/** Daily city upkeep of a public amenity (Phase 7 venues from their venue definition). */
+const amenityUpkeep = (role: AmenityRole) => role === 'stage' || role === 'plaza' ? VENUES[role]!.upkeep : ECONOMY.cityUpkeep[role];
 export const venueFee = (b: Building): number => { const role = amenityRole(b); return role === 'pool' || role === 'clubhouse' ? ECONOMY.venueFees[role] : 0; };
 /** Road upkeep: $1 per started block of `roadTilesPerDollar` tiles. */
 export const roadUpkeep = (tiles: number) => Math.ceil(tiles / ECONOMY.cityUpkeep.roadTilesPerDollar);
@@ -91,12 +99,12 @@ export function validateEconomy(world: WorldState, assert: (condition: boolean, 
   assert(Number.isSafeInteger(e.nextTransactionId) && e.nextTransactionId >= 1, 'invalid transaction cursor');
   assert(money(e.constructionSpentAtSettlement), 'invalid construction cursor');
   assert(e.today.day === day, 'economy day accumulators belong to another day');
-  for (const map of [e.today.visits, e.today.fees, e.today.fares ?? {}, e.today.carCosts ?? {}]) for (const value of Object.values(map)) assert(money(value), 'invalid daily economy counter');
+  for (const map of [e.today.visits, e.today.fees, e.today.fares ?? {}, e.today.carCosts ?? {}, e.today.eventCosts ?? {}, ...Object.values(e.today.purchases ?? {})]) for (const value of Object.values(map)) assert(money(value), 'invalid daily economy counter');
   const accounts = Object.entries(e.residents);
   assert(accounts.length <= 20_000, 'too many resident accounts');
   for (const [, a] of accounts) assert(money(a.balance) && money(a.income) && money(a.taxes) && money(a.spending), 'invalid resident account');
   for (const [id, f] of Object.entries(e.buildings)) {
-    assert(f.buildingId === id && ['office', 'mall', 'park', 'pool', 'clubhouse'].includes(f.role), 'invalid building finance');
+    assert(f.buildingId === id && ROLES.includes(f.role), 'invalid building finance');
     assert([f.workers, f.jobs, f.revenue, f.payroll, f.upkeep, f.tax, f.visits, f.fees, f.demand, f.lossStreak].every(money) && Number.isSafeInteger(f.profit), 'invalid building finance amounts');
   }
   assert(e.history.length <= ECONOMY.historyDays && e.ledger.length <= ECONOMY.ledgerEntries, 'economy history exceeds its bounds');
@@ -105,9 +113,9 @@ export function validateEconomy(world: WorldState, assert: (condition: boolean, 
     assert(Number.isSafeInteger(r.day) && r.day > previousDay && r.day <= e.lastSettledDay, 'economy reports must be unique and in order');
     previousDay = r.day;
     assert(money(r.treasuryOpen) && money(r.treasuryClose), 'invalid report treasury');
-    assert(money(r.income.transitFares ?? 0) && money(r.expenses.transit ?? 0), 'invalid report transit amounts');
+    assert(money(r.income.transitFares ?? 0) && money(r.expenses.transit ?? 0) && money(r.expenses.events ?? 0), 'invalid report transit amounts');
     const inflow = r.income.residentialTax + r.income.commercialTax + r.income.venueFees + r.income.constructionRefunds + (r.income.transitFares ?? 0);
-    const outflow = r.expenses.publicServices + r.expenses.roads + r.expenses.amenities + r.expenses.unemploymentSupport + r.expenses.construction + (r.expenses.transit ?? 0);
+    const outflow = r.expenses.publicServices + r.expenses.roads + r.expenses.amenities + r.expenses.unemploymentSupport + r.expenses.construction + (r.expenses.transit ?? 0) + (r.expenses.events ?? 0);
     assert(r.treasuryOpen + inflow - outflow === r.treasuryClose, 'report does not reconcile the treasury');
   }
   let previousTx = 0;
@@ -129,7 +137,9 @@ export function cloneEconomy(e: EconomyState): EconomyState {
     version: e.version, policy: { residentialTaxRate: e.policy.residentialTaxRate, commercialTaxRate: e.policy.commercialTaxRate },
     lastSettledDay: e.lastSettledDay, nextTransactionId: e.nextTransactionId, constructionSpentAtSettlement: e.constructionSpentAtSettlement,
     today: { day: e.today.day, visits: { ...e.today.visits }, fees: { ...e.today.fees },
-      ...(e.today.fares === undefined ? {} : { fares: { ...e.today.fares } }), ...(e.today.carCosts === undefined ? {} : { carCosts: { ...e.today.carCosts } }) },
+      ...(e.today.fares === undefined ? {} : { fares: { ...e.today.fares } }), ...(e.today.carCosts === undefined ? {} : { carCosts: { ...e.today.carCosts } }),
+      ...(e.today.purchases === undefined ? {} : { purchases: Object.fromEntries(Object.entries(e.today.purchases).map(([id, v]) => [id, { ...v }])) }),
+      ...(e.today.eventCosts === undefined ? {} : { eventCosts: { ...e.today.eventCosts } }) },
     residents: Object.fromEntries(Object.entries(e.residents).map(([id, a]) => [id, { balance: a.balance, income: a.income, taxes: a.taxes, spending: a.spending }])),
     buildings: Object.fromEntries(Object.entries(e.buildings).map(([id, f]) => [id, { ...f }])),
     history: e.history.map((r) => ({ ...r, income: { ...r.income }, expenses: { ...r.expenses }, unpaid: { ...r.unpaid } })),
@@ -147,9 +157,24 @@ export function recordTransit(e: EconomyState, kind: 'fare' | 'car', citizenId: 
 /** Records a resident's real arrival at a leisure venue on the current day (fees are collected at settlement). */
 export function recordVisit(e: EconomyState, citizenId: string, venue: Building): EconomyState {
   const fee = venueFee(venue);
-  return { ...e, today: { day: e.today.day,
+  return { ...e, today: { ...e.today,
     visits: { ...e.today.visits, [venue.id]: (e.today.visits[venue.id] ?? 0) + 1 },
     fees: fee > 0 ? { ...e.today.fees, [citizenId]: (e.today.fees[citizenId] ?? 0) + fee } : e.today.fees } };
+}
+
+/** Phase 7: a resident's purchase at an entertainment business (one per outing), collected at settlement. */
+export function recordPurchase(e: EconomyState, citizenId: string, venueId: string, amount: number): EconomyState {
+  const purchases = e.today.purchases ?? {}, mine = purchases[citizenId] ?? {};
+  return { ...e, today: { ...e.today, visits: { ...e.today.visits, [venueId]: (e.today.visits[venueId] ?? 0) + 1 },
+    purchases: { ...purchases, [citizenId]: { ...mine, [venueId]: (mine[venueId] ?? 0) + amount } } } };
+}
+/** Phase 7: an event ticket at a city venue, paid to the treasury like a venue fee. */
+export function recordFee(e: EconomyState, citizenId: string, amount: number): EconomyState {
+  return { ...e, today: { ...e.today, fees: { ...e.today.fees, [citizenId]: (e.today.fees[citizenId] ?? 0) + amount } } };
+}
+/** Phase 7: what the city owes for an event it hosts, recorded once when the event starts. */
+export function recordEventCost(e: EconomyState, eventId: string, cost: number): EconomyState {
+  return { ...e, today: { ...e.today, eventCosts: { ...(e.today.eventCosts ?? {}), [eventId]: cost } } };
 }
 
 /** Largest-remainder split of `total` by integer weights; deterministic (ties go to the earlier index). */
@@ -243,7 +268,8 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
     staff.get(job.id)!.push(c.id);
   }
   for (const b of businesses) {
-    const team = staff.get(b.id)!, wage = ECONOMY.wages[businessRole(b)!];
+    const role = businessRole(b)!;
+    const team = staff.get(b.id)!, wage = role === 'office' || role === 'mall' ? ECONOMY.wages[role] : VENUES[role]!.wage;
     if (team.length === 0) continue;
     const total = wage * team.length, tax = percentOf(total, policy.residentialTaxRate);
     const shift = day % team.length, rotated = [...team.slice(shift), ...team.slice(0, shift)];
@@ -273,8 +299,10 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   const amenityCoverage = needed === 0 ? 100 : Math.min(100, Math.floor(leisureCapacity * 100 / needed));
   const strained = (economy.history.at(-1)?.unpaid.upkeep ?? 0) > 0;
   const confidence = consumerConfidence(policy, amenityCoverage, strained);
-  let housingTotal = 0, fees = 0, feesWaived = 0, demand = 0, fares = 0, carCosts = 0;
+  let housingTotal = 0, fees = 0, feesWaived = 0, demand = 0, fares = 0, carCosts = 0, leisure = 0, leisureWaived = 0;
   const shopping = new Map<string, number>();
+  // Phase 7: what each entertainment business actually collected from residents today.
+  const venueSales = new Map<string, number>();
   for (const c of citizens) {
     let balance = balances.get(c.id)!;
     const rent = housingCost(buildingMap.get(c.homeBuildingId));
@@ -287,12 +315,21 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
     balance -= fare; fares += fare;
     const running = Math.min(economy.today.carCosts?.[c.id] ?? 0, balance);
     balance -= running; carCosts += running;
+    // Phase 7: purchases at entertainment businesses (never beyond savings; what cannot be paid is waived).
+    let bought = 0;
+    for (const [venueId, owed] of Object.entries(economy.today.purchases?.[c.id] ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+      // A business demolished before settlement collects nothing (the purchase is waived).
+      const paid = buildingMap.has(venueId) ? Math.min(owed, balance) : 0;
+      balance -= paid; bought += paid; leisureWaived += owed - paid;
+      if (paid > 0) venueSales.set(venueId, (venueSales.get(venueId) ?? 0) + paid);
+    }
+    leisure += bought;
     const disposable = Math.max(0, income.get(c.id)! - taxes.get(c.id)! - rent);
     const k = ECONOMY.consumption;
     const wanted = percentOf(Math.max(k.minimum, k.base + percentOf(disposable, k.ofDisposable) + percentOf(balance - k.comfortSavings, k.ofSavingsGap)), confidence);
     const spent = Math.min(wanted, balance);
     balance -= spent; demand += spent;
-    shopping.set(c.id, spent); spending.set(c.id, housing + fee + fare + running + spent); balances.set(c.id, balance);
+    shopping.set(c.id, spent); spending.set(c.id, housing + fee + fare + running + bought + spent); balances.set(c.id, balance);
   }
   add('resident.housing', housingTotal, null, citizens.length);
   add('resident.venue-fees', fees, null, Object.keys(economy.today.fees).filter((id) => live.has(id)).length);
@@ -301,6 +338,7 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   add('transit.fares', fares, null, transportDay?.boardings ?? 0);
   treasury += fares; treasuryIncome += fares;
   add('resident.car-costs', carCosts, null, transportDay?.carCompleted ?? 0);
+  for (const [venueId, paid] of [...venueSales].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) add('business.sales', paid, venueId, economy.today.visits[venueId] ?? 0);
 
   // Shopping stays in the city's malls up to what their staff can sell; the rest is spent outside the city.
   const malls = businesses.filter((b) => businessRole(b) === 'mall');
@@ -318,18 +356,20 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   for (const b of businesses) {
     const role = businessRole(b)!, staffCount = workers.get(b.id)!;
     const mallIndex = malls.indexOf(b);
-    const revenue = role === 'office' ? percentOf(staffCount * ECONOMY.officeRevenuePerWorker, officeDemandRate(policy)) : sales[mallIndex]!;
-    const tax = percentOf(revenue, policy.commercialTaxRate), upkeep = ECONOMY.businessUpkeep[role], wages = payroll.get(b.id)!;
+    // Phase 7 venue businesses earn exactly what residents paid them today (recorded above as sales).
+    const venue = role !== 'office' && role !== 'mall';
+    const revenue = role === 'office' ? percentOf(staffCount * ECONOMY.officeRevenuePerWorker, officeDemandRate(policy)) : venue ? venueSales.get(b.id) ?? 0 : sales[mallIndex]!;
+    const tax = percentOf(revenue, policy.commercialTaxRate), upkeep = venue ? VENUES[role]!.upkeep : ECONOMY.businessUpkeep[role], wages = payroll.get(b.id)!;
     const profit = revenue - wages - upkeep - tax;
-    add(role === 'office' ? 'business.services' : 'business.sales', revenue, b.id, staffCount);
+    if (!venue) add(role === 'office' ? 'business.services' : 'business.sales', revenue, b.id, staffCount);
     add('tax.commercial', tax, b.id);
     add('business.upkeep', upkeep, b.id);
     add(profit >= 0 ? 'business.profit' : 'business.loss-cover', Math.abs(profit), b.id);
     const lossStreak = profit < 0 ? (economy.buildings[b.id]?.lossStreak ?? 0) + 1 : 0;
     const status: BusinessStatus = staffCount === 0 ? 'unstaffed' : staffCount * 100 < b.capacity * ECONOMY.understaffedPercent ? 'understaffed' :
-      profit >= 0 ? 'profitable' : role === 'mall' && sales[mallIndex]! < capacities[mallIndex]! ? 'weak-demand' : 'loss';
+      profit >= 0 ? 'profitable' : role === 'mall' && sales[mallIndex]! < capacities[mallIndex]! || venue ? 'weak-demand' : 'loss';
     finance[b.id] = { buildingId: b.id, role, workers: staffCount, jobs: b.capacity, revenue, payroll: wages, upkeep, tax, profit,
-      visits: 0, fees: 0, demand: role === 'mall' ? mallDemand[mallIndex]! : 0, status, lossStreak };
+      visits: venue ? economy.today.visits[b.id] ?? 0 : 0, fees: 0, demand: role === 'mall' ? mallDemand[mallIndex]! : 0, status, lossStreak };
     commercialTax += tax; businessRevenue += revenue; businessProfit += profit; if (profit >= 0) profitable += 1;
   }
   treasury += commercialTax; treasuryIncome += commercialTax;
@@ -344,11 +384,11 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   };
   const publicServices = pay('city.public-services', citizens.length * ECONOMY.publicServicesPerResident, null, citizens.length);
   const roads = pay('city.road-upkeep', roadUpkeep(world.plan.roads.length), null, world.plan.roads.length);
-  let amenityUpkeep = 0;
+  let amenitiesPaid = 0;
   for (const b of amenities) {
-    const role = amenityRole(b)!, cost = ECONOMY.cityUpkeep[role];
+    const role = amenityRole(b)!, cost = amenityUpkeep(role);
     const paid = pay('city.amenity-upkeep', cost, b.id, 1);
-    amenityUpkeep += paid;
+    amenitiesPaid += paid;
     const visits = economy.today.visits[b.id] ?? 0;
     finance[b.id] = { buildingId: b.id, role, workers: 0, jobs: 0, revenue: 0, payroll: 0, upkeep: cost, tax: 0, profit: -cost,
       visits, fees: visits * venueFee(b), demand: 0, status: 'public', lossStreak: 0 };
@@ -356,6 +396,9 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   // Phase 6: the city runs the buses assigned to its active lines.
   const buses = (world.transport?.lines ?? []).filter((l) => l.status === 'active').reduce((sum, l) => sum + l.buses, 0);
   const transit = pay('city.transit-operations', buses * TRANSPORT.busDailyCost, null, buses);
+  // Phase 7: the events the city hosted today (recorded when each started).
+  const eventCosts = Object.values(economy.today.eventCosts ?? {}).reduce((sum, cost) => sum + cost, 0);
+  const eventsPaid = pay('city.events', eventCosts, null, Object.keys(economy.today.eventCosts ?? {}).length);
 
   const residents: Record<string, ResidentAccount> = {};
   let savings = 0;
@@ -369,7 +412,7 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
   const report: EconomyDayReport = {
     day, treasuryOpen: open, treasuryClose: treasury,
     income: { residentialTax, commercialTax, venueFees: fees, constructionRefunds: refunds, ...(world.transport ? { transitFares: fares } : {}) },
-    expenses: { publicServices, roads, amenities: amenityUpkeep, unemploymentSupport: supportPaid, construction: constructionSpent, ...(world.transport ? { transit } : {}) },
+    expenses: { publicServices, roads, amenities: amenitiesPaid, unemploymentSupport: supportPaid, construction: constructionSpent, ...(world.transport ? { transit } : {}), ...(world.society ? { events: eventsPaid } : {}) },
     unpaid: { upkeep: upkeepUnpaid, support: supportUnpaid },
     population: citizens.length, employed, jobs: businesses.reduce((sum, b) => sum + b.capacity, 0), wages: wagesTotal,
     housing: housingTotal, shoppingDemand: demand, shoppingLocal: local, shoppingOutside: demand - local, feesWaived,
@@ -377,6 +420,7 @@ export function computeEconomyDay(world: WorldState, economy: EconomyState, day:
     businesses: businesses.length, profitableBusinesses: profitable, businessRevenue, businessProfit,
     confidence, amenityCoverage, localShoppingRate: rate,
     ...(world.transport ? { transitRides: transportDay?.boardings ?? 0, carTrips: transportDay?.carCompleted ?? 0, carCosts } : {}),
+    ...(world.society ? { leisureSpending: leisure, leisureWaived } : {}),
   };
   return { residents, buildings: finance, report, entries, treasuryIncome, treasuryExpenses };
 }
@@ -454,6 +498,6 @@ export function financialCondition(account: ResidentAccount): FinancialCondition
 /** Operating income and expenses of a report (construction excluded). */
 export function operatingNet(report: EconomyDayReport): { income: number; expenses: number; net: number } {
   const income = report.income.residentialTax + report.income.commercialTax + report.income.venueFees + (report.income.transitFares ?? 0);
-  const expenses = report.expenses.publicServices + report.expenses.roads + report.expenses.amenities + report.expenses.unemploymentSupport + (report.expenses.transit ?? 0);
+  const expenses = report.expenses.publicServices + report.expenses.roads + report.expenses.amenities + report.expenses.unemploymentSupport + (report.expenses.transit ?? 0) + (report.expenses.events ?? 0);
   return { income, expenses, net: income - expenses };
 }

@@ -11,6 +11,8 @@ export type TargetResolution =
 const LABELS: Record<string, string> = {
   villa: 'villa', duplex: 'semi-detached home', townhouse: 'townhouse', apartment: 'apartment building', park: 'park',
   clubhouse: 'clubhouse', pool: 'swimming pool', mall: 'shopping mall', office: 'office tower',
+  cafe: 'café', shops: 'shopping street', market: 'night market', cinema: 'cinema', nightclub: 'music club', stage: 'concert stage',
+  plaza: 'performance plaza', amusement: 'amusement park',
 };
 export const targetLabel = (selector: TargetSelector, plural = false): string => {
   const base = selector.buildingType ? LABELS[selector.buildingType] ?? selector.buildingType : 'building';

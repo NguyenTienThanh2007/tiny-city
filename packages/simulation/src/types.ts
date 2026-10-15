@@ -5,7 +5,9 @@ export interface Position {
 }
 
 export type BuildingKind = 'home' | 'workplace' | 'park';
-export type BuildingType = 'villa' | 'duplex' | 'townhouse' | 'apartment' | 'park' | 'clubhouse' | 'pool' | 'mall' | 'office';
+export type BuildingType = 'villa' | 'duplex' | 'townhouse' | 'apartment' | 'park' | 'clubhouse' | 'pool' | 'mall' | 'office' |
+  /** Phase 7 entertainment venues. */
+  'cafe' | 'shops' | 'market' | 'cinema' | 'nightclub' | 'stage' | 'plaza' | 'amusement';
 
 export interface Building {
   readonly id: string;
@@ -69,7 +71,8 @@ export type BusinessStatus = 'profitable' | 'loss' | 'understaffed' | 'weak-dema
 /** The last settled day of one economically active building (a business or a public amenity). */
 export interface BuildingFinance {
   readonly buildingId: string;
-  readonly role: 'office' | 'mall' | 'park' | 'pool' | 'clubhouse';
+  /** Phase 7 adds the entertainment venues (businesses and the city's stage and plaza) by building type. */
+  readonly role: 'office' | 'mall' | 'park' | 'pool' | 'clubhouse' | 'cafe' | 'shops' | 'market' | 'cinema' | 'nightclub' | 'stage' | 'plaza' | 'amusement';
   readonly workers: number;
   readonly jobs: number;
   readonly revenue: number;
@@ -94,7 +97,9 @@ export type LedgerCategory =
   | 'tax.residential' | 'tax.commercial' | 'city.support' | 'resident.housing' | 'resident.shopping-outside'
   | 'resident.venue-fees' | 'business.upkeep' | 'business.profit' | 'business.loss-cover' | 'city.public-services'
   | 'city.road-upkeep' | 'city.amenity-upkeep' | 'city.construction' | 'city.construction-refund'
-  | 'transit.fares' | 'resident.car-costs' | 'city.transit-operations';
+  | 'transit.fares' | 'resident.car-costs' | 'city.transit-operations'
+  /** Phase 7: what the city pays performers and crews for the events it hosts. */
+  | 'city.events';
 
 /** One recorded money movement. Internal transfers move money between city actors; `external` creates or removes it. */
 export interface LedgerEntry {
@@ -121,7 +126,9 @@ export interface EconomyDayReport {
   /** Treasury outflows. */
   readonly expenses: { readonly publicServices: number; readonly roads: number; readonly amenities: number; readonly unemploymentSupport: number; readonly construction: number;
     /** Phase 6 bus operations (absent in older reports, meaning 0). */
-    readonly transit?: number };
+    readonly transit?: number;
+    /** Phase 7 city events (absent in older reports, meaning 0). */
+    readonly events?: number };
   /** City costs the treasury could not pay (never owed later). */
   readonly unpaid: { readonly upkeep: number; readonly support: number };
   readonly population: number;
@@ -149,6 +156,9 @@ export interface EconomyDayReport {
   readonly carTrips?: number;
   /** Phase 6: what residents paid for their own car trips (to the outside economy). */
   readonly carCosts?: number;
+  /** Phase 7: what residents paid at entertainment businesses, and what they could not pay (absent in older reports). */
+  readonly leisureSpending?: number;
+  readonly leisureWaived?: number;
 }
 
 export type EconomyAlertKind = 'treasury-low' | 'deficit' | 'upkeep-unpaid' | 'unemployment' | 'understaffed' |
@@ -174,6 +184,10 @@ export interface EconomyToday {
   readonly fares?: Readonly<Record<string, number>>;
   /** Phase 6: resident → running costs of today's car trips (absent in older saves). */
   readonly carCosts?: Readonly<Record<string, number>>;
+  /** Phase 7: resident → venue → purchases at entertainment businesses today (absent in older saves). */
+  readonly purchases?: Readonly<Record<string, Readonly<Record<string, number>>>>;
+  /** Phase 7: event → what the city owes for hosting it (recorded when it starts; absent in older saves). */
+  readonly eventCosts?: Readonly<Record<string, number>>;
 }
 
 export interface EconomyState {
@@ -462,6 +476,158 @@ export interface WorldState {
   readonly economy?: EconomyState;
   /** Phase 6 transportation. Absent in older saves; enabled explicitly, with no vehicles until trips start. */
   readonly transport?: TransportState;
+  /** Phase 7 living society. Absent in older saves; enabled explicitly, never replayed retroactively. */
+  readonly society?: SocietyState;
+}
+
+/** Phase 7 living society. Every number is an integer; see `societyConfig.ts`. */
+export type Interest = 'food' | 'shopping' | 'film' | 'music' | 'nightlife' | 'outdoors' | 'arts' | 'thrills' | 'fitness';
+/** What a resident does on an outing (decided by the venue type, or `visit` for a friend's home). */
+export type OutingKind = 'dine' | 'shop' | 'market' | 'movie' | 'club' | 'event' | 'rides' | 'park' | 'plaza' | 'swim' | 'lounge' | 'visit';
+export type CityEventKind = 'concert' | 'performance' | 'movie-night' | 'festival';
+
+/** Stable 0–100 traits, generated once per resident from their identity and then stored. */
+export interface Personality {
+  /** Seeks company and groups (high) or quiet and small groups (low). */
+  readonly sociability: number;
+  /** Tries new places (high) or returns to favourites (low). */
+  readonly curiosity: number;
+  /** Stamina for late nights and long outings. */
+  readonly vitality: number;
+  /** Careful with money: weighs prices more and keeps a larger cushion. */
+  readonly frugality: number;
+  /** Drawn to community events and public gatherings. */
+  readonly community: number;
+}
+
+/** 0–100, 100 is fully satisfied. The same scale and meaning as the Life Mode player's needs. */
+export interface ResidentNeeds {
+  readonly energy: number;
+  readonly hunger: number;
+  readonly social: number;
+  /** Leisure satisfaction. */
+  readonly fun: number;
+}
+
+/** A decided outing. Companions on the same outing share its `id`. */
+export interface Outing {
+  readonly id: string;
+  readonly kind: OutingKind;
+  readonly venueId: string;
+  readonly eventId: string | null;
+  /** Residents going together (not including this resident). */
+  readonly companions: readonly string[];
+  /** For a friend's home visit: the friend who hosts. */
+  readonly hostId: string | null;
+  readonly decidedTick: number;
+  /** Leaves when it must to arrive by `startTick` (events, cinema screenings) or right away. */
+  readonly startTick: number;
+  readonly endTick: number;
+  /** Cancelled if not arrived by then (late for an event, or stuck). */
+  readonly arriveByTick: number;
+  readonly status: 'travelling' | 'present';
+  /** What was charged on arrival (0 for free activities), so one outing is never charged twice. */
+  readonly spent: number;
+}
+
+/** Why the last outing was chosen (top factors) or why the resident stayed in; shown in the profile. */
+export interface SocialChoice {
+  readonly tick: number;
+  readonly kind: OutingKind | 'stay-home';
+  readonly venueId: string | null;
+  /** Factor codes such as `hungry`, `interest:music`, `friend:npc-4`, `event:event-3`, `cheap`, `nearby`, `tired`. */
+  readonly reasons: readonly string[];
+  /** Options weighed (reachable, open, affordable and with room). */
+  readonly options: number;
+}
+
+export interface SocialProfile {
+  readonly traits: Personality;
+  readonly interests: readonly Interest[];
+  readonly needs: ResidentNeeds;
+  readonly outing: Outing | null;
+  /** The resident is hosting a friend at home until this tick (0 when not hosting). */
+  readonly hostingUntil: number;
+  /** No outing is considered before this tick (cool-down after an outing or a decision to stay in). */
+  readonly nextDecisionTick: number;
+  /** Outings started today and the day they were counted on. */
+  readonly outingsToday: number;
+  readonly day: number;
+  /** Venues visited most recently, newest last (bounded): novelty for the curious, favourites for the rest. */
+  readonly recent: readonly string[];
+  readonly lastChoice: SocialChoice | null;
+}
+
+/** An undirected relationship; `a < b` (citizen IDs), so each pair has exactly one edge. */
+export interface Relationship {
+  readonly a: string;
+  readonly b: string;
+  /** 1–100: acquaintance below 40, friend from 40, close friend from 75. */
+  readonly strength: number;
+  readonly since: number;
+  /** Game day of the last time they spent together, and what they gained that day (capped per day). */
+  readonly lastDay: number;
+  readonly gainedToday: number;
+}
+
+export interface CityEvent {
+  readonly id: string;
+  readonly kind: CityEventKind;
+  readonly name: string;
+  readonly venueId: string;
+  readonly startTick: number;
+  readonly endTick: number;
+  readonly capacity: number;
+  /** Ticket per attendee (paid to the city for public venues); 0 for free events. */
+  readonly price: number;
+  /** What the city pays to host it, recorded when it starts. */
+  readonly cost: number;
+  readonly organizer: 'city' | 'player';
+  readonly status: 'scheduled' | 'running' | 'finished' | 'cancelled';
+  readonly cancelReason: 'venue-removed' | 'player' | null;
+  /** Residents who arrived (each counted and charged once). */
+  readonly attendees: readonly string[];
+}
+
+export interface SocietyDayStats {
+  readonly day: number;
+  readonly outings: number;
+  readonly groupOutings: number;
+  readonly visitsByKind: Readonly<Partial<Record<OutingKind, number>>>;
+  readonly eventAttendance: number;
+  readonly newFriendships: number;
+  readonly cancelled: number;
+  /** Times a wanted venue was full (demand the city could add room for). */
+  readonly turnedAway: number;
+  readonly spending: number;
+}
+
+export interface SocietyState {
+  readonly version: 1;
+  readonly nextOutingId: number;
+  readonly nextEventId: number;
+  /** The last day the event calendar was filled for (events are never created for days that have passed). */
+  readonly scheduledThrough: number;
+  readonly residents: Readonly<Record<string, SocialProfile>>;
+  /** Sorted by (a, b); at most `SOCIETY.relationshipsPerResident` per resident. */
+  readonly relationships: readonly Relationship[];
+  /** Scheduled, running and recently finished events, sorted by start; bounded. */
+  readonly events: readonly CityEvent[];
+  readonly today: SocietyDayStats;
+  /** Newest last, at most `SOCIETY.historyDays`. */
+  readonly history: readonly SocietyDayStats[];
+}
+
+export type SocietyCommand =
+  | { readonly type: 'society.schedule-event'; readonly venueId: string; readonly kind: CityEventKind; readonly day: number; readonly startMinute: number }
+  | { readonly type: 'society.cancel-event'; readonly eventId: string };
+export type SocietyRejectionReason = 'society-disabled' | 'invalid-command' | 'venue-not-found' | 'unsupported-event' | 'invalid-time' |
+  'venue-busy' | 'event-limit' | 'insufficient-funds' | 'event-not-found' | 'event-started';
+
+export interface SocietyCommandResult extends SimulationResult {
+  readonly applied: boolean;
+  readonly reason: SocietyRejectionReason | null;
+  readonly eventId: string | null;
 }
 
 export type PlayerHairStyle = 'short' | 'long' | 'bun' | 'curly' | 'cap' | 'buzz';
@@ -640,6 +806,17 @@ export type SimulationEvent =
   | { readonly type: 'transport.vehicle-stalled'; readonly tick: number; readonly vehicleId: string }
   | { readonly type: 'transport.line-changed'; readonly tick: number; readonly lineId: string; readonly status: BusLine['status'] | 'created' | 'deleted'; readonly reason: BusLine['suspendedReason'] }
   | { readonly type: 'transport.command-rejected'; readonly tick: number; readonly commandType: TransportCommand['type']; readonly reason: TransportRejectionReason }
+  | { readonly type: 'society.enabled'; readonly tick: number }
+  | { readonly type: 'society.outing-planned'; readonly tick: number; readonly citizenId: string; readonly outingId: string; readonly kind: OutingKind; readonly venueId: string; readonly companions: readonly string[]; readonly reasons: readonly string[] }
+  | { readonly type: 'society.outing-arrived'; readonly tick: number; readonly citizenId: string; readonly outingId: string; readonly venueId: string; readonly spent: number }
+  | { readonly type: 'society.outing-ended'; readonly tick: number; readonly citizenId: string; readonly outingId: string; readonly venueId: string; readonly result: 'completed' | 'cancelled'; readonly reason: 'venue-removed' | 'unreachable' | 'late' | 'event-cancelled' | 'host-left' | 'obligation' | null }
+  | { readonly type: 'society.turned-away'; readonly tick: number; readonly citizenId: string; readonly venueId: string }
+  | { readonly type: 'society.relationship-changed'; readonly tick: number; readonly a: string; readonly b: string; readonly level: 'acquaintance' | 'friend' | 'close-friend'; readonly strength: number }
+  | { readonly type: 'society.event-scheduled'; readonly tick: number; readonly event: CityEvent }
+  | { readonly type: 'society.event-started'; readonly tick: number; readonly eventId: string; readonly venueId: string; readonly expected: number }
+  | { readonly type: 'society.event-ended'; readonly tick: number; readonly eventId: string; readonly venueId: string; readonly attendance: number }
+  | { readonly type: 'society.event-cancelled'; readonly tick: number; readonly eventId: string; readonly venueId: string; readonly reason: 'venue-removed' | 'player' }
+  | { readonly type: 'society.command-rejected'; readonly tick: number; readonly commandType: SocietyCommand['type']; readonly reason: SocietyRejectionReason }
   | { readonly type: 'clock.ticked'; readonly tick: number; readonly day: number; readonly minuteOfDay: number };
 
 export interface SimulationResult {

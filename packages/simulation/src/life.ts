@@ -1,7 +1,7 @@
 import { buildingCenter, containsPosition, NPC_LIMITS, RoadNavigator } from './navigation.js';
 import { insideMovement, providesLeisure } from './population.js';
 import type { TripPlanner } from './transport.js';
-import type { Building, Citizen, CitizenMovement, ScheduleEntry, SimulationEvent, WorldState } from './types.js';
+import type { Building, Citizen, CitizenActivity, CitizenMovement, ScheduleEntry, SimulationEvent, WorldState } from './types.js';
 
 /** FNV-1a: a stable, platform-independent 32-bit hash. */
 function hash(text: string): number {
@@ -36,7 +36,9 @@ export function scheduledEntry(citizen: Citizen, minute: number): ScheduleEntry 
  * Phase 6: with a `planner`, a resident leaving a building may drive or take the bus instead of walking; residents in
  * transport (`status: 'vehicle'`) only have their destination updated here, and `advanceTransport` moves them.
  */
-export function advanceDailyLife(world: WorldState, navigator: RoadNavigator, minute: number, planner?: TripPlanner) {
+export type LifeOverride = (c: Citizen, entry: ScheduleEntry) => { activity: CitizenActivity; destination: string | null } | null;
+
+export function advanceDailyLife(world: WorldState, navigator: RoadNavigator, minute: number, planner?: TripPlanner, override?: LifeOverride) {
   const events: SimulationEvent[] = [], tick = world.clock.tick;
   const leisure = navigator.leisureBuildings;
   const reservations = new Map<string, number>();
@@ -51,11 +53,13 @@ export function advanceDailyLife(world: WorldState, navigator: RoadNavigator, mi
     if (holdsReservation(oldMovement)) {
       const id = oldMovement.destinationBuildingId!; reservations.set(id, (reservations.get(id) ?? 1) - 1);
     }
-    let activity = entry.activity, destination = entry.targetBuildingId;
+    // Phase 7: society decides outings, days off and free evenings; its destination is already reserved there.
+    const decided = override?.(c, entry) ?? null;
+    let activity = decided?.activity ?? entry.activity, destination = decided ? decided.destination : entry.targetBuildingId;
     if (activity === 'sleep' || activity === 'home') destination ??= c.homeBuildingId;
     if (activity === 'work' && !c.workBuildingId) { activity = 'home'; destination = c.homeBuildingId; }
     else if (activity === 'work') destination = c.workBuildingId;
-    if (activity === 'leisure') {
+    if (activity === 'leisure' && !decided) {
       const available = (id: string | null) => { const b = navigator.getBuilding(id); return b && providesLeisure(b) && (reservations.get(b.id) ?? 0) < b.capacity ? b.id : null; };
       destination = available(destination) ?? available(oldMovement.arrivalActivity === 'leisure' ? oldMovement.destinationBuildingId : null) ??
         preferredVenue(c.id, leisure, (b) => (reservations.get(b.id) ?? 0) < b.capacity);

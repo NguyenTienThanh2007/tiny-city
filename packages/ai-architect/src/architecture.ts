@@ -100,6 +100,16 @@ export const ARCHITECTURE_MODELS: readonly ArchitectureModel[] = [
   classic('office', 0, 'tide', 'Tide Tower', 'Tòa Tide', 'Glass tower on a stone podium with ivory fins.', ['Curtain wall', 'Lit crown', 'Plaza']),
   classic('office', 1, 'nova', 'Nova Tower', 'Tòa Nova', 'Green glass with coral fins and palms.', ['Coral fins', 'Garden terrace', 'Palms']),
   classic('office', 2, 'helix', 'Helix Tower', 'Tòa Helix', 'Steel-blue glass with bronze fins.', ['Bronze fins', 'Mast', 'Lime trees']),
+  // Phase 7 entertainment venues (Classic Coastal bakes).
+  classic('cafe', 0, 'corner-terrace', 'Corner Terrace Café', 'Quán cà phê Corner Terrace', 'A corner café with a striped awning, window counters and a planted terrace.', ['Striped awning', 'Terrace tables', 'Warm window glow']),
+  classic('cafe', 1, 'garden-bistro', 'Garden Bistro', 'Nhà hàng Garden Bistro', 'A garden restaurant under a pergola with string lights and a pizza oven.', ['Pergola', 'String lights', 'Garden tables']),
+  classic('shops', 0, 'harbour-arcade', 'Harbour Arcade', 'Phố mua sắm Harbour Arcade', 'Four lettered shopfronts with awnings, display windows and a shared colonnade.', ['Four shopfronts', 'Colonnade', 'Display windows']),
+  classic('market', 0, 'lantern-market', 'Lantern Night Market', 'Chợ đêm Lantern', 'Rows of food and craft stalls under lantern strings around a seating court.', ['Lantern strings', 'Food stalls', 'Seating court']),
+  classic('cinema', 0, 'marquee', 'Marquee Cinema', 'Rạp chiếu phim Marquee', 'An art-deco cinema with a lit marquee, poster cases and a ticket kiosk.', ['Lit marquee', 'Poster cases', 'Ticket kiosk']),
+  classic('nightclub', 0, 'neon-club', 'Neon Music Club', 'Câu lạc bộ âm nhạc Neon', 'A dark brick music club with a neon sign, a rooftop lounge and a queue rail.', ['Neon sign', 'Rooftop lounge', 'Queue rail']),
+  classic('stage', 0, 'shell-stage', 'Shell Concert Stage', 'Sân khấu Shell', 'A white acoustic shell over a stage, light towers and a lawn for the audience.', ['Acoustic shell', 'Light towers', 'Audience lawn']),
+  classic('plaza', 0, 'fountain-plaza', 'Fountain Performance Plaza', 'Quảng trường biểu diễn Fountain', 'A paved plaza with a small performance platform, a fountain and benches under trees.', ['Performance platform', 'Fountain', 'Shade trees']),
+  classic('amusement', 0, 'seaside-fun', 'Seaside Fun Park', 'Công viên giải trí Seaside', 'A Ferris wheel, a carousel, a small coaster and food kiosks in a colourful park.', ['Ferris wheel', 'Carousel', 'Mini coaster']),
 
   // Luxury Minimalist: the 3.1 benchmark collection.
   { id: 'lm.villa.glass-pavilion', collection: 'luxury-minimalist', buildingType: 'villa', name: 'Glass Pavilion Villa', nameVi: 'Biệt thự Glass Pavilion', status: 'available',

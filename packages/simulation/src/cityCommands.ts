@@ -5,6 +5,7 @@ import { RoadGraph } from './roads.js';
 import { reconcilePopulation } from './population.js';
 import { reconcilePlayer } from './player.js';
 import { reconcileTransport } from './transport.js';
+import { reconcileSociety } from './society.js';
 import type { Building, BuildingType, CityCommand, CityCommandResult, CityRejectionReason, PlacementValidation, Position, SimulationEvent, WorldState } from './types.js';
 import { cloneWorld, freeze, validateWorld } from './world.js';
 
@@ -191,6 +192,9 @@ export function applyCityCommand(world: WorldState, command: CityCommand): CityC
   const transport = reconcileTransport(next, world);
   next = transport.state;
   events.push(...transport.events);
+  const society = reconcileSociety(next, world);
+  next = society.state;
+  events.push(...society.events);
   validateWorld(next);
   return result(next, events, true);
 }
