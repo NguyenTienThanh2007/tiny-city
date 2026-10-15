@@ -169,8 +169,10 @@ export function buildAsset(id: string): BuiltAsset | null {
     geometry.computeBoundingBox();
     meshBox.copy(geometry.boundingBox!);
     bounds.union(meshBox);
-    // The camera stops at real mass: anything taller than a garden wall that is not foliage.
-    if (role !== 'foliage' && meshBox.max.y > 0.16 && meshBox.max.y - meshBox.min.y > 0.08) solid.union(meshBox);
+    // The camera stops at real building mass: walls, volumes and roofs (taller than a garden wall, with a real
+    // footprint). Foliage, tree trunks, lamp posts and thin columns never pull the camera in.
+    const footprint = (meshBox.max.x - meshBox.min.x) * (meshBox.max.z - meshBox.min.z);
+    if (role !== 'foliage' && meshBox.max.y > 0.16 && meshBox.max.y - meshBox.min.y > 0.08 && footprint > 0.03) solid.union(meshBox);
     triangles += geometry.attributes.position!.count / 3;
     const key = `${role}:${material.uuid}`;
     const group = groups.get(key) ?? { material, role, geometries: [], cast: false };

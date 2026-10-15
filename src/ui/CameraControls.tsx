@@ -4,7 +4,7 @@ import { Icon } from './Icon';
  * Every camera control in one place (Phase 4.6): zoom and the neighbourhood framing for all modes, plus, in Life
  * Mode, the City View / Life View switch, Focus and Follow. The Follow state shown is the real one the camera uses.
  */
-export function CameraControls({ lifeActive, playerName, playerPlaced, cameraView, following, onZoom, onHome, onFocus, onToggleFollow, onView, onEnterWorld }: {
+export function CameraControls({ lifeActive, playerName, playerPlaced, cameraView, following, onZoom, onHome, onFocus, onToggleFollow, onView }: {
   lifeActive: boolean;
   playerName: string | null;
   /** The character is in the world (created and moved in). */
@@ -16,13 +16,9 @@ export function CameraControls({ lifeActive, playerName, playerPlaced, cameraVie
   onFocus: () => void;
   onToggleFollow: () => void;
   onView: (view: 'city' | 'life') => void;
-  /** Phase 8A: open the third-person Character View (explains what is missing when the character cannot enter yet). */
-  onEnterWorld?: () => void;
 }) {
   const absent = !playerName ? 'Create a character first' : `${playerName} has not moved in yet`;
   return <>
-    {onEnterWorld && <button type="button" className="enter-world" onClick={onEnterWorld}
-      title={playerPlaced ? `Walk ${playerName ?? 'your character'} through the neighbourhood in 3D` : absent}><Icon name="cube" size={16} /><span>Enter World</span></button>}
     {lifeActive && <div className="life-camera" role="group" aria-label="Character camera">
       <div className="view-switch" role="group" aria-label="Camera view">
         <button type="button" aria-pressed={cameraView === 'life'} disabled={!playerPlaced} onClick={() => onView('life')}

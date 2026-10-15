@@ -62,12 +62,35 @@ export interface ImmersiveDebug {
   commits: number;
   rejected: number;
   pointerLocked: boolean;
-  stats: NeighbourhoodStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; fps: number; frameMs: number; p95Ms: number; initMs: number };
+  stats: NeighbourhoodStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; fps: number; frameMs: number; p95Ms: number; initMs: number;
+    /** Mean CPU time of the engine's frame callback (simulation advance, controller, camera, scene update, render submit). */
+    cpuMs: number;
+    /** Estimated GPU memory of the static scene: vertex buffers plus textures (mipmapped RGBA8), in bytes. */
+    gpuBytes: number };
   residents: string[];
   vehicles: string[];
   /** The character's composed layers (appearance → rig layers), to prove the same character in both views. */
   character: readonly string[];
   input: MoveInput;
+}
+
+/** Vertex buffers (instance matrices included) and textures of a scene, counted once each. */
+function estimateGpuBytes(scene: THREE.Scene): number {
+  const geometries = new Set<THREE.BufferGeometry>(), textures = new Set<THREE.Texture>();
+  let bytes = 0;
+  scene.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    geometries.add(mesh.geometry);
+    if ((mesh as THREE.InstancedMesh).isInstancedMesh) bytes += (mesh as THREE.InstancedMesh).instanceMatrix.array.byteLength;
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const map = (m as THREE.MeshStandardMaterial).map;
+      if (map) textures.add(map);
+    }
+  });
+  for (const g of geometries) for (const a of Object.values(g.attributes)) bytes += (a as THREE.BufferAttribute).array.byteLength;
+  for (const t of textures) { const img = t.image as { width?: number; height?: number } | undefined; bytes += Math.round((img?.width ?? 0) * (img?.height ?? 0) * 4 * 4 / 3); }
+  return bytes;
 }
 
 /** Reads the GPU/renderer name from a throwaway context (released at once), e.g. to spot software rendering. */
@@ -114,6 +137,8 @@ export class ImmersiveEngine {
   private rendererName = 'unknown';
   private drag: { id: number; x: number; y: number; travel: number; at: number } | null = null;
   private frameTimes: number[] = [];
+  private frameCosts: number[] = [];
+  private gpuBytes = 0;
   private hudAt = 0;
   private initMs = 0;
   private time = 0;
@@ -188,6 +213,7 @@ export class ImmersiveEngine {
     this.lastCommitted = { ...world.player!.position };
     this.bindInput();
     this.initMs = Math.round(performance.now() - started);
+    this.gpuBytes = estimateGpuBytes(neighbourhood.scene);
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
     this.host.onReady({ spawn, quality: this.quality });
@@ -373,14 +399,16 @@ export class ImmersiveEngine {
     this.orbit = frameOrbit.state;
     this.camera.position.set(frameOrbit.position.x, frameOrbit.position.y, frameOrbit.position.z);
     this.camera.lookAt(frameOrbit.lookAt.x, frameOrbit.lookAt.y, frameOrbit.lookAt.z);
-    // Very close up, the character fades so the camera never looks out through their head.
-    this.character.root.visible = this.orbit.actual > 0.2;
+    // The camera never comes closer than ORBIT.nearest; this only guards against looking out through the head.
+    this.character.root.visible = this.orbit.actual > 0.12;
     this.neighbourhood.update(getGameTime(world.clock).minuteOfDay, c.position, this.camera.position);
     this.renderer.render(this.neighbourhood.scene, this.camera);
 
     const cost = performance.now() - frameStart;
     this.frameTimes.push(elapsedMs);
     if (this.frameTimes.length > 240) this.frameTimes.shift();
+    this.frameCosts.push(cost);
+    if (this.frameCosts.length > 120) this.frameCosts.shift();
     if (now - this.hudAt > 160) {
       this.hudAt = now;
       const status = player.movement.status;
@@ -409,7 +437,8 @@ export class ImmersiveEngine {
       camera: { yaw: this.orbit.yaw, pitch: this.orbit.pitch, distance: this.orbit.distanceTarget, actual: this.orbit.actual, x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z },
       commits: this.commits, rejected: this.rejected, pointerLocked: document.pointerLockElement === this.canvas,
       stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
-        fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs },
+        fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs,
+        cpuMs: Math.round(this.frameCosts.reduce((a, b) => a + b, 0) / Math.max(1, this.frameCosts.length) * 100) / 100, gpuBytes: this.gpuBytes },
       residents: this.residents.ids(), vehicles: this.vehicles?.ids() ?? [], character: this.character?.layers ?? [], input,
     };
     (window as unknown as { __tinyCityImmersive?: ImmersiveDebug }).__tinyCityImmersive = debug;

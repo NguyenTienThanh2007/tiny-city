@@ -1552,15 +1552,16 @@ button.funds-chip:hover { background: var(--sand-200); }
 }
 
 /* ---------- Phase 8A: Character View (third-person 3D) ---------- */
-.map-tools:has(.enter-world):not(:has(.life-camera)) { flex-wrap: wrap; justify-content: flex-end; max-width: 280px; }
 .enter-world {
-  flex-basis: 100%; grid-column: 1 / -1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px;
-  padding: 8px 14px; border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, .3); color: var(--ivory); font: 700 13px/1 var(--font-ui);
-  background: linear-gradient(180deg, var(--forest-700), var(--forest-900)); box-shadow: var(--shadow-md); cursor: pointer; letter-spacing: .01em;
-  transition: transform .15s var(--ease), box-shadow .15s var(--ease);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 13px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; color: var(--ivory); font: 700 13px/1 var(--font-ui); white-space: nowrap; cursor: pointer;
+  background: linear-gradient(180deg, var(--forest-700), var(--forest-900)); box-shadow: var(--shadow-sm); transition: transform .15s var(--ease), box-shadow .15s var(--ease);
 }
-.enter-world:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.enter-world:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .enter-world:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+@media (max-width: 1180px) { .enter-world span { display: none; } .enter-world { width: 36px; padding: 0; } }
+/* Phones: the Character View needs a keyboard and a mouse or trackpad (touch controls are not part of Phase 8A). */
+@media (max-width: 760px) { .enter-world { display: none; } }
 .app-shell.is-immersive .city-viewport { visibility: hidden; }
 
 .immersive { position: fixed; inset: 0; z-index: 80; background: #cfe3ee; color: var(--ink); font-family: var(--font-ui); overflow: hidden; }

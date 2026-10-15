@@ -1327,6 +1327,10 @@ function App() {
           <div className="hud-stat" title="Home buildings"><Icon name="home" size={15} /><strong>{villas}</strong><small>Homes</small></div>
         </div>
         <div className="top-actions">
+          {/* Phase 8A: the third-person Character View. It lives in the top bar so it never covers the map. */}
+          <button type="button" className="enter-world" aria-label="Enter World" onClick={enterWorld}
+            title={playerPlaced ? `Walk ${player?.name ?? 'your character'} through the neighbourhood in 3D` : player ? `${player.name} needs a home first` : 'Create a character to walk the neighbourhood in 3D'}>
+            <Icon name="cube" size={15} /><span>Enter World</span></button>
           <button className="icon-button" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!history.length}><Icon name="undo" /></button>
           <button className="icon-button" aria-label="Redo" title="Redo (⌘⇧Z)" onClick={redo} disabled={!redoHistory.length}><Icon name="redo" /></button>
           {auth.status === 'authenticated' && <button className="cloud-button" onClick={openCloudSaves} title="Manage account cloud cities">Cloud</button>}
@@ -1361,7 +1365,7 @@ function App() {
           onZoom={zoomCamera} onFocus={focusPlayer}
           onHome={() => { setFollowCitizenId(null); setFollowPlayer(false); if (lifeActive) setCameraView('city'); navigateCamera(); }}
           onToggleFollow={() => { setFollowCitizenId(null); setFollowPlayer(!followingPlayer); }}
-          onView={(next) => { if (next === 'life') showLifeView(); else showCityView(); }} onEnterWorld={enterWorld} />
+          onView={(next) => { if (next === 'life') showLifeView(); else showCityView(); }} />
         <MiniMap city={city} citizens={citizens} footprint={footprintStore} selectedCitizenId={selectedCitizenId} selectedFootprint={selectedFootprint} onNavigate={(cell) => { setFollowCitizenId(null); setFollowPlayer(false); navigateCamera(cell); }} />
       </div>
 

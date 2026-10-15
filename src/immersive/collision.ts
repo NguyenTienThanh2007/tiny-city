@@ -99,8 +99,14 @@ function resolve(grid: WalkGrid, p: Position, r: number): Position {
         } else {
           const dx = x - o.x, dy = y - o.y, d = Math.hypot(dx, dy), min = r + o.r;
           if (d < min) {
-            const ux = d > 1e-9 ? dx / d : 1, uy = d > 1e-9 ? dy / d : 0;
-            x = o.x + ux * min; y = o.y + uy * min; moved = true;
+            let ux = d > 1e-9 ? dx / d : 1, uy = d > 1e-9 ? dy / d : 0;
+            // Head-on into a post: lean the push slightly toward the middle of the tile (the street side), so the
+            // character slides around it instead of stopping dead. Deterministic.
+            const cx = Math.floor(o.x) + 0.5, cy = Math.floor(o.y) + 0.5;
+            if (Math.abs(uy) < 0.05 && Math.abs(ux) > 0.9) { uy += 0.12 * (Math.sign(cy - o.y) || 1); }
+            else if (Math.abs(ux) < 0.05 && Math.abs(uy) > 0.9) { ux += 0.12 * (Math.sign(cx - o.x) || 1); }
+            const n = Math.hypot(ux, uy);
+            x = o.x + (ux / n) * min; y = o.y + (uy / n) * min; moved = true;
           }
         }
       }

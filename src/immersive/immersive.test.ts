@@ -136,6 +136,16 @@ describe('walkable ground and collision', () => {
     expect(Math.hypot(moved.x - lamp.at.x, moved.y - lamp.at.y)).toBeGreaterThanOrEqual(MOVEMENT.radius + 0.03 - 1e-9);
   });
 
+  it('slides around a curb post instead of snagging, even head-on', () => {
+    const plan = { ...world.plan, buildings: [], roads: Array.from({ length: 20 }, (_, i) => ({ x: i + 2, y: 5 })) };
+    for (const offset of [0, 0.01, 0.06]) {
+      const posts = buildWalkGrid(plan, [{ kind: 'streetTree', tile: { x: 8, y: 5 }, at: { x: 8.5, y: 5.07 }, variant: 0, size: 1 }]);
+      let s = createController({ x: 6.5, y: 5.07 + offset }, Math.PI / 2);
+      for (let i = 0; i < 900; i += 1) s = advanceController(s, { forward: 1, right: 0, run: false }, Math.PI / 2, 1 / 60, posts);
+      expect(s.position.x).toBeGreaterThan(9.5);
+    }
+  });
+
   it('every position the controller reaches is accepted by the simulation walk check', () => {
     const sim = withPlayer();
     const spawn = resolveSpawn(sim.getState(), sim.getNavigator(), grid);
