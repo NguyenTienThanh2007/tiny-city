@@ -3,7 +3,9 @@ import type { Renderer } from 'pixi.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CityPlan, Position, WorldState } from '@tiny-city/simulation';
 import type { PlanProposal } from '@tiny-city/ai-architect';
-import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement } from '@tiny-city/simulation';
+import { validateBuildingMove, validateBuildingPlacement, validateRoadPlacement, VENUES } from '@tiny-city/simulation';
+/** Phase 7: entertainment venues the player can visit. */
+const VENUE_KINDS: ReadonlySet<string> = new Set(Object.keys(VENUES));
 import { getRenderBuildings } from '../simulation/cityAdapter';
 import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
@@ -1215,7 +1217,7 @@ export default function CityViewport(props: Props) {
           } else if (hoverPlayer) label = 'You · open your profile';
           else if (hoverCitizenId) label = `Meet ${live.citizens.find((entry) => entry.id === hoverCitizenId)?.name ?? 'resident'}`;
           else if (building) {
-            label = `${building.name} · ${building.kind === 'park' || building.kind === 'pool' || building.kind === 'clubhouse' ? 'Visit or walk here' : 'Walk here'}`;
+            label = `${building.name} · ${building.kind === 'park' || building.kind === 'pool' || building.kind === 'clubhouse' || VENUE_KINDS.has(building.kind) ? 'Visit or walk here' : 'Walk here'}`;
             const spec = BUILDINGS[building.kind];
             ghostShape.poly(footprint(building.x, building.y, spec.width, spec.height).flatMap((point) => [point.x, point.y]))
               .fill({ color: 0xffffff, alpha: 0.12 }).stroke({ color: 0xffffff, width: 2, alpha: 0.85 });

@@ -76,7 +76,8 @@ export function windowsOn(type: string | undefined, id: string, minuteOfDay: num
   const venue = type === 'stage' ? { open: 18 * 60, close: 23 * 60 + 30 } : type ? VENUES[type as BuildingType] : undefined;
   if (venue && type !== 'park' && type !== 'pool') {
     const t = venue.close > 1440 && m < 12 * 60 ? m + 1440 : m;
-    if (t >= venue.open - 20 && t <= venue.close) return Math.max(0.12, Math.min(ramp(venue.open - 20, venue.open), 1 - ramp(venue.close - 20, venue.close)));
+    const fade = (from: number, to: number) => Math.max(0, Math.min(1, (t - from) / (to - from)));
+    if (t >= venue.open - 20 && t <= venue.close) return Math.max(0.12, Math.min(fade(venue.open - 20, venue.open), 1 - fade(venue.close - 20, venue.close)));
     return 0.12;
   }
   // Each home picks its own bedtime between 23:00 and 01:30 and wakes between 05:30 and 06:30.

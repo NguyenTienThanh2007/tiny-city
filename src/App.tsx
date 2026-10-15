@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, TRANSPORT, validateRoadPlacement, VENUES } from '@tiny-city/simulation';
+import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, TRANSPORT, validateRoadPlacement, VENUES, visitorCapacity } from '@tiny-city/simulation';
 import type { CityEventKind, EconomyPolicy, LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { Building as SimBuilding, CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
@@ -15,7 +15,7 @@ import { CameraControls } from './ui/CameraControls';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
 import { ActionButton, HomePicker, LifeEntry, LifePanel, LifeStrip, PlaceCard } from './ui/LifePanel';
 import { homeOccupancy, projectWelcome } from './simulation/housingView';
-import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, rejectionText, type PlayerLogState } from './simulation/playerView';
+import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, servesMeals, rejectionText, type PlayerLogState } from './simulation/playerView';
 import { DEFAULT_APPEARANCE } from './game/playerLook';
 import { Icon } from './ui/Icon';
 import { createFootprintStore, MiniMap } from './ui/MiniMap';
@@ -1038,7 +1038,7 @@ function App() {
     const rooms = homeOccupancy(lifePlace.capacity, occupancy, player, lifePlace.id);
     const detail = own ? `Your home · ${rooms.occupied} of ${lifePlace.capacity} rooms taken`
       : lifePlace.kind === 'home' ? `${BUILDINGS[kind].label} · ${rooms.freeRooms > 0 ? `${rooms.freeRooms} free room${rooms.freeRooms === 1 ? '' : 's'}` : 'no free rooms'}`
-      : isLeisure(lifePlace) ? `${BUILDINGS[kind].label} · ${occupancy.visitorIds.length} of ${lifePlace.capacity} visitors now`
+      : isLeisure(lifePlace) ? `${BUILDINGS[kind].label} · ${occupancy.visitorIds.length} of ${visitorCapacity(lifePlace)} visitors now`
       : `${BUILDINGS[kind].label} · ${occupancy.workerIds.length} working here · not open to visit`;
     const walk = <ActionButton key="walk" label="Walk here" icon="walk" hint={own ? 'Go inside' : 'Stop at the entrance'}
       availability={dryRun({ type: 'player.move-to', destination: { type: 'building', buildingId: lifePlace.id } })}
@@ -1047,7 +1047,10 @@ function App() {
       <ActionButton key="rest" label="Rest" icon="bed" hint="120 min · restores energy" availability={dryRun({ type: 'player.start-activity', activity: 'rest' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'rest' })} />,
       <ActionButton key="eat" label="Eat" icon="leaf" hint="30 min · fills hunger" availability={dryRun({ type: 'player.start-activity', activity: 'eat' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'eat' })} />]
       : isLeisure(lifePlace) ? [<ActionButton key="visit" label="Visit" icon="park" hint="60 min · lifts mood" availability={dryRun({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })}
-        onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })} />, walk]
+        onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })} />,
+        // Phase 7: eat out at a café or the night market.
+        ...(servesMeals(lifePlace) ? [<ActionButton key="eat-out" label="Eat here" icon="food" hint="30 min · fills hunger" availability={dryRun({ type: 'player.start-activity', activity: 'eat', buildingId: lifePlace.id })}
+          onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'eat', buildingId: lifePlace.id })} />] : []), walk]
       : lifePlace.kind === 'home' && rooms.freeRooms > 0 ? [walk, <ActionButton key="move-in" label="Move in here" icon="home" hint="Take a free room" availability={{ action: 'cancel', available: true, reason: null }}
         onClick={() => { setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: lifePlace.id }); setLifePlaceId(null); }} />]
       : [walk];

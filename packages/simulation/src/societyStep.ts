@@ -691,6 +691,9 @@ export function stepSocietyAfter(world: WorldState, nav: RoadNavigator): { state
     else if (c.activity === 'work' && c.movement?.status === 'inside') delta = NEED_RATES.work;
     else if (c.movement?.status === 'inside' && c.movement.currentBuildingId === c.homeBuildingId) delta = p.hostingUntil > tick ? addRates(NEED_RATES.home, { energy: 0, hunger: 0, social: 8, fun: 3 }) : NEED_RATES.home;
     else delta = NEED_RATES.travel;
+    // Life Mode: the player's company counts (greeting or chatting with this resident right now).
+    const pa = world.player?.activity;
+    if (pa && pa.phase === 'performing' && pa.citizenId === id && (pa.kind === 'greet' || pa.kind === 'socialize')) delta = addRates(delta, { energy: 0, hunger: 0, social: SOCIETY.playerChatSocial, fun: 1 });
     const needs = addNeeds(p.needs, delta);
     if (needs.energy !== p.needs.energy || needs.hunger !== p.needs.hunger || needs.social !== p.needs.social || needs.fun !== p.needs.fun) set(id, { ...residents[id]!, needs });
   }

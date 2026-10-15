@@ -60,6 +60,8 @@ export const SOCIETY = Object.freeze({
   playerEvents: 4,
   /** The calendar is filled this many days ahead (never for days that have passed). */
   lookaheadDays: 3,
+  /** A resident chatting with the Life Mode player gains this much company per period. */
+  playerChatSocial: 6,
   /** Venue options weighed per activity: the nearest few of each venue type. */
   venuesPerType: 3,
 });

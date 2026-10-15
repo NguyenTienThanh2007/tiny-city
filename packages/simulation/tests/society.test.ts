@@ -343,6 +343,46 @@ describe('economy', () => {
   });
 });
 
+describe('life mode', () => {
+  const look = { skinTone: 1, hairStyle: 'short', hairColor: 2, outfit: 'tee', outfitColor: 3, accessory: 'none' } as const;
+  const town = () => {
+    const sim = new Simulation(societyTown({ townhouse: 2, cafe: 1, cinema: 1, plaza: 1, office: 1 }, { maxCitizens: 4 }));
+    // The second townhouse has free rooms (four residents fill the first).
+    const home = sim.getState().plan.buildings.filter((b) => b.type === 'townhouse').find((b) => !sim.getState().citizens.some((c) => c.homeBuildingId === b.id))!;
+    expect(sim.executeLife({ type: 'player.create', name: 'Mai', appearance: look, homeBuildingId: home.id }).applied).toBe(true);
+    return sim;
+  };
+  const id = (sim: Simulation, type: string) => sim.getState().plan.buildings.find((b) => b.type === type)!.id;
+
+  it('visits open venues only, eats out at the café, and refuses closed ones', () => {
+    const sim = town();
+    sim.step(3 * 60);
+    expect(sim.executeLife({ type: 'player.start-activity', activity: 'visit', buildingId: id(sim, 'cafe') }).reason).toBe('venue-closed');
+    sim.step(8 * 60);
+    expect(sim.executeLife({ type: 'player.start-activity', activity: 'visit', buildingId: id(sim, 'cinema') }).reason).toBe('venue-closed');
+    const hungry = sim.getState().player!.needs.hunger;
+    expect(sim.executeLife({ type: 'player.start-activity', activity: 'eat', buildingId: id(sim, 'cafe') }).applied).toBe(true);
+    const events = runSociety(sim, 240, 20);
+    const ended = ofType(events, 'player.activity-ended').find((e) => e.outcome.kind === 'eat');
+    expect(ended?.outcome.result).toBe('completed');
+    expect(ended?.outcome.buildingId).toBe(id(sim, 'cafe'));
+    expect(sim.getState().player!.needs.hunger).toBeGreaterThan(hungry);
+    // Any open venue can be visited, and the visit counts towards its capacity.
+    expect(sim.executeLife({ type: 'player.start-activity', activity: 'visit', buildingId: id(sim, 'plaza') }).applied).toBe(true);
+  });
+
+  it('a running event lifts the player more than a quiet visit', () => {
+    const quiet = town(), lively = town();
+    const plaza = id(lively, 'plaza');
+    expect(lively.executeSociety({ type: 'society.schedule-event', venueId: plaza, kind: 'festival', day: 0, startMinute: 9 * 60 }).applied).toBe(true);
+    for (const sim of [quiet, lively]) { sim.step(9 * 60 + 5); sim.executeLife({ type: 'player.start-activity', activity: 'visit', buildingId: plaza }); }
+    const done = (sim: Simulation) => ofType(runSociety(sim, 200), 'player.activity-ended').find((e) => e.outcome.kind === 'visit');
+    expect(done(quiet)?.outcome.result).toBe('completed');
+    expect(done(lively)?.outcome.result).toBe('completed');
+    expect(lively.getState().player!.needs.mood).toBeGreaterThan(quiet.getState().player!.needs.mood);
+  });
+});
+
 describe('determinism and persistence', () => {
   it('pauses exactly: no society progress while paused', () => {
     const sim = new Simulation(societyTown(LIVELY));

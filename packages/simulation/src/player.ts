@@ -1,5 +1,8 @@
 import { buildingCenter, containsPosition, NPC_LIMITS, RoadNavigator } from './navigation.js';
 import { providesLeisure } from './population.js';
+import { visitorCapacity } from './catalog.js';
+import { isLeisureVenue, isVenueOpen } from './society.js';
+import { VENUES } from './societyConfig.js';
 import type {
   Building, Citizen, LifeCommand, LifeRejectionReason, PlayerActionKind, PlayerActivity, PlayerActivityKind, PlayerAppearance,
   PlayerCharacter, PlayerFailureReason, PlayerMovement, PlayerNeed, PlayerNeedLevel, PlayerNeeds, PlayerOutcome, PlayerSocialTopic,
@@ -48,7 +51,9 @@ export const PLAYER_BALANCE = Object.freeze({
   activities: Object.freeze({
     rest: Object.freeze({ minutes: 120, energy: 0.6, hungerDecayFactor: 0.5, mood: 5 }),
     eat: Object.freeze({ minutes: 30, hunger: 2.5, mood: 5 }),
-    visit: Object.freeze({ minutes: 60, social: 0.15, socialPerVisitor: 0.05, maxVisitorBonus: 0.3, mood: 20 }),
+    visit: Object.freeze({ minutes: 60, social: 0.15, socialPerVisitor: 0.05, maxVisitorBonus: 0.3, mood: 20,
+      /** Phase 7: a city event running at the venue (a concert, a festival) adds company and joy. */
+      eventSocial: 0.15, eventMood: 10 }),
     greet: Object.freeze({ minutes: 5, social: 1.2, mood: 10 }),
     socialize: Object.freeze({ minutes: 30, social: 1.8, mood: 15 }),
   }),
@@ -126,16 +131,19 @@ function visitorCount(world: WorldState, buildingId: string): number {
 type Meeting = { readonly type: 'venue'; readonly building: Building } | { readonly type: 'street'; readonly goals: readonly Position[]; readonly at: Position } |
   { readonly type: 'unavailable'; readonly building: Building | null };
 
+/** Parks, pools, the clubhouse and (Phase 7) every entertainment venue are public places the player may enter. */
+const publicPlace = (b: Building) => providesLeisure(b) || isLeisureVenue(b);
+
 function meetingPoint(citizen: Citizen, nav: RoadNavigator): Meeting {
   const m = citizen.movement;
   const inside = m?.status === 'inside' && m.currentBuildingId ? nav.getBuilding(m.currentBuildingId) : undefined;
-  if (inside) return providesLeisure(inside) ? { type: 'venue', building: inside } : { type: 'unavailable', building: inside };
+  if (inside) return publicPlace(inside) ? { type: 'venue', building: inside } : { type: 'unavailable', building: inside };
   if (!m) {
     // Legacy authored residents only move between schedule targets; meet them where they are.
     const cell = nav.grid.get(tileOf(citizen.position));
     if (cell?.type === 'building') {
       const b = nav.getBuilding(cell.buildingId)!;
-      return providesLeisure(b) ? { type: 'venue', building: b } : { type: 'unavailable', building: b };
+      return publicPlace(b) ? { type: 'venue', building: b } : { type: 'unavailable', building: b };
     }
   }
   const tile = tileOf(citizen.position);
@@ -190,9 +198,15 @@ function stopMovement(player: PlayerCharacter, nav: RoadNavigator, revision: num
   return standing(cell?.type === 'building' ? cell.buildingId : null, revision);
 }
 
-function canEnter(player: PlayerCharacter, building: Building, purpose: PlayerActivityKind): boolean {
-  return building.id === player.homeBuildingId || purpose === 'visit' && providesLeisure(building) ||
-    (purpose === 'greet' || purpose === 'socialize') && providesLeisure(building);
+/** Phase 7: with a living society, every entertainment venue can be visited while it is open (parks, pools and the clubhouse at any hour, as before). */
+const visitable = (world: WorldState, b: Building) => providesLeisure(b) || world.society !== undefined && isLeisureVenue(b) && isVenueOpen(world, b);
+/** Phase 7: the café and the night market serve meals while open. */
+const servesMeals = (world: WorldState, b: Building | undefined) => !!b && world.society !== undefined && b.type !== undefined &&
+  (VENUES[b.type]?.kind === 'dine' || VENUES[b.type]?.kind === 'market') && isVenueOpen(world, b);
+
+function canEnter(world: WorldState, player: PlayerCharacter, building: Building, purpose: PlayerActivityKind): boolean {
+  return building.id === player.homeBuildingId || purpose === 'visit' && visitable(world, building) || purpose === 'eat' && servesMeals(world, building) ||
+    (purpose === 'greet' || purpose === 'socialize') && publicPlace(building);
 }
 
 type Plan = { readonly route: readonly Position[]; readonly enter: string | null } | { readonly route: null; readonly reason: 'unreachable' | 'search-limit' | 'stranded' };
@@ -234,19 +248,28 @@ function resolveAction(world: WorldState, player: PlayerCharacter, nav: RoadNavi
   switch (activity) {
     case 'rest':
     case 'eat': {
+      // Phase 7: eat out at an open café or night market (named by the player); otherwise a meal at home.
+      if (activity === 'eat' && buildingId !== undefined && buildingId !== player.homeBuildingId) {
+        const place = nav.getBuilding(buildingId);
+        if (!place) return 'building-not-found';
+        if (!servesMeals(world, place)) return world.society && isLeisureVenue(place) && !isVenueOpen(world, place) ? 'venue-closed' : 'not-leisure';
+        if (visitorCount(world, place.id) >= visitorCapacity(place)) return 'venue-full';
+        return { target: { building: place, enter: true }, activity: { ...base, buildingId: place.id, citizenId: null } };
+      }
       const home = nav.getBuilding(player.homeBuildingId);
       if (!home) return 'no-home';
       return { target: { building: home, enter: true }, activity: { ...base, buildingId: home.id, citizenId: null } };
     }
     case 'visit': {
       if (tired) return 'too-tired';
-      const candidates = buildingId !== undefined ? [nav.getBuilding(buildingId)] : nav.leisureBuildings;
+      const venues = world.society ? world.plan.buildings.filter((b) => isLeisureVenue(b) && !providesLeisure(b)).map((b) => nav.getBuilding(b.id)!) : [];
+      const candidates = buildingId !== undefined ? [nav.getBuilding(buildingId)] : [...nav.leisureBuildings, ...venues].filter((b) => visitable(world, b));
       if (buildingId !== undefined && !candidates[0]) return 'building-not-found';
-      if (buildingId !== undefined && !providesLeisure(candidates[0]!)) return 'not-leisure';
+      if (buildingId !== undefined && !visitable(world, candidates[0]!)) return world.society && isLeisureVenue(candidates[0]!) ? 'venue-closed' : 'not-leisure';
       let best: { building: Building; length: number } | null = null, full = false;
       for (const venue of candidates) {
         if (!venue) continue;
-        if (visitorCount(world, venue.id) >= venue.capacity) { full = true; continue; }
+        if (visitorCount(world, venue.id) >= visitorCapacity(venue)) { full = true; continue; }
         const plan = planRoute(player, nav, { building: venue, enter: true });
         if (!plan.route) continue;
         if (!best || plan.route.length < best.length) best = { building: venue, length: plan.route.length };
@@ -359,7 +382,7 @@ export function applyLifeCommand(world: WorldState, command: LifeCommand, nav: R
       } else if (destination?.type === 'building') {
         const building = nav.getBuilding(destination.buildingId);
         if (!building) return reject('building-not-found');
-        target = { building, enter: canEnter(player, building, 'move') };
+        target = { building, enter: canEnter(world, player, building, 'move') };
         activity = { kind: 'move', phase: 'travelling', buildingId: building.id, citizenId: null, tile: null, durationMinutes: 0, elapsedMinutes: 0 };
       } else return reject('invalid-command');
       const plan = planRoute(player, nav, target);
@@ -416,7 +439,9 @@ function updateNeeds(player: PlayerCharacter, world: WorldState, minutes: number
     case 'visit': {
       const others = a.buildingId ? visitorCount(world, a.buildingId) : 0;
       social = b.activities.visit.social + Math.min(b.activities.visit.maxVisitorBonus, others * b.activities.visit.socialPerVisitor);
-      moodBonus = b.activities.visit.mood; break;
+      moodBonus = b.activities.visit.mood;
+      if (world.society?.events.some((e) => e.venueId === a.buildingId && e.status === 'running')) { social += b.activities.visit.eventSocial; moodBonus += b.activities.visit.eventMood; }
+      break;
     }
     case 'greet': social = b.activities.greet.social; moodBonus = b.activities.greet.mood; break;
     case 'socialize': social = b.activities.socialize.social * (n.mood < b.thresholds.critical ? 0.75 : 1); moodBonus = b.activities.socialize.mood; break;
@@ -464,7 +489,7 @@ export function advancePlayer(world: WorldState, nav: RoadNavigator): Change {
       else {
         const building = nav.getBuilding(player.activity.buildingId);
         if (!building) player = { ...finish(world, player, 'failed', player.activity.kind === 'rest' || player.activity.kind === 'eat' ? 'home-lost' : 'venue-removed', events), movement: stopMovement(player, nav, revision) };
-        else target = { building, enter: canEnter(player, building, player.activity.kind) };
+        else target = { building, enter: canEnter(world, player, building, player.activity.kind) };
       }
       if (target && replan && player.activity.phase === 'travelling') {
         const plan = planRoute(player, nav, target);
@@ -535,7 +560,7 @@ function perform(world: WorldState, player: PlayerCharacter, citizen: Citizen | 
     const venue = nav.getBuilding(a.buildingId);
     const inside = player.movement.status === 'inside' && player.movement.currentBuildingId === a.buildingId;
     if (!venue || !inside) return finish(world, player, 'failed', a.kind === 'rest' || a.kind === 'eat' ? 'home-lost' : 'venue-removed', events);
-    if ((a.kind === 'rest' || a.kind === 'eat') && venue.id !== player.homeBuildingId) return finish(world, player, 'failed', 'home-lost', events);
+    if ((a.kind === 'rest' || a.kind === 'eat' && !servesMeals(world, venue)) && venue.id !== player.homeBuildingId) return finish(world, player, 'failed', 'home-lost', events);
   }
   const elapsed = Math.min(a.durationMinutes, a.elapsedMinutes + minutes);
   const next = { ...player, activity: { ...a, elapsedMinutes: elapsed } };
@@ -587,7 +612,7 @@ export function reconcilePlayer(world: WorldState, previous: WorldState | undefi
   const a = player.activity;
   if (a.kind !== 'idle') {
     const venueGone = a.buildingId !== null && !nav.getBuilding(a.buildingId);
-    const homeGone = (a.kind === 'rest' || a.kind === 'eat') && a.buildingId !== player.homeBuildingId;
+    const homeGone = (a.kind === 'rest' || a.kind === 'eat' && !servesMeals(world, nav.getBuilding(a.buildingId))) && a.buildingId !== player.homeBuildingId;
     const citizenGone = a.citizenId !== null && !citizens.has(a.citizenId);
     const performingElsewhere = a.phase === 'performing' && a.buildingId !== null && !(player.movement.status === 'inside' && player.movement.currentBuildingId === a.buildingId);
     const reason: PlayerFailureReason | null = citizenGone ? 'citizen-left' : homeGone ? 'home-lost' : venueGone ? 'venue-removed' : performingElsewhere ? 'venue-removed' : null;
@@ -643,7 +668,7 @@ export function validatePlayer(world: WorldState, assert: (condition: boolean, m
   assert(m.status === 'travelling' || m.route.length === 0 && m.nextWaypoint === 0, 'stationary player cannot retain a route');
   if (m.status === 'inside') {
     const b = m.currentBuildingId === null ? undefined : byId.get(m.currentBuildingId);
-    assert(b !== undefined && containsPosition(b, p.position) && (b.id === p.homeBuildingId || providesLeisure(b)), 'player can only be inside their home or a public venue');
+    assert(b !== undefined && containsPosition(b, p.position) && (b.id === p.homeBuildingId || publicPlace(b)), 'player can only be inside their home or a public venue');
   } else {
     // Standing or walking: the ground under the player is a road, the building whose entrance leg they use, or open
     // ground only after a city edit left them stranded with no road nearby.
@@ -652,7 +677,7 @@ export function validatePlayer(world: WorldState, assert: (condition: boolean, m
   }
   if (m.status === 'travelling') {
     assert(a.phase === 'travelling' && m.route.length > 0 && m.nextWaypoint > 0 && m.nextWaypoint < m.route.length && m.plannedRevision === world.revision, 'invalid active player route');
-    assert(m.destinationBuildingId === null || byId.get(m.destinationBuildingId)!.id === p.homeBuildingId || providesLeisure(byId.get(m.destinationBuildingId)!), 'player route enters a private building');
+    assert(m.destinationBuildingId === null || byId.get(m.destinationBuildingId)!.id === p.homeBuildingId || publicPlace(byId.get(m.destinationBuildingId)!), 'player route enters a private building');
     const roads = new Set(plan.roads.map((t) => `${t.x},${t.y}`));
     let from = p.position;
     for (const to of m.route.slice(m.nextWaypoint)) {

@@ -1,4 +1,4 @@
-import { getGameTime, PLAYER_BALANCE } from '@tiny-city/simulation';
+import { getGameTime, PLAYER_BALANCE, VENUES } from '@tiny-city/simulation';
 import type {
   Building, Citizen, LifeRejectionReason, PlayerActivityKind, PlayerCharacter, PlayerFailureReason, PlayerNeed, PlayerNeedLevel,
   PlayerSocialTopic, SimulationEvent, WorldState,
@@ -31,9 +31,10 @@ export const rejectionText: Record<LifeRejectionReason, string> = {
   'unreachable': 'No road connects you to that place.',
   'stranded': 'There is no road near you. Build a road, or move into a home.',
   'building-not-found': 'That place no longer exists.',
-  'not-leisure': 'Only parks, pools and the clubhouse can be visited.',
-  'no-venue': 'There is no park, pool or clubhouse yet. Build one in Build mode.',
+  'not-leisure': 'Only parks, pools, the clubhouse and entertainment venues can be visited.',
+  'no-venue': 'There is nowhere open to visit right now. Build a park or a venue in Build mode.',
   'venue-full': 'That place is full right now. Try again later.',
+  'venue-closed': 'That place is closed right now. Check its opening hours.',
   'citizen-not-found': 'That resident has left the city.',
   'citizen-unavailable': 'They are inside a home or workplace. Catch them on the street or at a park.',
   'too-tired': 'You are exhausted. Rest at home first.',
@@ -176,5 +177,11 @@ export function needAdvice(need: PlayerNeed): string {
 export const ACTIVITY_MINUTES = Object.fromEntries(Object.entries(PLAYER_BALANCE.activities).map(([k, v]) => [k, v.minutes])) as Record<'rest' | 'eat' | 'visit' | 'greet' | 'socialize', number>;
 
 export function isLeisure(building: Building | undefined): boolean {
-  return !!building && (building.kind === 'park' || building.type === 'clubhouse');
+  // Phase 7: every entertainment venue is a place to visit too.
+  return !!building && (building.kind === 'park' || building.type === 'clubhouse' || (building.type !== undefined && VENUES[building.type] !== undefined));
+}
+/** Phase 7: the café and the night market serve meals. */
+export function servesMeals(building: Building | undefined): boolean {
+  const kind = building?.type !== undefined ? VENUES[building.type]?.kind : undefined;
+  return kind === 'dine' || kind === 'market';
 }

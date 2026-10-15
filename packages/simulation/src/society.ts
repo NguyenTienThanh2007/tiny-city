@@ -58,6 +58,19 @@ export function createSociety(world: WorldState): SocietyState {
 }
 
 export const isLeisureVenue = (b: Building | undefined): boolean => !!b && b.type !== undefined && VENUES[b.type] !== undefined;
+/**
+ * Whether a venue is open at the world's current minute: within its hours, during a screening window for the cinema,
+ * and only while an event runs for events-only venues (the concert stage).
+ */
+export function isVenueOpen(world: WorldState, b: Building): boolean {
+  const spec = b.type !== undefined ? VENUES[b.type] : undefined;
+  if (!spec) return false;
+  if (spec.eventsOnly) return (world.society?.events ?? []).some((e) => e.venueId === b.id && e.status === 'running');
+  const { minuteOfDay } = getGameTime(world.clock);
+  if (spec.sessions) return minuteOfDay >= spec.sessions[0]! && minuteOfDay < spec.sessions.at(-1)! + spec.minutes[0];
+  const m = minuteOfDay < spec.open && spec.close > MINUTES_PER_DAY ? minuteOfDay + MINUTES_PER_DAY : minuteOfDay;
+  return m >= spec.open && m < spec.close;
+}
 export const relationshipKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
 export const relationshipLevel = (strength: number): 'acquaintance' | 'friend' | 'close-friend' =>
   strength >= SOCIETY.closeAt ? 'close-friend' : strength >= SOCIETY.friendAt ? 'friend' : 'acquaintance';
