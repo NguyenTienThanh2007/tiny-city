@@ -30,12 +30,13 @@ async function open(viewport = { width: 1440, height: 900 }) {
   await page.waitForTimeout(500);
   return { context, page };
 }
+const log = (...parts) => console.log(new Date().toISOString().slice(11, 19), ...parts);
 const shot = async (page, name) => {
   await page.evaluate(() => getSelection()?.removeAllRanges());
   await page.mouse.move(2, 2);
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${out}/${name}.jpg`, type: 'jpeg', quality: 88 });
-  console.log('captured', name);
+  log('captured', name);
 };
 async function screenOf(page, gx, gy) {
   const c = await page.evaluate(() => window.__tinyCityCamera);
@@ -71,7 +72,7 @@ async function setup(page, buses = 6) {
 }
 /** Runs at 4× (1× for the last half hour, so the moment is exact) until the absolute game minute, then pauses. */
 async function runTo(page, until) {
-  console.log('running to', Math.floor(until / 60) + ':' + String(until % 60).padStart(2, '0'));
+  log('running to', Math.floor(until / 60) + ':' + String(until % 60).padStart(2, '0'));
   const resume = page.getByRole('button', { name: 'Resume', exact: true });
   if (await resume.isVisible()) await resume.click();
   await page.getByRole('button', { name: 'Speed 4x' }).click();

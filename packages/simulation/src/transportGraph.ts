@@ -133,6 +133,8 @@ class MinHeap {
   }
 }
 
+const lineCaches = new WeakMap<RoadNavigator, Map<string, LinePlanResult>>();
+
 /** Immutable per (plan, routing snapshot). Route results are pure functions of those, so the caches are only memos. */
 export class TransportNetwork {
   readonly navigator: RoadNavigator;
@@ -146,7 +148,8 @@ export class TransportNetwork {
   private readonly width: number;
   private readonly height: number;
   private readonly carCache = new Map<string, CarRoute | null>();
-  private readonly lineCache = new Map<string, LinePlanResult>();
+  /** Bus loops use free-flow costs, so they depend only on the roads: shared by every network on the same plan. */
+  private readonly lineCache: Map<string, LinePlanResult>;
   private searches = 0;
   private cacheHits = 0;
   private expanded = 0;
@@ -154,6 +157,9 @@ export class TransportNetwork {
   constructor(navigator: RoadNavigator, routing: Readonly<Record<string, number>> = {}) {
     this.navigator = navigator;
     this.routing = routing;
+    let lines = lineCaches.get(navigator);
+    if (!lines) { lines = new Map(); lineCaches.set(navigator, lines); }
+    this.lineCache = lines;
     const roads = navigator.graph.getComponents().flat().sort(compareTiles);
     this.tiles = roads;
     roads.forEach((tile, i) => this.index.set(tileKey(tile), i));

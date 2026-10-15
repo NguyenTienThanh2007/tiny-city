@@ -2,7 +2,13 @@
 // Towns on a connected street grid at about 20, 100, 300 and 1,000 residents, one bus line each, run for two full
 // days with transportation on and off. Reports tick cost (average, p95, worst), peak vehicles, routing searches and
 // cache hits, and the save size.
-import { BUILDING_CATALOG, createWorld, serializeWorld, Simulation } from '@tiny-city/simulation';
+import { BUILDING_CATALOG, createWorld, serializeWorld, Simulation, TransportNetwork } from '@tiny-city/simulation';
+
+// Routing counters across network rebuilds (a network is rebuilt every routing epoch, so its own stats reset).
+const counts = { carRoutes: 0, searches: 0, expanded: 0 };
+const carRoute = TransportNetwork.prototype.carRoute, search = TransportNetwork.prototype.search;
+TransportNetwork.prototype.carRoute = function (...a) { counts.carRoutes += 1; return carRoute.apply(this, a); };
+TransportNetwork.prototype.search = function (...a) { counts.searches += 1; const before = this.expanded; const r = search.apply(this, a); counts.expanded += this.expanded - before; return r; };
 
 const STREETS = [8, 22, 36, 50], AVENUES = [2, 32, 61];
 const ORDER = ['apartment', 'townhouse', 'duplex', 'villa', 'office', 'mall', 'park', 'pool', 'clubhouse'];
@@ -41,6 +47,7 @@ const towns = [
 const rows = [];
 for (const [label, spec] of towns) {
   for (const transport of [false, true]) {
+    counts.carRoutes = 0; counts.searches = 0; counts.expanded = 0;
     const sim = new Simulation(town(spec, transport));
     if (transport) sim.executeTransport({ type: 'transport.create-line', stops: [{ x: 10, y: 8 }, { x: 45, y: 8 }, { x: 45, y: 22 }, { x: 10, y: 22 }], buses: 4 });
     const times = [];
@@ -50,13 +57,12 @@ for (const [label, spec] of towns) {
       if (transport) peak = Math.max(peak, sim.getState().transport.vehicles.length);
     }
     times.sort((a, b) => a - b);
-    const net = transport ? sim.getTransportNetwork().getStats() : null;
     const state = sim.getState();
     const days = transport ? state.transport.history : [];
     rows.push({ town: label, residents: state.citizens.length, transport: transport ? 'on' : 'off',
       avgMs: +(times.reduce((a, b) => a + b, 0) / times.length).toFixed(3), p95Ms: +times[Math.floor(times.length * 0.95)].toFixed(3), maxMs: +times.at(-1).toFixed(2),
       peakVehicles: peak, carTrips: days.reduce((n, d) => n + d.carTrips, 0), busRides: days.reduce((n, d) => n + d.boardings, 0), stalls: days.reduce((n, d) => n + d.stalls, 0),
-      searches: net?.searches ?? '', cacheHits: net?.cacheHits ?? '', saveKB: Math.round(serializeWorld(state).length / 1024) });
+      routeRequests: transport ? counts.carRoutes : '', searches: transport ? counts.searches : '', avgExpanded: transport && counts.searches ? Math.round(counts.expanded / counts.searches) : '', saveKB: Math.round(serializeWorld(state).length / 1024) });
   }
 }
 console.table(rows);
