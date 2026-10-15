@@ -132,8 +132,14 @@ test('occupancy: the home picker tells the truth, the player counts once, reside
   const night = (await save(page)).simulation;
   for (const c of night.citizens) {
     expect(c.homeBuildingId).toBe(moved.citizens.find((m) => m.id === c.id)!.homeBuildingId);
-    expect(c.movement).toMatchObject({ status: 'inside', currentBuildingId: c.homeBuildingId });
+    // Phase 7: evenings are free time, so a resident may be out — but only on a real outing the society recorded
+    // (at its venue, or on the way there or back); everyone else is home.
+    const outing = night.society?.residents[c.id]?.outing;
+    if (outing?.status === 'present') expect(c.movement).toMatchObject({ status: 'inside', currentBuildingId: outing.venueId });
+    else if (!outing && c.movement?.status === 'inside') expect(c.movement.currentBuildingId).toBe(c.homeBuildingId);
+    else expect(outing !== null && outing !== undefined || c.movement?.destinationBuildingId === c.homeBuildingId).toBe(true);
   }
+  expect(night.citizens.filter((c) => c.movement?.status === 'inside' && c.movement.currentBuildingId === c.homeBuildingId).length).toBeGreaterThan(0);
   expect(night.player!.homeBuildingId).toBe('villa-a');
 
   // G. Reload: the same character, the same homes, the same counts.
