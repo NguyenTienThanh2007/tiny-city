@@ -43,6 +43,8 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   // Built lazily: only a city edit that strands a walking resident needs road lookups.
   let navigator: RoadNavigator | undefined;
   const nav = () => navigator ??= new RoadNavigator(world.plan);
+  // Any city change (an edit, or an undo/redo even back to an identical plan) bumps the revision: walks are re-planned.
+  const cityChanged = previous !== undefined && (previous.plan !== world.plan || previous.revision !== world.revision);
   const validHomes = new Map<string, string>();
   for (const c of world.citizens.slice(0, world.population.maxCitizens)) {
     const home = buildings.get(c.homeBuildingId);
@@ -85,7 +87,9 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
       (oldInterior.position.x !== interior.position.x || oldInterior.position.y !== interior.position.y)) {
       const activity = c.activity === 'travel' ? interior.id === home.id ? 'home' : interior.id === work ? 'work' : 'leisure' : c.activity;
       position = buildingCenter(interior); movement = insideMovement(interior.id, world.revision, activity);
-    } else if (previous && previous.plan !== world.plan) {
+    } else if (cityChanged && movement.status === 'vehicle') {
+      // Phase 6: in a vehicle or at a stop; transport reconciliation decides what happens to the trip.
+    } else if (cityChanged) {
       const current = interior && containsPosition(interior, position) ? interior : undefined;
       // Stopped on a building's entrance leg: the resident is inside it only if that building is theirs to be in, and
       // then does what that building is for (never the activity of a destination it had not reached yet).
@@ -96,7 +100,7 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
         route: [], nextWaypoint: 0, plannedRevision: -1, status: 'waiting', heading: { x: 0, y: 0 } };
     }
     let recovered = recoverHome;
-    if (previous && previous.plan !== world.plan && movement.status !== 'inside') {
+    if (cityChanged && movement.status !== 'inside' && movement.status !== 'vehicle') {
       // A walker left off the network (its road removed, or a building restored on top of it by undo) can never route
       // again from there: step to the nearest road like the player does, or go home when no road is close.
       const tile = { x: Math.floor(position.x), y: Math.floor(position.y) }, cell = nav().grid.get(tile);

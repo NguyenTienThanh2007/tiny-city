@@ -5,7 +5,7 @@ import { currentArt } from './art/artLibrary';
 import { CharacterRig, hasCharacterArt } from './art/characterRig';
 import { citizenLook, selectPose } from './art/characterLook';
 import { crowdLayout, type CrowdPlacement } from './venueCrowd';
-import { figureDepth, hashString, lotDepths } from './npcMotion';
+import { figureDepth, hashString, lotDepths, waitingAtStops, type StopPlace } from './npcMotion';
 import {
   blendPosition, citizenAppearance, laneOffset, receiveSnapshot, screenFacing,
   type CitizenAppearance, type MotionSample,
@@ -86,6 +86,7 @@ export class NpcLayer {
   private tint = 0xffffff;
   private time = 0;
   private crowd = new Map<string, CrowdPlacement>();
+  private waiting: ReadonlyMap<string, StopPlace> = new Map();
   private interactions = new Map<string, { action: 'wave' | 'talk'; toward: Position }>();
   private artRigs = false;
   private lots = new Map<string, number>();
@@ -297,6 +298,7 @@ export class NpcLayer {
     }
     const stateChanged = this.lastState !== world;
     if (stateChanged) {
+      this.waiting = waitingAtStops(world);
       this.crowd = crowdLayout(world, this.options.frontOf);
       if (world.plan !== this.lotsPlan) { this.lots = lotDepths(world.plan); this.lotsPlan = world.plan; }
       this.interactions = interactionsOf(world);
@@ -344,7 +346,9 @@ export class NpcLayer {
       const base = blendPosition(sample, alpha);
       const travelled = Math.abs(base.x - sprite.lastBase.x) + Math.abs(base.y - sprite.lastBase.y);
       sprite.lastBase = base;
-      const laneTarget = laneOffset(sample.heading, sprite.appearance.lane);
+      // Waiting at a bus stop: stand on the shelter's curb instead of the walking lane.
+      const waitingPlace = this.waiting.get(id);
+      const laneTarget = waitingPlace ? waitingPlace.offset : laneOffset(sample.heading, sprite.appearance.lane);
       const ease = Math.min(1, dt * LANE_EASE_PER_MS);
       sample.offset = { x: sample.offset.x + (laneTarget.x - sample.offset.x) * ease, y: sample.offset.y + (laneTarget.y - sample.offset.y) * ease };
       const position = { x: base.x + sample.offset.x, y: base.y + sample.offset.y };

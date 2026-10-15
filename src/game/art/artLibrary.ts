@@ -59,7 +59,7 @@ async function load(base: string): Promise<ArtLibrary | null> {
   const sources = new Map<string, FrameSource>();
   const buildingFrames = new Set(Object.values(manifest.assets).filter((asset) => asset.category === 'building' && asset.color).map((asset) => asset.color!));
   let textureBytes = 0;
-  await Promise.all([...manifest.sheets, ...(manifest.characters?.sheets ?? [])].map(async (sheet) => {
+  await Promise.all([...manifest.sheets, ...(manifest.characters?.sheets ?? []), ...(manifest.vehicles?.sheets ?? [])].map(async (sheet) => {
     const [data, image] = await Promise.all([
       fetch(`${base}${sheet.file}`).then((r) => { if (!r.ok) throw new Error(`${sheet.file} ${r.status}`); return r.json() as Promise<SpritesheetData>; }),
       Assets.load<Texture>({ src: `${base}${sheet.image}`, data: { autoGenerateMipmaps: true, scaleMode: 'linear' } }),

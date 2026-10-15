@@ -59,7 +59,7 @@ if (preview) {
 } else {
   mkdirSync(out, { recursive: true });
   // --only=<groups> re-bakes just those atlases and keeps the rest of the manifest.
-  const groups = [...ATLASES.map((atlas) => atlas.name), 'characters'].filter((name) => !only || only.includes(name));
+  const groups = [...ATLASES.map((atlas) => atlas.name), 'characters', 'vehicles'].filter((name) => !only || only.includes(name));
   for (const file of readdirSync(out)) {
     if (!/\.(json|webp|png)$/.test(file) || file === 'manifest.json') continue;
     if (!only || groups.some((g) => file.startsWith(`${g}-`))) rmSync(join(out, file));
@@ -71,6 +71,7 @@ if (preview) {
       manifest = JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8'));
       manifest.sheets = manifest.sheets.filter((sheet) => !groups.some((g) => sheet.file.startsWith(`${g}-`)));
       if (groups.includes('characters')) delete manifest.characters;
+      if (groups.includes('vehicles')) delete manifest.vehicles;
     } catch { /* fresh output directory */ }
   }
   for (const atlas of ATLASES) {
@@ -111,6 +112,20 @@ if (preview) {
         sha256: createHash('sha256').update(image).digest('hex').slice(0, 16) });
     }
     console.log(`baked characters: ${result.meta.frames} frames, ${result.pages.length} page(s) in ${Date.now() - started} ms`);
+  }
+  if (!only || only.includes('vehicles')) {
+    const started = Date.now();
+    const result = await page.evaluate(() => window.TC.bakeVehicles());
+    manifest.vehicles = { ...result.meta, sheets: [] };
+    for (const pageData of result.pages) {
+      const base = `vehicles-${pageData.index}`;
+      const image = png(pageData.url);
+      writeFileSync(join(out, `${base}.webp`), image);
+      writeFileSync(join(out, `${base}.json`), JSON.stringify({ frames: pageData.frames, meta: { app: 'tiny-city-bake', version: '1', image: `${base}.webp`, format: 'RGBA8888', size: { w: pageData.width, h: pageData.height }, scale: String(pageData.scale) } }));
+      manifest.vehicles.sheets.push({ file: `${base}.json`, image: `${base}.webp`, scale: pageData.scale, width: pageData.width, height: pageData.height,
+        sha256: createHash('sha256').update(image).digest('hex').slice(0, 16) });
+    }
+    console.log(`baked vehicles: ${result.meta.frames} frames, ${result.pages.length} page(s) in ${Date.now() - started} ms`);
   }
   writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1));
 }

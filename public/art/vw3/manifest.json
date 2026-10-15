@@ -2660,5 +2660,39 @@
     "sha256": "f90fa957e39638f3"
    }
   ]
+ },
+ "vehicles": {
+  "resolution": 4,
+  "directions": 16,
+  "models": [
+   "compact",
+   "sedan",
+   "suv",
+   "van",
+   "bus"
+  ],
+  "layers": [
+   "body",
+   "detail",
+   "lights",
+   "shadow"
+  ],
+  "stops": [
+   "N",
+   "E",
+   "S",
+   "W"
+  ],
+  "frames": 330,
+  "sheets": [
+   {
+    "file": "vehicles-0.json",
+    "image": "vehicles-0.webp",
+    "scale": 4,
+    "width": 2048,
+    "height": 1520,
+    "sha256": "34dbf199155e1bde"
+   }
+  ]
  }
 }

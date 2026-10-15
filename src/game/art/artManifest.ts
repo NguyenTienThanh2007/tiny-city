@@ -42,9 +42,20 @@ export interface ArtCharacters {
   readonly frames: number;
   readonly sheets: readonly ArtSheet[];
 }
+/** Phase 6 vehicle atlas (frames `veh:<model>:<layer>:<direction>` and `stop:<side>:<layer>`). */
+export interface ArtVehicles {
+  readonly resolution: number;
+  readonly directions: number;
+  readonly models: readonly string[];
+  readonly layers: readonly string[];
+  readonly stops: readonly string[];
+  readonly frames: number;
+  readonly sheets: readonly ArtSheet[];
+}
 export interface ArtManifest {
   readonly version: number;
   readonly characters?: ArtCharacters;
+  readonly vehicles?: ArtVehicles;
   readonly resolution: number;
   readonly tile: { readonly w: number; readonly h: number };
   readonly sheets: readonly ArtSheet[];
@@ -72,6 +83,11 @@ export function validateManifest(value: unknown, footprints?: Readonly<Record<st
     const c = manifest.characters;
     if (!(c.resolution > 0) || !Array.isArray(c.sheets) || c.sheets.length === 0) errors.push('characters need a resolution and at least one sheet');
     for (const pose of ['walk', 'idle', 'wave', 'talk', 'sit']) if (!(c.poses?.[pose]! > 0)) errors.push(`characters are missing the ${pose} pose`);
+  }
+  if (manifest.vehicles) {
+    const v = manifest.vehicles;
+    if (!(v.resolution > 0) || v.directions !== 16 || !Array.isArray(v.sheets) || v.sheets.length === 0) errors.push('vehicles need a resolution, 16 directions and a sheet');
+    for (const model of ['compact', 'sedan', 'suv', 'van', 'bus']) if (!v.models?.includes(model)) errors.push(`vehicles are missing the ${model} model`);
   }
   for (const [id, asset] of Object.entries(manifest.assets ?? {})) {
     if (!asset.color) errors.push(`${id} has no color frame`);

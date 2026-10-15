@@ -24,7 +24,7 @@ function capacityLabel(kind: BuildingKind): string {
   return `${spec.capacity} visitors`;
 }
 
-export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onShowGuide, onChoose, onWelcome, populationEnabled, designChoices = {}, onDesignChange, onApplyCollection, dailyNet = null, onOpenEconomy }: {
+export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onShowGuide, onChoose, onWelcome, populationEnabled, designChoices = {}, onDesignChange, onApplyCollection, dailyNet = null, onOpenEconomy, vehicles = null, onOpenTransport }: {
   tool: Tool;
   funds: number;
   steps: OnboardingStep[];
@@ -41,6 +41,9 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
   /** Phase 5: the last settled day's operating result, and the way into the economy panel (also on phones). */
   dailyNet?: number | null;
   onOpenEconomy?: () => void;
+  /** Phase 6: vehicles on the street and the way into the Transport panel (also where phones reach it). */
+  vehicles?: number | null;
+  onOpenTransport?: () => void;
 }) {
   const remaining = steps.filter((step) => !step.done);
   const next = remaining[0];
@@ -80,7 +83,9 @@ export function BuildPanel({ tool, funds, steps, guideVisible, onHideGuide, onSh
     <div className="panel-topline"><span>CONSTRUCTION</span>{onOpenEconomy
       ? <button type="button" className="funds-chip" onClick={onOpenEconomy} aria-label="Open city economy" title="Open city economy">
         <Icon name="coin" size={13} /> ${funds.toLocaleString()}{dailyNet !== null && <i className={dailyNet >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(dailyNet)}/day</i>}</button>
-      : <span className="funds-chip"><Icon name="coin" size={13} /> ${funds.toLocaleString()}</span>}</div>
+      : <span className="funds-chip"><Icon name="coin" size={13} /> ${funds.toLocaleString()}</span>}
+      {onOpenTransport && <button type="button" className="funds-chip transport-chip" onClick={onOpenTransport} aria-label="Open city transport" title="Open city transport">
+        <Icon name="car" size={13} /> {vehicles ?? 0}</button>}</div>
     <h2 id="build-heading">Shape the neighborhood</h2>
     <p className="panel-lede">Pick a building, then click an open lot next to a road. Drag with the road tool to pave a street.</p>
     {/* With a building tool active, its card and Architectural Style Selector lead; otherwise the guide does. */}

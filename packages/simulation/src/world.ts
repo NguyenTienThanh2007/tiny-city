@@ -8,6 +8,7 @@ import { containsPosition, NPC_LIMITS } from './navigation.js';
 import { initializePopulation, providesJobs, providesLeisure } from './population.js';
 import { clonePlayer, validatePlayer } from './player.js';
 import { cloneEconomy, createEconomy, validateEconomy } from './economy.js';
+import { cloneTransport, createTransport, validateTransport } from './transport.js';
 import type { CityPlan, CityPlanInput, Citizen, DailySchedule, EconomyOptions, PopulationOptions, Position, WorldState } from './types.js';
 
 const ACTIVITIES = new Set(['sleep', 'home', 'work', 'leisure', 'idle', 'travel']);
@@ -120,7 +121,8 @@ export function validateWorld(world: WorldState): void {
         assert(!['home','sleep'].includes(e.activity) || e.targetBuildingId === null || e.targetBuildingId === citizen.homeBuildingId, 'schedule home target must match assignment');
         assert(e.activity !== 'leisure' || e.targetBuildingId === null || providesLeisure(byId.get(e.targetBuildingId)!), 'schedule leisure target has invalid role');
       }
-      assert(m !== undefined && ['inside', 'travelling', 'waiting'].includes(m.status), 'invalid citizen movement');
+      assert(m !== undefined && ['inside', 'travelling', 'waiting', 'vehicle'].includes(m.status), 'invalid citizen movement');
+      assert(m.status !== 'vehicle' || m.destinationBuildingId !== null && m.currentBuildingId === null, 'invalid transport movement');
       assert(m.currentBuildingId === null || buildings.has(m.currentBuildingId), 'movement references unknown current building');
       assert(m.destinationBuildingId === null || buildings.has(m.destinationBuildingId), 'movement references unknown destination');
       assert(ACTIVITIES.has(m.arrivalActivity), 'invalid arrival activity');
@@ -153,6 +155,7 @@ export function validateWorld(world: WorldState): void {
   }
   validatePlayer(world, assert);
   validateEconomy(world, assert);
+  validateTransport(world, assert);
 }
 
 /** Copies plain contract data so callers retain ownership of their input objects. */
@@ -168,6 +171,7 @@ export function cloneWorld(world: WorldState): WorldState {
     ...(world.population === undefined ? {} : { population: { version: world.population.version, maxCitizens: world.population.maxCitizens, nextCitizenId: world.population.nextCitizenId } }),
     ...(world.player === undefined ? {} : { player: clonePlayer(world.player) }),
     ...(world.economy === undefined ? {} : { economy: cloneEconomy(world.economy) }),
+    ...(world.transport === undefined ? {} : { transport: cloneTransport(world.transport) }),
     plan: { id: world.plan.id, name: world.plan.name, width: world.plan.width, height: world.plan.height,
       roads: world.plan.roads.map((tile) => ({ x: tile.x, y: tile.y })),
       blockedTiles: world.plan.blockedTiles.map((tile) => ({ x: tile.x, y: tile.y })),
@@ -212,6 +216,8 @@ export function createWorld(options: {
   readonly population?: PopulationOptions;
   /** Phase 5: enables the economy from the world's first day. */
   readonly economy?: EconomyOptions;
+  /** Phase 6: enables transportation (no vehicles until residents travel). */
+  readonly transport?: boolean;
 }): WorldState {
   const world: WorldState = {
     schemaVersion: 2,
@@ -224,7 +230,8 @@ export function createWorld(options: {
   };
   validateWorld(world);
   const populated = options.population === undefined ? world : initializePopulation(world, options.population).state;
-  const initialized = options.economy === undefined ? populated : { ...populated, economy: createEconomy(populated, options.economy) };
+  const economic = options.economy === undefined ? populated : { ...populated, economy: createEconomy(populated, options.economy) };
+  const initialized = options.transport ? { ...economic, transport: createTransport(economic) } : economic;
   validateWorld(initialized);
   return freeze(cloneWorld(initialized));
 }

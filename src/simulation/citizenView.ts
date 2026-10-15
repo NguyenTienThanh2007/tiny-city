@@ -1,4 +1,5 @@
 import type { Building, Citizen, CitizenActivity, WorldState } from '@tiny-city/simulation';
+import { tripText } from './transportView';
 
 /** Read-only presentation of authoritative resident data. Never invents attributes. */
 
@@ -87,6 +88,11 @@ export function describeCitizen(citizen: Citizen, world: WorldState): CitizenDet
     }
     remainingTiles = Math.round(tiles * 10) / 10;
     travelStatus = destination ? `Heading to ${destination}` : 'Travelling';
+  } else if (movement?.status === 'vehicle') {
+    // Phase 6: in a car, on a bus or at a stop (the trip says which).
+    const text = tripText(world, citizen.id);
+    location = text?.startsWith('Waiting at') ? text.split(' for ')[0]!.replace('Waiting at', 'At') : text?.startsWith('On ') ? 'On a bus' : 'In their car';
+    travelStatus = text ?? (destination ? `Heading to ${destination}` : 'Travelling');
   } else if (movement?.status === 'waiting') {
     travelStatus = movement.destinationBuildingId && movement.plannedRevision === world.revision
       ? 'Waiting · no connected road to the destination'

@@ -8,6 +8,8 @@ export type {
   PlayerSocialTopic, LifeCommand, LifeCommandResult, LifeRejectionReason,
   EconomyPolicy, ResidentAccount, BusinessStatus, BuildingFinance, EconomyAccountKind, LedgerCategory, LedgerEntry, EconomyDayReport,
   EconomyAlertKind, EconomyAlert, EconomyToday, EconomyState, EconomyOptions, EconomyCommand, EconomyRejectionReason, EconomyCommandResult,
+  CompassDirection, VehicleKind, VehicleModel, VehicleState, JunctionGrant, Vehicle, BusStop, BusLine, TripMode, TripPhase, Trip,
+  TransportDayStats, TransportState, TransportCommand, TransportRejectionReason, TransportCommandResult,
 } from './types.js';
 export type { ClockOptions } from './clock.js';
 export { advanceClock, createClock, getGameTime, MINUTES_PER_DAY, stepClock } from './clock.js';
@@ -35,3 +37,7 @@ export { createDailyRoutine, providesJobs, providesLeisure } from './population.
 export { PLAYER_ID, PLAYER_APPEARANCE_OPTIONS, PLAYER_BALANCE, PLAYER_LIMITS, applyLifeCommand, housingSummary, isPlayerAppearance,
   isPlayerPlaced, needLevel, normalizePlayerName, playerActionAvailability, playerHomeOptions } from './player.js';
 export type { HomeOption, HousingSummary, PlayerActionAvailability } from './player.js';
+export { TRANSPORT } from './transportConfig.js';
+export { TransportNetwork, DIRECTIONS, STEP, decodePath, encodePath, directionBetween, laneKey, movementMask } from './transportGraph.js';
+export type { CarRoute, LinePlan, LinePlanResult, BusOption, NetworkStats } from './transportGraph.js';
+export { bodyOnLanes, carIdOf, carLook, ownsCar, busIdOf, vanIdOf, validateTransport } from './transport.js';

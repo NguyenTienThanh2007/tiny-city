@@ -9,6 +9,7 @@ import { connectSimulationTicker } from '../simulation/tickerAdapter';
 import { BUILDINGS, cellKey, occupiedCells, type Building, type BuildingKind, type CityState, type Cell, type Tool } from '../types';
 import { buildingLift, drawBuildingArt, polygon, roofCapHeight, type RoadSides } from './buildingArt';
 import { NpcLayer, npcSpriteScale, type LocalBounds } from './npcLayer';
+import { TransportLayer, type TrafficOverlay } from './transportLayer';
 import { PlayerLayer, type HomeHighlight, type LifeFeedback } from './playerLayer';
 import { DecorLayer } from './decorLayer';
 import { EffectsLayer } from './effectsLayer';
@@ -53,7 +54,11 @@ export type RendererStats = { fps: number; frameMs: number; residents: number; v
   /** Estimated GPU bytes of all loaded atlas pages (with mipmaps) and their count. */
   atlasBytes?: number; atlasPages?: number;
   /** Measured: bytes of every texture actually uploaded to the GPU (Pixi uploads atlas pages only when drawn). */
-  gpuTextureBytes?: number; gpuTextures?: number };
+  gpuTextureBytes?: number; gpuTextures?: number;
+  /** Phase 6: vehicles drawn (all simulated vehicles on the street) and those inside the view. */
+  vehicles?: number; visibleVehicles?: number };
+/** Phase 6 debug hook: what the renderer shows for each simulated vehicle (read by e2e tests, never by the game). */
+export type TransportDebug = { tick: number; vehicles: { id: string; kind: string; model: string; state: string; x: number; y: number; angle: number; visible: boolean }[] };
 /** Bytes of the textures currently uploaded to the GPU (WebGL renderer), with a third more for mip chains. */
 function gpuTextureUse(renderer: unknown): { gpuTextureBytes?: number; gpuTextures?: number } {
   const sources = (renderer as { texture?: { managedTextures?: readonly ({ pixelWidth: number; pixelHeight: number; autoGenerateMipmaps?: boolean } | null)[] } }).texture?.managedTextures;
@@ -115,6 +120,14 @@ type Props = {
   targetHighlights?: readonly TargetHighlight[];
   /** Visual World 3.1: the architectural model chosen per building type (the ghost shows exactly what gets built). */
   designChoices?: DesignChoices;
+  /** Phase 6: selected vehicle (highlighted with its remaining route), click-to-select, follow and traffic overlay. */
+  selectedVehicleId?: string | null;
+  onSelectVehicle?: (id: string | null) => void;
+  followVehicleId?: string | null;
+  trafficOverlay?: TrafficOverlay;
+  /** Phase 6 bus-line editor: clicks pick road tiles as stops instead of selecting; picked stops are marked. */
+  onPickStopTile?: (cell: Cell) => void;
+  draftStops?: readonly Cell[];
 };
 export type TargetHighlight = { id: string; tone: 'candidate' | 'selected' | 'remove' | 'move' };
 const TARGET_TONES: Record<TargetHighlight['tone'], [number, number]> = {
@@ -685,7 +698,10 @@ export default function CityViewport(props: Props) {
       nameplate.anchor.set(0.5, 1);
       labels.addChild(nameplateBg, nameplate);
       labels.visible = false;
-      world.addChild(terrain, groundSprite, roads, shadowLayer, lightPoolLayer, groundOverlay, buildings, proposalOverlay, effectsContainer, ghost, labels);
+      // Vehicle lamps glow above the depth-sorted scene in one additive layer (night only).
+      const vehicleLights = new Container();
+      vehicleLights.eventMode = 'none';
+      world.addChild(terrain, groundSprite, roads, shadowLayer, lightPoolLayer, groundOverlay, buildings, vehicleLights, proposalOverlay, effectsContainer, ghost, labels);
       app.stage.addChild(world);
       // Pixi v8 skips listeners on passive containers, including the default stage.
       app.stage.eventMode = 'static';
@@ -712,6 +728,7 @@ export default function CityViewport(props: Props) {
         return selectBuildingAsset(art.index, editor, roadSidesFor(editor, roadSet))?.front ?? 'S';
       };
       const npcs = new NpcLayer(buildings, groundOverlay, { frontOf });
+      const traffic = new TransportLayer(buildings, groundOverlay, shadowLayer, vehicleLights);
       const lifeMarkers = new Container();
       world.addChildAt(lifeMarkers, world.getChildIndex(labels));
       const player = new PlayerLayer(buildings, groundOverlay, lifeMarkers, (id) => {
@@ -748,6 +765,7 @@ export default function CityViewport(props: Props) {
         decor.applyLighting(next.tint, next.glow, force);
         npcs.setTint(next.tint);
         player.setTint(next.tint);
+        traffic.setLighting(next.tint, next.glow);
         for (const [id, visual] of registry) {
           visual.item.tint = id === demolishHoverId ? 0xff9c8a : next.tint;
           if (visual.lights) { visual.lights.visible = next.glow > 0.01; visual.lights.alpha = next.glow; }
@@ -1064,9 +1082,12 @@ export default function CityViewport(props: Props) {
             current.onLifeTarget(building ? { type: 'building', id: building.id } : { type: 'tile', cell });
           }
         } else {
+          if (current.onPickStopTile) { current.onPickStopTile(cell); return; }
           if (current.onSelectPlayer && player.pick(localPoint, zoom)) { current.onSelectPlayer(); return; }
           const citizenId = current.onSelectCitizen ? npcs.pick(localPoint, zoom) : null;
+          const vehicleId = !citizenId && current.onSelectVehicle ? traffic.pick(localPoint, zoom) : null;
           if (citizenId) current.onSelectCitizen?.(citizenId);
+          else if (vehicleId) current.onSelectVehicle?.(vehicleId);
           else current.onSelectBuilding(buildingAtPoint(current.city, localPoint)?.id ?? null);
         }
       };
@@ -1338,6 +1359,18 @@ export default function CityViewport(props: Props) {
       let wasConstructing = false;
       let lastConstructionDraw = 0;
       let frames = 0, frameWindowStart = performance.now(), frameCost = 0;
+      let transportDebugAt = 0;
+      /** The visible map area in grid coordinates (plus a margin), for culling residents and vehicles. */
+      const viewBounds = (): LocalBounds => {
+        const margin = 60 / cam.pose.zoom;
+        const corners = [world.toLocal({ x: 0, y: 0 }), world.toLocal({ x: app.screen.width, y: app.screen.height })];
+        const a = toGrid({ x: corners[0]!.x - margin, y: corners[0]!.y - margin });
+        const b = toGrid({ x: corners[1]!.x + margin, y: corners[1]!.y + margin });
+        const c = toGrid({ x: corners[0]!.x - margin, y: corners[1]!.y + margin });
+        const d = toGrid({ x: corners[1]!.x + margin, y: corners[0]!.y - margin });
+        return { left: Math.min(a.x, b.x, c.x, d.x), right: Math.max(a.x, b.x, c.x, d.x),
+          top: Math.min(a.y, b.y, c.y, d.y), bottom: Math.max(a.y, b.y, c.y, d.y) };
+      };
       let lastWantFollow = cam.following;
       // Off-screen character locator: a button on the edge of the visible area pointing at the character.
       let locatorShown = false, locatorX = -1, locatorY = -1, locatorAngle = 0;
@@ -1407,17 +1440,7 @@ export default function CityViewport(props: Props) {
 
         // Residents: read the authoritative snapshot after this frame's simulation advance.
         const live = current.getWorld?.() ?? current.world;
-        const inverse = 1 / cam.pose.zoom;
-        const margin = 60 * inverse;
-        const bounds: LocalBounds | null = live.citizens.length > 60 ? (() => {
-          const corners = [world.toLocal({ x: 0, y: 0 }), world.toLocal({ x: app.screen.width, y: app.screen.height })];
-          const a = toGrid({ x: corners[0]!.x - margin, y: corners[0]!.y - margin });
-          const b = toGrid({ x: corners[1]!.x + margin, y: corners[1]!.y + margin });
-          const c = toGrid({ x: corners[0]!.x - margin, y: corners[1]!.y + margin });
-          const d = toGrid({ x: corners[1]!.x + margin, y: corners[0]!.y - margin });
-          return { left: Math.min(a.x, b.x, c.x, d.x), right: Math.max(a.x, b.x, c.x, d.x),
-            top: Math.min(a.y, b.y, c.y, d.y), bottom: Math.max(a.y, b.y, c.y, d.y) };
-        })() : null;
+        const bounds: LocalBounds | null = live.citizens.length > 60 ? viewBounds() : null;
         npcs.setSelected(current.selectedCitizenId ?? null);
         const minuteOfDay = getGameTime(live.clock).minuteOfDay;
         const target = live.population ? worldLighting(minuteOfDay) : DAYLIGHT;
@@ -1434,6 +1457,16 @@ export default function CityViewport(props: Props) {
         const tl = world.toLocal({ x: 0, y: 0 }), br = world.toLocal({ x: app.screen.width, y: app.screen.height });
         decor.sway(ambientTime, { left: tl.x - 60, top: tl.y - 60, right: br.x + 60, bottom: br.y + 120 }, reducedMotion);
         npcs.sync(live, frameStart, cam.pose.zoom, bounds);
+        traffic.setOverlay(current.trafficOverlay ?? 'off');
+        traffic.setSelected(current.selectedVehicleId ?? null);
+        traffic.setDraft(current.draftStops ?? null);
+        traffic.sync(live, viewBounds());
+        if (frameStart - transportDebugAt >= 250) {
+          transportDebugAt = frameStart;
+          (window as unknown as { __tinyCityTransport?: TransportDebug }).__tinyCityTransport = { tick: live.clock.tick,
+            vehicles: (live.transport?.vehicles ?? []).filter((v) => v.state !== 'departing').map((v) => { const pose = traffic.poseOf(v.id);
+              return { id: v.id, kind: v.kind, model: v.model, state: v.state, x: pose?.x ?? NaN, y: pose?.y ?? NaN, angle: pose?.angle ?? 0, visible: traffic.isVisible(v.id) }; }) };
+        }
         player.feedback(current.lifeFeedback);
         if (current.homeHighlights !== lastHighlights) { lastHighlights = current.homeHighlights; player.setHomeHighlights(current.homeHighlights ?? null); }
         player.sync(live, frameStart, cam.pose.zoom);
@@ -1445,9 +1478,12 @@ export default function CityViewport(props: Props) {
 
         // Camera subject: a followed resident, else the character (Life Mode). Follow turns on/off on prop edges, so a
         // pan that just ended Follow is not re-enabled before React catches up.
-        const followId = current.followCitizenId ?? null;
+        const followId = current.followCitizenId ?? current.followVehicleId ?? null;
         let subject: Point | null = null;
-        if (followId) {
+        const followedVehicle = current.followVehicleId ? traffic.poseOf(current.followVehicleId) : null;
+        if (current.followVehicleId && !current.followCitizenId) {
+          subject = followedVehicle ? iso(followedVehicle.x, followedVehicle.y) : null;
+        } else if (followId) {
           const citizen = live.citizens.find((entry) => entry.id === followId);
           const rendered = npcs.getRenderedPosition(followId);
           const at = citizen ? (citizen.movement?.status === 'inside' || !rendered ? citizen.position : rendered) : null;
@@ -1474,8 +1510,9 @@ export default function CityViewport(props: Props) {
             visibleResidents: buildings.children.filter((child) => child.label === 'npc' && child.visible).length,
             venueVisitors: npcs.venueVisitors, art: host.dataset.art ?? 'loading', nearbyTags: nearbyTags.shown.length,
             bakedBuildings: drawStats.baked, vectorBuildings: drawStats.vector, drawnModels: { ...drawStats.models },
+            vehicles: traffic.total, visibleVehicles: traffic.count,
             ...gpuTextureUse(app.renderer),
-            atlasBytes: currentArt()?.textureBytes, atlasPages: currentArt() ? currentArt()!.index.manifest.sheets.length + (currentArt()!.index.manifest.characters?.sheets.length ?? 0) : 0 };
+            atlasBytes: currentArt()?.textureBytes, atlasPages: currentArt() ? currentArt()!.index.manifest.sheets.length + (currentArt()!.index.manifest.characters?.sheets.length ?? 0) + (currentArt()!.index.manifest.vehicles?.sheets.length ?? 0) : 0 };
           (window as unknown as { __tinyCityRenderer?: RendererStats }).__tinyCityRenderer = stats;
           frames = 0; frameCost = 0; frameWindowStart = frameStart;
         }
@@ -1484,6 +1521,7 @@ export default function CityViewport(props: Props) {
       cleanup = () => {
         disconnectSimulation();
         npcs.destroy();
+        traffic.destroy();
         player.destroy();
         decor.destroy();
         ambient.destroy();
