@@ -6,8 +6,8 @@
 // says; every number is read from the simulation.
 import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { BUILDING_CATALOG, createWorld, serializeWorld, Simulation } from '@tiny-city/simulation';
-import { coralBayNights } from './p7_city.mjs';
+import { createWorld, Simulation } from '@tiny-city/simulation';
+import { cityAt, coralBayNights, LINE_STOPS, toCityPlan } from './p7_city.mjs';
 
 const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice(7).split(',');
@@ -18,29 +18,6 @@ const SAVE_KEY = 'tiny-city-imagine-save-v1';
 const DAY = 1440;
 const want = (...names) => !only || names.some((name) => only.some((prefix) => name.startsWith(prefix)));
 const log = (...parts) => console.log(new Date().toISOString().slice(11, 19), ...parts);
-
-/** The bus line every scene uses: along both streets from the old town into the entertainment district. */
-export const LINE_STOPS = [[20, 30], [32, 30], [44, 30], [56, 30], [56, 20], [44, 20], [32, 20], [20, 20]];
-
-/** src/simulation/cityAdapter.ts `toCityPlan`, for a node script. */
-function toCityPlan(city) {
-  const blockedTiles = [];
-  for (let y = 0; y < city.size; y += 1) for (let x = 0; x < city.size; x += 1) if (!(x + y < city.size * 2 - 8)) blockedTiles.push({ x, y });
-  return { id: 'villa-gardens-plan', name: 'Villa Gardens', width: city.size, height: city.size, roads: city.roads.map((t) => ({ ...t })), blockedTiles,
-    buildings: city.buildings.map((b) => ({ id: b.id, name: b.name, kind: BUILDING_CATALOG[b.kind].kind, type: b.kind, position: { x: b.x, y: b.y },
-      footprint: { ...BUILDING_CATALOG[b.kind].footprint }, capacity: BUILDING_CATALOG[b.kind].capacity })) };
-}
-/** The city as the game would have it at `minute` (absolute game minutes) after welcoming residents at midnight. */
-export function cityAt(minute) {
-  const city = coralBayNights();
-  const sim = new Simulation(createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true },
-    startingFunds: city.funds, economy: {}, transport: true, society: true }));
-  sim.enablePopulation({ maxCitizens: 1000 });
-  sim.executeTransport({ type: 'transport.create-line', stops: LINE_STOPS.map(([x, y]) => ({ x, y })), buses: 4 });
-  sim.step(minute);
-  const state = sim.getState();
-  return { save: { size: city.size, funds: state.budget.balance, roads: city.roads, buildings: city.buildings, saveVersion: 3, simulation: JSON.parse(serializeWorld(state)) }, state };
-}
 
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=metal', '--ignore-gpu-blocklist'] });
 async function open(minute, viewport = { width: 1440, height: 900 }) {

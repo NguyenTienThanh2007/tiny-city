@@ -3,6 +3,7 @@
 // performance plaza, an amusement park, and homes for the district's own neighbourhood behind it.
 // `node scripts/p7_city.mjs` validates every lot against the real simulation placement rules.
 import { pathToFileURL } from 'node:url';
+import { BUILDING_CATALOG, createWorld, serializeWorld, Simulation } from '@tiny-city/simulation';
 import { coralBay31 } from './vw31_city.mjs';
 
 export function coralBayNights() {
@@ -28,8 +29,32 @@ export function coralBayNights() {
   return { ...city, funds: 40_000, roads: [...roads.values()], buildings: [...city.buildings, ...district] };
 }
 
+/** The bus line every scene uses: along both streets from the old town into the entertainment district. */
+export const LINE_STOPS = [[20, 30], [32, 30], [44, 30], [56, 30], [56, 20], [44, 20], [32, 20], [20, 20]];
+
+/** src/simulation/cityAdapter.ts `toCityPlan`, for a node script. */
+export function toCityPlan(city) {
+  const blockedTiles = [];
+  for (let y = 0; y < city.size; y += 1) for (let x = 0; x < city.size; x += 1) if (!(x + y < city.size * 2 - 8)) blockedTiles.push({ x, y });
+  return { id: 'villa-gardens-plan', name: 'Villa Gardens', width: city.size, height: city.size, roads: city.roads.map((t) => ({ ...t })), blockedTiles,
+    buildings: city.buildings.map((b) => ({ id: b.id, name: b.name, kind: BUILDING_CATALOG[b.kind].kind, type: b.kind, position: { x: b.x, y: b.y },
+      footprint: { ...BUILDING_CATALOG[b.kind].footprint }, capacity: BUILDING_CATALOG[b.kind].capacity })) };
+}
+/** The city as the game would have it at `minute` (absolute game minutes) after welcoming residents at midnight. */
+export function cityAt(minute) {
+  const city = coralBayNights();
+  const sim = new Simulation(createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true },
+    startingFunds: city.funds, economy: {}, transport: true, society: true }));
+  sim.enablePopulation({ maxCitizens: 1000 });
+  sim.executeTransport({ type: 'transport.create-line', stops: LINE_STOPS.map(([x, y]) => ({ x, y })), buses: 4 });
+  sim.step(minute);
+  const state = sim.getState();
+  return { save: { size: city.size, funds: state.budget.balance, roads: city.roads, buildings: city.buildings, saveVersion: 3, simulation: JSON.parse(serializeWorld(state)) }, state };
+}
+
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { createWorld, validateBuildingPlacement, BUILDING_CATALOG } = await import('@tiny-city/simulation');
+  const { validateBuildingPlacement } = await import('@tiny-city/simulation');
   const city = coralBayNights();
   const blockedTiles = [];
   for (let y = 0; y < 64; y += 1) for (let x = 0; x < 64; x += 1) if (!(x + y < 64 * 2 - 8)) blockedTiles.push({ x, y });
