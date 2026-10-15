@@ -50,7 +50,8 @@ export function scheduleRows(citizen: Citizen, world: WorldState, minuteOfDay: n
     time: formatMinute(entry.startMinute),
     activity: entry.activity,
     label: activityVerbs[entry.activity],
-    place: entry.activity === 'leisure' && entry.targetBuildingId === null ? 'Nearest open park or clubhouse'
+    // Phase 7: with a living society, free time is decided by the resident (needs, interests, friends, events).
+    place: entry.activity === 'leisure' && entry.targetBuildingId === null ? world.society ? 'Free time · their choice' : 'Nearest open park or clubhouse'
       : buildingName(buildings, entry.targetBuildingId),
     current: index === currentIndex,
   }));

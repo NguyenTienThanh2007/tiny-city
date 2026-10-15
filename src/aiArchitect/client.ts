@@ -1,5 +1,5 @@
 import type { WorldState } from '@tiny-city/simulation';
-import { isBuildingType } from '@tiny-city/simulation';
+import { isBuildingType, providesLeisure } from '@tiny-city/simulation';
 import { decodeConstraints, decodeIntent, DEFAULT_CONSTRAINTS } from '@tiny-city/ai-architect';
 import type {
   ArchitectErrorResponse,
@@ -82,15 +82,20 @@ function isArchitectError(value: unknown): value is ArchitectErrorResponse {
 }
 
 /**
- * The world as the planner sees it: the city without its Phase 5 economy or Phase 6 transportation (accounts,
- * ledger, vehicles and trips would only enlarge the request). Residents in a vehicle or at a stop are sent as
- * waiting walkers, which the planner treats the same. The plan fingerprint covers the plan and budget, which are
- * sent unchanged.
+ * The world as the planner sees it: the city without its Phase 5 economy, Phase 6 transportation or Phase 7 society
+ * (accounts, ledger, vehicles, trips, personalities and relationships would only enlarge the request). Residents in a
+ * vehicle or at a stop are sent as waiting walkers, and residents out at an entertainment venue or a friend's home
+ * as idle visitors there, which the planner treats the same. The plan fingerprint covers the plan and budget, which
+ * are sent unchanged.
  */
 export function plannerWorld(snapshot: WorldState): WorldState {
-  const { economy: _economy, transport: _transport, ...world } = snapshot;
-  if (!snapshot.citizens.some((c) => c.movement?.status === 'vehicle')) return world;
-  return { ...world, citizens: snapshot.citizens.map((c) => c.movement?.status === 'vehicle' ? { ...c, movement: { ...c.movement, status: 'waiting' } } : c) };
+  const { economy: _economy, transport: _transport, society: _society, ...world } = snapshot;
+  const buildings = new Map(snapshot.plan.buildings.map((b) => [b.id, b]));
+  const visiting = (c: WorldState['citizens'][number]) => c.activity === 'leisure' && c.movement?.status === 'inside' && c.movement.currentBuildingId !== null &&
+    !providesLeisure(buildings.get(c.movement.currentBuildingId)!);
+  if (!snapshot.citizens.some((c) => c.movement?.status === 'vehicle' || visiting(c))) return world;
+  return { ...world, citizens: snapshot.citizens.map((c) => c.movement?.status === 'vehicle' ? { ...c, movement: { ...c.movement, status: 'waiting' } }
+    : visiting(c) ? { ...c, activity: 'idle' } : c) };
 }
 
 export function createPlanningRequest(

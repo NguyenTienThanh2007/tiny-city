@@ -7,6 +7,8 @@ const SAVE_KEY = 'tiny-city-imagine-save-v1';
 const toolNames: Record<BuildingType, string> = {
   villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt',
   park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office',
+  // Phase 7 entertainment venues.
+  cafe: 'Café', shops: 'Shops', market: 'Market', cinema: 'Cinema', nightclub: 'Club', stage: 'Stage', plaza: 'Plaza', amusement: 'Fun park',
 };
 const fixture = { size: 64, funds: 5000, buildings: [],
   roads: Array.from({ length: 41 }, (_, index) => ({ x: index + 8, y: 20 })) };
@@ -60,7 +62,8 @@ async function saveData(page: Page) {
 async function selectRoof(page: Page, kind: BuildingType, x: number, y: number) {
   await choose(page, 'select');
   const spec = BUILDING_CATALOG[kind];
-  const lift = { villa: 30, duplex: 40, townhouse: 45, apartment: 87, park: 5, clubhouse: 40, pool: 5, mall: 39, office: 101 }[kind];
+  const lift = { villa: 30, duplex: 40, townhouse: 45, apartment: 87, park: 5, clubhouse: 40, pool: 5, mall: 39, office: 101,
+    cafe: 29, shops: 35, market: 17, cinema: 51, nightclub: 39, stage: 31, plaza: 5, amusement: 35 }[kind];
   const point = await screenPoint(page, x + spec.footprint.width / 2, y + spec.footprint.height / 2, lift);
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('.building-details')).toBeVisible();

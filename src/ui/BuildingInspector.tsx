@@ -9,7 +9,7 @@ import { Icon } from './Icon';
 
 const roleLabels = { home: 'Residential', workplace: 'Workplace', park: 'Leisure' } as const;
 
-export function BuildingInspector({ building, roadConnected, occupancy, citizens, populationEnabled, player, economy,
+export function BuildingInspector({ building, roadConnected, occupancy, citizens, populationEnabled, player, economy, venue,
   onClose, onDetails, onMove, onBulldoze, onSelectCitizen, onSelectPlayer }: {
   building: Building;
   roadConnected: boolean;
@@ -20,6 +20,8 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
   player: PlayerCharacter | null;
   /** Phase 5: the building's economic activity (businesses and public amenities). */
   economy?: ReactNode;
+  /** Phase 7: a leisure venue's hours, visitors, events and event booking. */
+  venue?: ReactNode;
   onSelectPlayer: () => void;
   onClose: () => void;
   onDetails: () => void;
@@ -30,7 +32,7 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
   const spec = BUILDINGS[building.kind];
   const design = designOf(building);
   const model = architectureModel(design.model);
-  const leisure = spec.role === 'park' || building.kind === 'clubhouse';
+  const leisure = spec.role === 'park' || building.kind === 'clubhouse' || venue !== undefined && venue !== null && venue !== false;
   const jobs = spec.role === 'workplace' && building.kind !== 'clubhouse';
   const home = spec.role === 'home';
   // Residents are assigned (wherever they are now); workers hold jobs; visitors are inside a venue right now.
@@ -57,8 +59,11 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
       </div>
     </div>
     {showCard && <div className="occupancy-card" role="group" aria-label={home ? 'Residents' : jobs ? 'Workers' : 'Visitors'}>
-      <div className="occupancy-numbers"><strong>{used}</strong><span>/ {spec.capacity} {usage}</span></div>
-      <div className="meter" aria-hidden="true"><i style={{ width: `${Math.min(100, used / Math.max(1, spec.capacity) * 100)}%` }} /></div>
+      {/* Phase 7: a venue's visitor numbers live on its venue card; this card then just lists the people. */}
+      {(home || jobs || !venue) && <>
+        <div className="occupancy-numbers"><strong>{used}</strong><span>/ {spec.capacity} {usage}</span></div>
+        <div className="meter" aria-hidden="true"><i style={{ width: `${Math.min(100, used / Math.max(1, spec.capacity) * 100)}%` }} /></div>
+      </>}
       {rooms && <p className="muted small occupancy-breakdown">{rooms.residents} resident{rooms.residents === 1 ? '' : 's'}{rooms.player ? ' + you' : ''} · {rooms.freeRooms} free room{rooms.freeRooms === 1 ? '' : 's'}</p>}
       {rooms?.player && player && <ul className="people-list" aria-label="You live here"><li><button className="link-button" onClick={onSelectPlayer}>{player.name}</button><small>You · Resident</small></li></ul>}
       {people.length > 0 ? <ul className="people-list" aria-label="People linked to this building">
@@ -69,6 +74,7 @@ export function BuildingInspector({ building, roadConnected, occupancy, citizens
         {people.length > 8 && <li className="muted">+{people.length - 8} more</li>}
       </ul> : rooms?.player ? null : <p className="muted small">{home ? 'No residents yet.' : jobs ? 'No workers assigned yet.' : 'Nobody is visiting right now.'}</p>}
     </div>}
+    {venue}
     {economy}
     <div className="building-details">
       <div className="detail-line"><span>Type</span><strong>{spec.label}</strong></div>

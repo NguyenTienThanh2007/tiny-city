@@ -63,7 +63,9 @@ export interface ArtManifest {
 }
 
 /** Since 3.0B every catalog building type ships baked art; the vector renderer is only a load-failure fallback. */
-export const BAKED_BUILDING_KINDS: readonly BuildingKind[] = ['villa', 'duplex', 'townhouse', 'apartment', 'park', 'clubhouse', 'pool', 'mall', 'office'];
+export const BAKED_BUILDING_KINDS: readonly BuildingKind[] = ['villa', 'duplex', 'townhouse', 'apartment', 'park', 'clubhouse', 'pool', 'mall', 'office',
+  // Phase 7 entertainment venues.
+  'cafe', 'shops', 'market', 'cinema', 'nightclub', 'stage', 'plaza', 'amusement'];
 export const MAX_ATLAS_SIZE = 4096;
 
 /** Structural checks; returns human-readable problems (empty when the manifest is usable). */

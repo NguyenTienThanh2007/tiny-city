@@ -191,7 +191,7 @@ interface Option {
   readonly price: number;
   readonly full: boolean;
 }
-interface Scored { readonly option: Option; readonly utility: number; readonly reasons: readonly string[] }
+interface Scored { readonly option: Option; readonly utility: number; readonly reasons: readonly string[]; readonly factors: readonly (readonly [string, number])[] }
 
 /** Integer utility of an option for a resident, with the factors behind it (largest first). */
 function score(p: SocialProfile, o: Option, extras: { friends: readonly string[]; strength: number; money: number }): Scored {
@@ -213,18 +213,18 @@ function score(p: SocialProfile, o: Option, extras: { friends: readonly string[]
   if (!p.recent.includes(o.venue.id)) add('new-place', t.curiosity * 15 / 100);
   else add('favourite', (50 - t.curiosity) * 2 / 10);
   if (o.price > 0) {
-    add('price', -o.price * (50 + t.frugality) / 30);
+    add('price', -o.price * (SOCIETY.price.base + t.frugality) / SOCIETY.price.divisor);
     if (extras.money < o.price * 3) add('budget', -o.price * 2);
   } else if (t.frugality >= 60 || extras.money < 20) add('free', 6 + (t.frugality - 50) / 10);
-  add('travel', -o.travel * 8 / 10);
-  if (o.travel <= 10) add('nearby', 4);
+  add('travel', -o.travel * SOCIETY.travelPenaltyPercent / 100);
+  if (o.travel <= 15) add('nearby', 4);
   if (n.energy < 40 && (o.kind === 'club' || o.kind === 'rides' || o.kind === 'shop')) add('tired', -(40 - n.energy));
   if (p.lastChoice?.kind === o.kind && p.outingsToday > 0) add('again', -15);
   for (const friend of extras.friends.slice(0, 2)) add(`friend:${friend}`, 6);
   if (o.hostId) add(`friend:${o.hostId}`, extras.strength * 3 / 10);
   const utility = factors.reduce((sum, [, v]) => sum + v, 0);
   const reasons = factors.filter(([code, v]) => v >= 5 && code !== 'base' && code !== 'appeal').sort((x, y) => y[1] - x[1] || byString(x[0], y[0])).slice(0, 3).map(([code]) => code);
-  return { option: o, utility, reasons };
+  return { option: o, utility, reasons, factors };
 }
 function stayHome(p: SocialProfile, money: number, options: number): { utility: number; reasons: string[] } {
   const t = p.traits, n = p.needs;
@@ -425,7 +425,7 @@ class DecisionContext {
         endTick = this.tick + ticks(wait + travel + duration); length = wait + travel + duration;
       }
       if (length + travel > window) return;
-      const price = event ? event.price : spec.price;
+      const price = event ? event.price + (isBusinessVenue(venue.type) ? spec.price : 0) : spec.price;
       if (price > money) return;
       const capacity = venue.kind === 'home' ? 1 : event ? event.capacity : servingCapacity(venue, this.staff.get(venue.id) ?? 0);
       const full = (this.load.get(venue.id) ?? 0) >= capacity || venue.kind === 'home' && this.visitors.has(venue.id);
@@ -530,6 +530,24 @@ class DecisionContext {
     this.load.set(o.venue.id, (this.load.get(o.venue.id) ?? 0) + members.length);
     this.today = { ...this.today, outings: this.today.outings + members.length, groupOutings: this.today.groupOutings + (group.length > 0 ? 1 : 0) };
   }
+  /** Debug: every option this resident would weigh right now, with its full factor breakdown (no state change). */
+  explain(c: Citizen): DecisionExplanation {
+    const p = this.profile(c.id);
+    const origin = this.origin(c, p);
+    const home = this.nav.getBuilding(c.homeBuildingId);
+    const money = spendable(c, p, home, this.world.economy);
+    const window = freeWindow(c, p, this.day, this.minute);
+    if (!origin) return { free: false, window, money, stayHome: stayHome(p, money, 0), options: [] };
+    const rels = relationshipsOf(this.world.society!.relationships).get(c.id) ?? [];
+    const options = (window < 45 || p.needs.energy < 15 ? [] : this.options(c, origin, window, Infinity)).map((o) => {
+      const strength = o.hostId ? rels.find((r) => otherOf(r, c.id) === o.hostId)?.strength ?? 0 : 0;
+      const friends = o.spec.social && o.kind !== 'visit' ? this.joinable(c, rels, o).slice(0, 2) : [];
+      const scored = score(p, o, { friends, strength, money });
+      return { kind: o.kind, venueId: o.venue.id, eventId: o.event?.id ?? null, travel: o.travel, price: o.price, affordable: o.price <= money, full: o.full,
+        utility: scored.utility, factors: scored.factors };
+    }).sort((a, b) => b.utility - a.utility);
+    return { free: true, window, money, stayHome: stayHome(p, money, options.length), options };
+  }
   /** Friends (strongest first) who are free now and would rather join this outing than stay in. */
   private joinable(c: Citizen, rels: readonly Relationship[], o: Option): string[] {
     const out: string[] = [];
@@ -552,6 +570,28 @@ class DecisionContext {
     }
     return out;
   }
+}
+
+export interface DecisionExplanation {
+  /** Whether the resident is free to go out from where they are now. */
+  readonly free: boolean;
+  /** Minutes until they must head home (work tomorrow, or the latest night out). */
+  readonly window: number;
+  /** Dollars they can spend on leisure today. */
+  readonly money: number;
+  readonly stayHome: { readonly utility: number; readonly reasons: readonly string[] };
+  readonly options: readonly { readonly kind: OutingKind; readonly venueId: string; readonly eventId: string | null; readonly travel: number; readonly price: number;
+    readonly affordable: boolean; readonly full: boolean; readonly utility: number; readonly factors: readonly (readonly [string, number])[] }[];
+}
+/**
+ * Debug explanation of a resident's choice at this moment: every reachable, open option with its utility and factor
+ * breakdown (needs, interests, traits, price, travel, friends, events), and the value of staying in. Read-only.
+ */
+export function explainDecision(world: WorldState, nav: RoadNavigator, citizenId: string): DecisionExplanation | null {
+  const c = world.citizens.find((x) => x.id === citizenId);
+  if (!world.society || !c) return null;
+  const { day, minuteOfDay } = getGameTime(world.clock);
+  return new DecisionContext(world, nav, day, minuteOfDay, venueLoad(world)).explain(c);
 }
 
 // ─── After transport: arrivals, endings, needs, mingling ──────────────────────────────────────────────────────────
@@ -603,10 +643,14 @@ export function stepSocietyAfter(world: WorldState, nav: RoadNavigator): { state
           const event = eventMap.get(o.eventId);
           if (!event || event.attendees.length >= event.capacity) { end(id, p, 'cancelled', 'event-cancelled'); continue; }
           if (!event.attendees.includes(id)) { eventMap.set(event.id, { ...event, attendees: [...event.attendees, id] }); eventsChanged = true; today = { ...today, eventAttendance: today.eventAttendance + 1 }; }
-          if (event.price > 0 && economy) {
-            // Tickets for city-run venues go to the treasury; at a business venue they are that business's sales.
+          if (economy && isBusinessVenue(venue?.type)) {
+            // An event at a business (a market festival): entry is the event's ticket, if any, and people buy as usual.
+            spent = event.price + VENUES[venue!.type!]!.price;
+            economy = recordPurchase(economy, id, o.venueId, spent);
+          } else if (event.price > 0 && economy) {
+            // Tickets for city-run venues (the stage, the plaza) go to the treasury.
             spent = event.price;
-            economy = isBusinessVenue(venue?.type) ? recordPurchase(economy, id, o.venueId, spent) : recordFee(economy, id, spent);
+            economy = recordFee(economy, id, spent);
           }
         } else if (economy && isBusinessVenue(venue?.type)) {
           spent = VENUES[venue!.type!]!.price;

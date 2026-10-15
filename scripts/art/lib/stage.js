@@ -189,6 +189,8 @@ export function createStage({ resolution }) {
       for (const mesh of meshes(object)) {
         originals.set(mesh, mesh.material);
         if (mesh.userData.lamp) { mesh.material = new THREE.MeshBasicMaterial({ color: 0xfff2c8 }); any = true; }
+        // Phase 7: coloured light (neon tubes, lanterns, marquee bulbs, stage lights).
+        else if (mesh.userData.glow !== undefined) { mesh.material = new THREE.MeshBasicMaterial({ color: mesh.userData.glow }); any = true; }
         else if (mesh.userData.sign && originals.get(mesh).map) { mesh.material = new THREE.MeshBasicMaterial({ map: originals.get(mesh).map }); any = true; }
         else if (mesh.userData.window && (mesh.userData.lit ?? random() < litShare)) {
           mesh.material = new THREE.MeshBasicMaterial({ color: warm[Math.floor(random() * warm.length)] }); any = true;

@@ -240,7 +240,7 @@ describe('frontend city/simulation integration', () => {
     expect(sentRequest?.contractVersion).toBe(1);
     expect(sentRequest?.prompt).toBe('Xây 3 biệt thự gần công viên');
     // The planner gets the live city without its economy (Phase 5) or transportation (Phase 6); nothing else is changed.
-    const { economy: _economy, transport: _transport, ...city } = initial;
+    const { economy: _economy, transport: _transport, society: _society, ...city } = initial;
     expect(sentRequest?.world).toEqual(city);
     expect(sentRequest?.sourceRevision).toBe(initial.revision);
     expect(sentRequest?.constraints).toMatchObject({ allowPartial: false, allowDestructive: false, maxOperations: 128 });

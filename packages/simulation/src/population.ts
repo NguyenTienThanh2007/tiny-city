@@ -24,6 +24,17 @@ export function createDailyRoutine(home: string, work: string | null, offset: nu
   ] };
 }
 
+/** The workplace with a vacancy and the lowest filled share (exact integer comparison), ties by building ID. */
+function leastStaffed(jobs: readonly Building[], counts: ReadonlyMap<string, number>): Building | undefined {
+  let best: Building | undefined;
+  for (const b of jobs) {
+    const n = counts.get(b.id) ?? 0;
+    if (n >= b.capacity) continue;
+    if (!best || n * best.capacity < (counts.get(best.id) ?? 0) * b.capacity) best = b;
+  }
+  return best;
+}
+
 /** Pure city-side population reconciliation. Speculative edits never mutate live RNG/IDs. */
 export function reconcilePopulation(world: WorldState, previous?: WorldState): { state: WorldState; events: SimulationEvent[] } {
   if (!world.population) return { state: world, events: [] };
@@ -69,7 +80,13 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   }
   const assign = (c: Citizen, isNew = false): Citizen => {
     let work = validJobs.get(c.id) ?? null;
-    if (!work) { const job = jobs.find(b => (jobCounts.get(b.id) ?? 0) < b.capacity); if (job) { work = job.id; reserve(jobCounts, work); } }
+    if (!work) {
+      // Phase 7: with a living society the city has many small employers, so a new hire joins the least-staffed
+      // workplace (lowest share of its jobs filled, ties by ID) instead of the first with a vacancy. Residents who
+      // already hold a job keep it; worlds without society keep the original rule exactly.
+      const job = world.society ? leastStaffed(jobs, jobCounts) : jobs.find(b => (jobCounts.get(b.id) ?? 0) < b.capacity);
+      if (job) { work = job.id; reserve(jobCounts, work); }
+    }
     const home = buildings.get(c.homeBuildingId)!;
     const old = previousCitizens.get(c.id) ?? c;
     const attrs = c.attributes ?? attributes();

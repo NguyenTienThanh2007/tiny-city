@@ -11,7 +11,8 @@ export function BuildingEconomyCard({ finance, projected }: { finance: BuildingF
     </div>
     {business ? <dl>
       <div><dt>Workers</dt><dd>{finance.workers} / {finance.jobs}</dd></div>
-      <div><dt>{finance.role === 'mall' ? 'Sales' : 'Revenue'}</dt><dd>{money(finance.revenue)}</dd></div>
+      <div><dt>{finance.role === 'office' ? 'Revenue' : 'Sales'}</dt><dd>{money(finance.revenue)}</dd></div>
+      {finance.role !== 'office' && finance.role !== 'mall' && <div><dt>Paying visitors</dt><dd>{finance.visits}</dd></div>}
       <div><dt>Payroll</dt><dd>−{money(finance.payroll)}</dd></div>
       <div><dt>Operating costs</dt><dd>−{money(finance.upkeep)}</dd></div>
       <div><dt>Commercial tax</dt><dd>−{money(finance.tax)}</dd></div>
@@ -20,7 +21,7 @@ export function BuildingEconomyCard({ finance, projected }: { finance: BuildingF
     </dl> : <dl>
       <div><dt>City upkeep</dt><dd>−{money(finance.upkeep)}</dd></div>
       <div><dt>Visits</dt><dd>{finance.visits}</dd></div>
-      <div><dt>Entry fees</dt><dd>{finance.fees ? money(finance.fees) : finance.role === 'park' ? 'Free' : '—'}</dd></div>
+      <div><dt>Entry fees</dt><dd>{finance.fees ? money(finance.fees) : finance.role === 'park' || finance.role === 'plaza' || finance.role === 'stage' ? 'Free' : '—'}</dd></div>
     </dl>}
     {business && finance.lossStreak >= 2 && <p className="muted small">Losing money {finance.lossStreak} days in a row; the owners cover it.</p>}
   </div>;

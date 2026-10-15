@@ -66,7 +66,8 @@ async function screenOf(page: Page, gx: number, gy: number) {
   return { x: box.x + c.focalX + (world.x - c.x) * c.zoom, y: box.y + c.focalY + (world.y - c.y) * c.zoom };
 }
 async function build(page: Page, type: BuildingType, x: number, y: number) {
-  const label = { villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt', park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office' }[type];
+  const label = { villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt', park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office',
+    cafe: 'Café', shops: 'Shops', market: 'Market', cinema: 'Cinema', nightclub: 'Club', stage: 'Stage', plaza: 'Plaza', amusement: 'Fun park' }[type];
   await page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: `${label} $${BUILDING_CATALOG[type].cost}`, exact: true }).click();
   const point = await screenOf(page, x + 0.5, y + 0.5);
   await page.mouse.move(point.x, point.y);

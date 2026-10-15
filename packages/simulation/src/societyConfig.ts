@@ -31,7 +31,11 @@ export const SOCIETY = Object.freeze({
   maxOutings: Object.freeze({ workday: 2, weekend: 3 }),
   cooldownMinutes: 45,
   stayInMinutes: 60,
-  maxTravelMinutes: 45,
+  maxTravelMinutes: 90,
+  /** Utility lost per minute of travel each way (percent of a point): nearby places win, the district stays worth a trip. */
+  travelPenaltyPercent: 45,
+  /** Utility lost per dollar: price × (base + frugality) / divisor (a $10 ticket costs 10–30 points). */
+  price: Object.freeze({ base: 30, divisor: 40 }),
   /** Outings may run past midnight up to this many minutes on work nights (vitality ≥ `nightOwlVitality`) and before days off. */
   lateMinutes: Object.freeze({ workNight: 0, nightOwl: 60, dayOff: 150 }),
   nightOwlVitality: 60,
@@ -112,14 +116,14 @@ export const VENUES: Readonly<Partial<Record<BuildingType, VenueSpec>>> = Object
   park: venue('park', 'Walk in the park', 0, 360, 1380, [45, 90], ['outdoors', 'fitness'], false, { energy: 0, hunger: 0, social: 1, fun: 5 }, 0, 10, 2),
   pool: venue('swim', 'Swim', 3, 480, 1260, [60, 90], ['fitness', 'outdoors'], true, { energy: -1, hunger: -1, social: 2, fun: 6 }, 0, 24, 4),
   clubhouse: venue('lounge', 'Clubhouse evening', 4, 600, 1440, [60, 120], ['nightlife', 'food'], true, { energy: 0, hunger: 2, social: 5, fun: 4 }, 0, 18, 4),
-  cafe: venue('dine', 'Eat out', 8, 420, 1380, [50, 90], ['food'], true, { energy: 1, hunger: 22, social: 4, fun: 3 }, 16, 30, 4),
-  shops: venue('shop', 'Shopping', 10, 540, 1260, [60, 120], ['shopping'], true, { energy: -1, hunger: -1, social: 2, fun: 6 }, 16, 40, 6),
-  market: venue('market', 'Night market', 6, 1020, 1500, [60, 120], ['food', 'shopping'], true, { energy: 0, hunger: 14, social: 5, fun: 5 }, 14, 25, 6),
-  cinema: venue('movie', 'Film', 9, 780, 1410, [120, 120], ['film'], false, { energy: 0, hunger: 0, social: 2, fun: 8 }, 16, 50, 12, { sessions: Object.freeze([780, 960, 1140, 1290]) }),
-  nightclub: venue('club', 'Night out', 9, 1200, 1560, [120, 180], ['music', 'nightlife'], true, { energy: -3, hunger: -1, social: 7, fun: 8 }, 16, 35, 8),
+  cafe: venue('dine', 'Eat out', 8, 420, 1380, [50, 90], ['food'], true, { energy: 1, hunger: 22, social: 4, fun: 3 }, 16, 30, 6),
+  shops: venue('shop', 'Shopping', 8, 540, 1260, [60, 120], ['shopping'], true, { energy: -1, hunger: -1, social: 2, fun: 6 }, 16, 40, 12),
+  market: venue('market', 'Night market', 6, 1020, 1500, [60, 120], ['food', 'shopping'], true, { energy: 0, hunger: 14, social: 5, fun: 5 }, 14, 25, 8),
+  cinema: venue('movie', 'Film', 9, 780, 1410, [120, 120], ['film'], false, { energy: 0, hunger: 0, social: 2, fun: 8 }, 16, 50, 18, { sessions: Object.freeze([780, 960, 1140, 1290]) }),
+  nightclub: venue('club', 'Night out', 9, 1200, 1560, [120, 180], ['music', 'nightlife'], true, { energy: -3, hunger: -1, social: 7, fun: 8 }, 16, 35, 14),
   stage: venue('event', 'Concert', 0, 0, 0, [0, 0], ['music'], true, { energy: -1, hunger: -1, social: 6, fun: 9 }, 0, 30, 0, { eventsOnly: true }),
   plaza: venue('plaza', 'Hang out at the plaza', 0, 480, 1380, [45, 90], ['arts', 'outdoors'], true, { energy: 0, hunger: 0, social: 4, fun: 4 }, 0, 12, 2),
-  amusement: venue('rides', 'Amusement park', 14, 600, 1320, [150, 240], ['thrills'], true, { energy: -3, hunger: -2, social: 5, fun: 10 }, 18, 90, 14),
+  amusement: venue('rides', 'Amusement park', 14, 600, 1320, [150, 240], ['thrills'], true, { energy: -3, hunger: -2, social: 5, fun: 10 }, 18, 90, 22),
 });
 
 /** A friend's home: free, social, quiet. */

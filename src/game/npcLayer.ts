@@ -434,7 +434,7 @@ export class NpcLayer {
     sprite.root.alpha = sample.alpha;
     sprite.root.scale.set(spriteScale * sample.facing, spriteScale);
     if (sprite.rig) {
-      const action = venue.placement.action === 'idle' ? 'none' : venue.placement.action;
+      const action = venue.placement.action === 'idle' ? 'none' : venue.placement.action === 'cheer' ? 'wave' : venue.placement.action;
       const pose = selectPose({ moving: walking, walkPhase: sample.walkPhase, action, seed: sprite.seed, timeMs: this.time, reducedMotion: this.reducedMotion });
       sprite.rig.show(walking && orientation.away ? 'back' : 'front', pose.pose, pose.frame);
     } else {

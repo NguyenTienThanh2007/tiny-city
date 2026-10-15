@@ -68,8 +68,10 @@ export class Simulation {
 
   enablePopulation(options: PopulationOptions = {}): SimulationResult {
     const change = initializePopulation(this.state, options);
-    if(change.state!==this.state) { validateWorld(change.state); this.state = freeze(cloneWorld(change.state)); }
-    return freeze({ state: this.state, events: change.events, steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    // Phase 7: residents who just moved in get their social profiles.
+    const social = reconcileSociety(change.state, this.state);
+    if(social.state!==this.state) { validateWorld(social.state); this.state = freeze(cloneWorld(social.state)); }
+    return freeze({ state: this.state, events: [...change.events, ...social.events], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
   /**

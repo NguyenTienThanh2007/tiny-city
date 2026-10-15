@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Citizen, CitizenActivity } from '@tiny-city/simulation';
 import type { ActivitySummary } from '../simulation/citizenView';
 import type { LifeFeedEntry } from '../simulation/lifeFeed';
@@ -9,10 +10,11 @@ const order: CitizenActivity[] = ['travel', 'work', 'leisure', 'home', 'sleep', 
 const tileLabels: Record<CitizenActivity, string> = { travel: 'Walking', work: 'Working', leisure: 'Leisure', home: 'At home', sleep: 'Asleep', idle: 'Idle' };
 const feedIcons: Record<LifeFeedEntry['kind'], string> = {
   commute: 'briefcase', return: 'home', leisure: 'leaf', 'arrived-home': 'home', population: 'people', blocked: 'warning', jobs: 'briefcase',
+  friendship: 'heart', event: 'calendar', group: 'people', full: 'warning',
 };
 
 export function LivePanel({ populationEnabled, homes, capacity, citizens, summary, jobless, feed, paused, selectedCitizenId,
-  onWelcome, onResume, onSelectCitizen }: {
+  onWelcome, onResume, onSelectCitizen, society }: {
   populationEnabled: boolean;
   homes: number;
   capacity: number;
@@ -25,6 +27,8 @@ export function LivePanel({ populationEnabled, homes, capacity, citizens, summar
   onWelcome: () => void;
   onResume: () => void;
   onSelectCitizen: (id: string) => void;
+  /** Phase 7: the society overview and event calendar. */
+  society?: ReactNode;
 }) {
   if (!populationEnabled) {
     return <section className="live-panel" aria-labelledby="live-heading">
@@ -37,7 +41,7 @@ export function LivePanel({ populationEnabled, homes, capacity, citizens, summar
         <p>Residents move into your homes, find jobs at offices and malls, and walk the roads on their own daily routines.</p>
         <ul className="welcome-facts">
           <li><Icon name="home" size={14} /> {homes > 0 ? `Room for ${capacity} residents across ${homes} homes` : 'Build a home first so residents have somewhere to live'}</li>
-          <li><Icon name="clock" size={14} /> Commutes around 07:00, leisure near 17:00, home by 19:00</li>
+          <li><Icon name="clock" size={14} /> Commutes around 07:00; evenings and weekends are their own: cafés, events, friends</li>
           <li><Icon name="save" size={14} /> Residents are saved with your city. Nothing changes until you choose to welcome them.</li>
         </ul>
         <button className="primary-action" onClick={onWelcome}><Icon name="people" size={16} /> Welcome residents</button>
@@ -67,6 +71,7 @@ export function LivePanel({ populationEnabled, homes, capacity, citizens, summar
           <CitizenAvatar citizenId={citizen.id} size={30} /><span>{citizen.name}</span><Icon name="chevron" size={14} />
         </button></li>)}</ul>
     </div>}
+    {society}
     <div className="life-feed">
       <div className="section-heading"><span>CITY LIFE</span><small>Latest moments</small></div>
       {feed.length === 0 ? <p className="muted small">Nothing has happened yet. Time is {paused ? 'paused' : 'moving'}.</p>

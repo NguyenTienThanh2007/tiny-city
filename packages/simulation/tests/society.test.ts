@@ -217,6 +217,20 @@ describe('venues', () => {
   });
 });
 
+describe('employment', () => {
+  it('staffs every venue: new hires join the least-staffed workplace, and worlds without society keep first-vacancy hiring', () => {
+    // Under the original rule the first workplace by ID fills completely before the next one hires anyone.
+    const spec = { townhouse: 6, villa: 6, office: 1, cafe: 1, shops: 1, nightclub: 1 } as const;
+    const social = new Simulation(societyTown(spec)).getState();
+    const staff = (w: WorldState, type: string) => w.citizens.filter((c) => w.plan.buildings.find((b) => b.id === c.workBuildingId)?.type === type).length;
+    for (const type of ['cafe', 'shops', 'nightclub']) expect(staff(social, type), type).toBeGreaterThan(0);
+    const legacy = new Simulation(societyTown(spec, { society: false })).getState();
+    const firstJob = [...legacy.plan.buildings].filter((b) => b.kind === 'workplace').sort((a, b) => a.id < b.id ? -1 : 1)[0]!;
+    const employed = legacy.citizens.filter((c) => c.workBuildingId !== null);
+    expect(employed.filter((c) => c.workBuildingId === firstJob.id).length).toBe(Math.min(employed.length, firstJob.capacity));
+  });
+});
+
 describe('relationships', () => {
   it('form from real time together, stay symmetric and bounded, and grow into friendships', () => {
     const s = week.state.society!;

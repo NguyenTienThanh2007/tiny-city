@@ -46,4 +46,5 @@ export { bodyOnLanes, carIdOf, carLook, ownsCar, busIdOf, vanIdOf, validateTrans
 export { SOCIETY, VENUES, HOME_VISIT, EVENTS, CITY_CALENDAR, NEED_RATES, WEEKDAYS, weekday, isWeekend } from './societyConfig.js';
 export type { VenueSpec, EventSpec } from './societyConfig.js';
 export { createSociety, interestsFor, isLeisureVenue, personalityFor, relationshipKey, relationshipLevel, validateSociety, venueLoad } from './society.js';
-export { effectiveActivity, isWorkday, relationshipsOf, otherOf, travelEstimate } from './societyStep.js';
+export { effectiveActivity, explainDecision, isWorkday, relationshipsOf, otherOf, servingCapacity, travelEstimate } from './societyStep.js';
+export type { DecisionExplanation } from './societyStep.js';

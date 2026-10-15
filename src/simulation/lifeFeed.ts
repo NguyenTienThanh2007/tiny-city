@@ -7,7 +7,9 @@ import { formatMinute } from './citizenView';
  * Repeated departures inside the same game hour merge into one counted entry instead of flooding the UI.
  */
 
-export type LifeFeedKind = 'commute' | 'return' | 'leisure' | 'arrived-home' | 'population' | 'blocked' | 'jobs';
+export type LifeFeedKind = 'commute' | 'return' | 'leisure' | 'arrived-home' | 'population' | 'blocked' | 'jobs' |
+  /** Phase 7 social life. */
+  'friendship' | 'event' | 'group' | 'full';
 
 export interface LifeFeedEntry {
   readonly id: number;
@@ -46,9 +48,8 @@ function describe(kind: LifeFeedKind, count: number, detail: string): string {
     case 'return': return `${plural(count, 'resident', 'residents')} walking home`;
     case 'leisure': return `${plural(count, 'resident', 'residents')} out for leisure`;
     case 'arrived-home': return `${plural(count, 'resident', 'residents')} arrived home`;
-    case 'population': return detail;
-    case 'blocked': return detail;
-    case 'jobs': return detail;
+    case 'group': return `${plural(count, 'group of friends', 'groups of friends')} went out together`;
+    case 'population': case 'blocked': case 'jobs': case 'friendship': case 'event': case 'full': return detail;
   }
 }
 
@@ -74,6 +75,24 @@ export function reduceLifeFeed(state: LifeFeedState, events: readonly Simulation
     } else if (event.type === 'citizen.arrived') {
       const citizen = citizens.get(event.citizenId);
       if (citizen?.homeBuildingId === event.buildingId) counts.set('arrived-home', (counts.get('arrived-home') ?? 0) + 1);
+    } else if (event.type === 'society.relationship-changed' && event.level !== 'acquaintance') {
+      const a = citizens.get(event.a)?.name ?? event.a, b = citizens.get(event.b)?.name ?? event.b;
+      unique.push({ kind: 'friendship', text: event.level === 'close-friend' ? `${a} and ${b} are now close friends` : `${a} and ${b} became friends`, key: `${event.a}|${event.b}|${event.level}` });
+    } else if (event.type === 'society.outing-planned' && event.companions.length > 0 && event.companions.every((id) => id > event.citizenId)) {
+      // A group outing is announced once (by its member with the first ID).
+      counts.set('group', (counts.get('group') ?? 0) + 1);
+    } else if (event.type === 'society.event-started' || event.type === 'society.event-ended' || event.type === 'society.event-cancelled') {
+      const e = world.society?.events.find((x) => x.id === event.eventId);
+      const name = e?.name ?? 'An event';
+      const text = event.type === 'society.event-started' ? `${name} has started${event.expected ? ` · ${plural(event.expected, 'resident', 'residents')} coming` : ''}`
+        : event.type === 'society.event-ended' ? `${name} ended · ${plural(event.attendance, 'resident', 'residents')} attended`
+        : `${name} was cancelled${event.reason === 'venue-removed' ? ' (the venue was removed)' : ''}`;
+      unique.push({ kind: 'event', text, key: `${event.eventId}:${event.type}` });
+    } else if (event.type === 'society.event-scheduled' && event.event.organizer === 'player') {
+      unique.push({ kind: 'event', text: `Booked: ${event.event.name}`, key: `${event.event.id}:booked` });
+    } else if (event.type === 'society.turned-away') {
+      const name = buildings.get(event.venueId)?.name ?? 'A venue';
+      unique.push({ kind: 'full', text: `${name} is full. Residents are choosing somewhere else.`, key: `full:${event.venueId}:${hourBucket}` });
     } else if (event.type === 'population.changed') {
       populationChanged = true;
       unique.push({ kind: 'population', text: `Population is now ${plural(event.count, 'resident', 'residents')}` });
@@ -121,6 +140,7 @@ export function reduceLifeFeed(state: LifeFeedState, events: readonly Simulation
     }
   }
   for (const item of unique) {
+    if (item.key && entries.some((entry) => entry.bucket === item.key)) continue;
     entries = entries.filter((entry) => !(item.kind === 'population' && entry.kind === 'population') && !(item.kind === 'jobs' && entry.kind === 'jobs'));
     entries.unshift({ id: nextId++, kind: item.kind, bucket: item.key ?? hourBucket, time: clock, count: 1, text: item.text });
   }

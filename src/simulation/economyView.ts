@@ -1,5 +1,5 @@
 import {
-  ECONOMY, TRANSPORT, computeEconomyDay, estimateEconomyImpact, financialCondition, getGameTime, officeDemandRate, operatingNet, projectEconomyDay, residentAccount,
+  ECONOMY, EVENTS, isBusinessVenue, TRANSPORT, VENUES, computeEconomyDay, estimateEconomyImpact, financialCondition, getGameTime, officeDemandRate, operatingNet, projectEconomyDay, residentAccount,
 } from '@tiny-city/simulation';
 import type {
   BuildingFinance, CityCommand, EconomyAlert, EconomyDayReport, EconomyImpactEstimate, EconomyPolicy, FinancialCondition, WorldState,
@@ -23,7 +23,13 @@ export function runningCost(kind: string): string {
     }
     case 'office': return `Business pays ${money(ECONOMY.businessUpkeep.office)}/day + wages · ${money(ECONOMY.wages.office)}/day jobs`;
     case 'mall': return `Business pays ${money(ECONOMY.businessUpkeep.mall)}/day + wages · ${money(ECONOMY.wages.mall)}/day jobs`;
-    default: return `${money(ECONOMY.publicServicesPerResident)}/day city services per resident`;
+    default: {
+      // Phase 7 venues: businesses earn what visitors pay; the stage and plaza are city venues that host events.
+      const venue = VENUES[kind as keyof typeof VENUES];
+      if (venue && isBusinessVenue(kind as never)) return `Business pays ${money(venue.upkeep)}/day + wages · ${money(venue.wage)}/day jobs · ${money(venue.price)} per visit`;
+      if (venue) return `${money(venue.upkeep)}/day city upkeep · events from ${money(Math.min(...Object.values(EVENTS).filter((e) => e.venues.includes(kind as never)).map((e) => e.cost)))}`;
+      return `${money(ECONOMY.publicServicesPerResident)}/day city services per resident`;
+    }
   }
 }
 
@@ -33,8 +39,8 @@ export interface FlowRow { readonly key: string; readonly label: string; readonl
 export function treasuryRows(report: EconomyDayReport): { income: FlowRow[]; expenses: FlowRow[] } {
   const income: FlowRow[] = [
     { key: 'residential', label: 'Residential tax', amount: report.income.residentialTax, hint: `Withheld from ${report.employed} workers' wages` },
-    { key: 'commercial', label: 'Commercial tax', amount: report.income.commercialTax, hint: 'On office and mall revenue' },
-    { key: 'fees', label: 'Venue fees', amount: report.income.venueFees, hint: 'Real pool and clubhouse visits' },
+    { key: 'commercial', label: 'Commercial tax', amount: report.income.commercialTax, hint: 'On business revenue' },
+    { key: 'fees', label: 'Venue fees', amount: report.income.venueFees, hint: report.expenses.events !== undefined ? 'Real pool and clubhouse visits and event tickets' : 'Real pool and clubhouse visits' },
   ];
   const expenses: FlowRow[] = [
     { key: 'services', label: 'Public services', amount: report.expenses.publicServices, hint: `$${ECONOMY.publicServicesPerResident} per resident` },
@@ -45,6 +51,8 @@ export function treasuryRows(report: EconomyDayReport): { income: FlowRow[]; exp
   // Phase 6: shown once the city has transportation (older reports have no transit fields).
   if (report.income.transitFares !== undefined) income.push({ key: 'fares', label: 'Bus fares', amount: report.income.transitFares, hint: `$${TRANSPORT.fare} per boarding · ${report.transitRides ?? 0} rides` });
   if (report.expenses.transit !== undefined) expenses.push({ key: 'transit', label: 'Bus operations', amount: report.expenses.transit, hint: `$${TRANSPORT.busDailyCost} per bus per day` });
+  // Phase 7: what the city paid to host events that day.
+  if (report.expenses.events !== undefined) expenses.push({ key: 'events', label: 'City events', amount: report.expenses.events, hint: 'Performers and crews for concerts, shows and festivals' });
   if (report.income.constructionRefunds > 0) income.push({ key: 'refunds', label: 'Construction undone', amount: report.income.constructionRefunds, hint: 'Refunded by undo' });
   if (report.expenses.construction > 0) expenses.push({ key: 'construction', label: 'Construction', amount: report.expenses.construction, hint: 'Charged when built' });
   return { income, expenses };
@@ -136,8 +144,9 @@ export function citizenEconomy(world: WorldState, citizenId: string): CitizenEco
   const account = residentAccount(world, citizenId);
   if (!citizen || !account) return null;
   const job = citizen.workBuildingId ? world.plan.buildings.find((b) => b.id === citizen.workBuildingId) : undefined;
-  const category = job ? job.type === 'mall' ? 'Retail' : 'Office services' : null;
-  const wage = job ? job.type === 'mall' ? ECONOMY.wages.mall : ECONOMY.wages.office : 0;
+  const venue = job?.type !== undefined && isBusinessVenue(job.type) ? VENUES[job.type] : undefined;
+  const category = job ? job.type === 'mall' ? 'Retail' : venue ? 'Hospitality & entertainment' : 'Office services' : null;
+  const wage = job ? job.type === 'mall' ? ECONOMY.wages.mall : venue ? venue.wage : ECONOMY.wages.office : 0;
   const settled = world.economy!.residents[citizenId] !== undefined;
   return { employment: job ? `Employed at ${job.name}` : 'Not employed', jobCategory: category, wage, balance: account.balance,
     condition: financialCondition(account), last: settled ? { income: account.income, taxes: account.taxes, spending: account.spending } : null };

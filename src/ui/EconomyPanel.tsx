@@ -179,7 +179,7 @@ export function EconomyPanel({ world, overview, onApplyPolicy, onSelectBuilding,
         {overview.businesses.finances.map((f) => {
           const name = world.plan.buildings.find((b) => b.id === f.buildingId)?.name ?? f.buildingId;
           return <li key={f.buildingId}><button onClick={() => onSelectBuilding(f.buildingId)}>
-            <span className={`business-mark is-${f.role}`}><Icon name={f.role === 'mall' ? 'mall' : 'office'} size={14} /></span>
+            <span className={`business-mark is-${f.role}`}><Icon name={f.role === 'office' ? 'office' : f.role} size={14} /></span>
             <span className="business-copy"><strong>{name}</strong><small>{f.workers}/{f.jobs} workers · <em className={`status-${f.status}`}>{businessStatusLabels[f.status]}</em></small></span>
             <b className={f.profit >= 0 ? 'is-gain' : 'is-loss'}>{signedMoney(f.profit)}</b>
           </button></li>;
