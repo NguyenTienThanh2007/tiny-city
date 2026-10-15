@@ -10,13 +10,15 @@ export type {
   EconomyAlertKind, EconomyAlert, EconomyToday, EconomyState, EconomyOptions, EconomyCommand, EconomyRejectionReason, EconomyCommandResult,
   CompassDirection, VehicleKind, VehicleModel, VehicleState, JunctionGrant, Vehicle, BusStop, BusLine, TripMode, TripPhase, Trip,
   TransportDayStats, TransportState, TransportCommand, TransportRejectionReason, TransportCommandResult,
+  Interest, OutingKind, CityEventKind, Personality, ResidentNeeds, Outing, SocialChoice, SocialProfile, Relationship, CityEvent,
+  SocietyDayStats, SocietyState, SocietyCommand, SocietyRejectionReason, SocietyCommandResult,
 } from './types.js';
 export type { ClockOptions } from './clock.js';
 export { advanceClock, createClock, getGameTime, MINUTES_PER_DAY, stepClock } from './clock.js';
 export { createRandomState, nextRandom, randomInteger } from './random.js';
 export { cloneWorld, createWorld, validateSchedule, validateWorld } from './world.js';
 export { Simulation } from './simulation.js';
-export { BUILDING_CATALOG, CONSTRUCTION_COSTS, isBuildingType } from './catalog.js';
+export { BUILDING_CATALOG, BUSINESS_VENUES, CONSTRUCTION_COSTS, VENUE_VISITORS, isBuildingType, isBusinessVenue, visitorCapacity } from './catalog.js';
 export type { BuildingDefinition } from './catalog.js';
 export { createBudget, validateBudget, spendBudget, applyOperating, restoreConstruction } from './budget.js';
 export { ECONOMY, percentOf } from './economyConfig.js';
@@ -41,3 +43,8 @@ export { TRANSPORT } from './transportConfig.js';
 export { TransportNetwork, DIRECTIONS, STEP, decodePath, encodePath, directionBetween, laneKey, movementMask } from './transportGraph.js';
 export type { CarRoute, LinePlan, LinePlanResult, BusOption, NetworkStats } from './transportGraph.js';
 export { bodyOnLanes, carIdOf, carLook, ownsCar, busIdOf, vanIdOf, validateTransport } from './transport.js';
+export { SOCIETY, VENUES, HOME_VISIT, EVENTS, CITY_CALENDAR, NEED_RATES, WEEKDAYS, weekday, isWeekend } from './societyConfig.js';
+export type { VenueSpec, EventSpec } from './societyConfig.js';
+export { createSociety, interestsFor, isLeisureVenue, personalityFor, relationshipKey, relationshipLevel, validateSociety, venueLoad } from './society.js';
+export { effectiveActivity, explainDecision, isWorkday, relationshipsOf, otherOf, servingCapacity, travelEstimate } from './societyStep.js';
+export type { DecisionExplanation } from './societyStep.js';

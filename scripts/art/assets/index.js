@@ -14,13 +14,16 @@ import { lmVillaAssets } from './lm-villas.js';
 import { lmResidentialAssets } from './lm-residential.js';
 import { lmCivicAssets } from './lm-civic.js';
 import { collectionAssets } from './collections.js';
+import { venueAssets } from './venues.js';
 
 export function allAssets() {
   return [
     ...[...villaAssets(), ...duplexAssets(), ...townhouseAssets(), ...apartmentAssets(), ...parkAssets(),
       ...clubhouseAssets(), ...poolAssets(), ...mallAssets(), ...officeAssets(),
       // Visual World 3.1 architecture collections.
-      ...lmVillaAssets(), ...lmResidentialAssets(), ...lmCivicAssets(), ...collectionAssets()].map((asset) => ({ category: 'building', ...asset })),
+      ...lmVillaAssets(), ...lmResidentialAssets(), ...lmCivicAssets(), ...collectionAssets(),
+      // Phase 7 entertainment venues.
+      ...venueAssets()].map((asset) => ({ category: 'building', ...asset })),
     ...natureAssets(),
     ...roadAssets(),
   ];

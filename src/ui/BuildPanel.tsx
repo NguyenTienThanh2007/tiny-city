@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CONSTRUCTION_COSTS } from '@tiny-city/simulation';
+import { CONSTRUCTION_COSTS, VENUE_VISITORS } from '@tiny-city/simulation';
 import { BUILDINGS, type BuildingKind, type Tool } from '../types';
 import { BuildingThumb } from './BuildingThumb';
 import { ArchitecturePicker } from './ArchitecturePicker';
@@ -13,12 +13,16 @@ export interface OnboardingStep { id: string; label: string; hint: string; done:
 const groups: { title: string; caption: string; kinds: BuildingKind[] }[] = [
   { title: 'Homes', caption: 'Residents move in here', kinds: ['villa', 'duplex', 'townhouse', 'apartment'] },
   { title: 'Work', caption: 'Jobs for commuters', kinds: ['office', 'mall'] },
-  { title: 'Leisure', caption: 'Evening destinations', kinds: ['park', 'clubhouse', 'pool'] },
+  { title: 'Leisure', caption: 'Free time and evenings', kinds: ['park', 'clubhouse', 'pool'] },
+  { title: 'Entertainment', caption: 'Dining, shopping, nightlife and events', kinds: ['cafe', 'shops', 'market', 'cinema', 'nightclub', 'stage', 'plaza', 'amusement'] },
 ];
 
 function capacityLabel(kind: BuildingKind): string {
   const spec = BUILDINGS[kind];
   if (spec.role === 'home') return `${spec.capacity} residents`;
+  // Phase 7 businesses: visitors they can serve when fully staffed, and the jobs they offer.
+  const visitors = VENUE_VISITORS[kind];
+  if (visitors !== undefined) return `${visitors} visitors · ${spec.capacity} jobs`;
   if (kind === 'clubhouse') return `${spec.capacity} visitors`;
   if (spec.role === 'workplace') return `${spec.capacity} jobs`;
   return `${spec.capacity} visitors`;

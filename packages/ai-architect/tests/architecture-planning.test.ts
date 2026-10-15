@@ -92,3 +92,39 @@ describe('AI Architect architecture requests (Visual World 3.1)', () => {
     expect(interpretLocally('Xây 2 biệt thự gần đường').builds[0]!.design).toBeUndefined();
   });
 });
+
+describe('Phase 7 entertainment venues', () => {
+  const town = () => createWorld({ id: 'fun', seed: 7, startingFunds: 20_000, clock: { paused: true },
+    plan: { id: 'fun-plan', name: 'Fun', width: 48, height: 48, buildings: [], roads: [...Array.from({ length: 40 }, (_, i) => ({ x: 4 + i, y: 16 })), ...Array.from({ length: 40 }, (_, i) => ({ x: 4 + i, y: 30 }))], blockedTiles: [] } });
+
+  it('understands the venue types in Vietnamese and English, and an entertainment district', () => {
+    const vi = interpretLocally('Xây một khu phố giải trí với quán cà phê, rạp chiếu phim và chợ đêm.');
+    expect(vi.builds.map((b) => b.buildingType)).toEqual(['cafe', 'cinema', 'market']);
+    const district = interpretLocally('Create a modern entertainment district near the mall.');
+    expect(district.builds.map((b) => [b.buildingType, b.quantity])).toEqual([['cafe', 2], ['cinema', 1], ['shops', 1], ['nightclub', 1]]);
+    // "modern" implies Luxury Minimalist only where that collection has models; venues keep the classic look.
+    expect(district.builds.every((b) => b.design === undefined)).toBe(true);
+    // "surrounded by parks" places the stage by the parks (a location, not a build).
+    const stage = interpretLocally('Build a concert stage surrounded by parks');
+    expect(stage.builds.map((b) => b.buildingType)).toEqual(['stage']);
+    expect(stage.near).toBe('park');
+    const walkable = interpretLocally('Make a walkable neighborhood with cafes and restaurants');
+    expect(walkable.builds.map((b) => b.buildingType)).toEqual(['cafe', 'cafe']);
+    expect(interpretLocally('Thêm 2 câu lạc bộ âm nhạc và một công viên giải trí').builds.map((b) => [b.buildingType, b.quantity])).toEqual([['nightclub', 2], ['amusement', 1]]);
+    expect(interpretLocally('Xây câu lạc bộ').builds[0]!.buildingType).toBe('clubhouse');
+    expect(interpretLocally('Build a Premium Community Plaza').builds.map((b) => b.buildingType)).toEqual(['park']);
+  });
+
+  it('plans venues on legal lots at catalog cost, with preview and validation like any building', async () => {
+    const p = await createProposal(town(), 0, interpretLocally('Xây một khu phố giải trí với quán cà phê, rạp chiếu phim và chợ đêm.'));
+    expect(p.validation).toMatchObject({ valid: true, fulfilled: true });
+    expect(p.placements.map((placement) => placement.buildingType).sort()).toEqual(['cafe', 'cinema', 'market']);
+    // Catalog prices for the venues, plus any connecting road tiles at the road price.
+    expect((p.estimatedCost - (260 + 700 + 300)) % 8).toBe(0);
+    expect(p.estimatedCost).toBeGreaterThanOrEqual(260 + 700 + 300);
+    const simulation = new Simulation(town());
+    const review = new PlanReview(simulation, p);
+    await review.preview();
+    expect(simulation.getState().plan.buildings).toHaveLength(0);
+  });
+});

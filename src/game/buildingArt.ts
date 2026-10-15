@@ -13,7 +13,9 @@ export function polygon(graphics: Graphics, points: Point[], color: number, alph
   if (stroke !== undefined) graphics.poly(points.flatMap((point) => [point.x, point.y])).stroke({ color: stroke, width: 1, alpha: strokeAlpha });
 }
 
-const blockHeights: Partial<Record<BuildingKind, number>> = { duplex: 35, townhouse: 40, apartment: 82, mall: 34, office: 96 };
+const blockHeights: Partial<Record<BuildingKind, number>> = { duplex: 35, townhouse: 40, apartment: 82, mall: 34, office: 96,
+  // Phase 7 venues (the stage and the amusement park are mostly open ground with a tall feature).
+  cafe: 24, shops: 30, market: 12, cinema: 46, nightclub: 34, stage: 26, amusement: 30 };
 
 export function buildingLift(building: Pick<Building, 'kind'>, progress: number): number {
   switch (building.kind) {
@@ -22,7 +24,8 @@ export function buildingLift(building: Pick<Building, 'kind'>, progress: number)
     case 'townhouse': return 5 + 40 * Math.max(0.08, progress);
     case 'apartment': return 5 + 82 * Math.max(0.08, progress);
     case 'park':
-    case 'pool': return 5;
+    case 'pool':
+    case 'plaza': return 5;
     case 'clubhouse': return 40;
     default: return 5 + (blockHeights[building.kind] ?? 0) * Math.max(0.08, progress);
   }
@@ -453,6 +456,34 @@ function drawMall(art: Art, progress: number) {
   for (const t of [0.15, 0.85]) tree(g, lerp(ground[3]!, ground[2]!, t), 0.6, false, v.index);
 }
 
+/** Phase 7 venues (vector fallback only; the baked art is the normal look): a lettered block with shopfront glass. */
+const VENUE_FALLBACK: Partial<Record<BuildingKind, { wall: number; roof: number; sign: number; glass: number; open?: boolean }>> = {
+  cafe: { wall: 0xf6ead4, roof: 0xd8d2c4, sign: 0x3f8d8a, glass: 0x9fc9c6 }, shops: { wall: 0xf3ebdc, roof: 0xc8714f, sign: 0xc8674a, glass: 0x8fbcc0 },
+  market: { wall: 0xe8925f, roof: 0xf1c45f, sign: 0x7a3b2a, glass: 0xf1c45f, open: true }, cinema: { wall: 0xefe4d6, roof: 0xe6d9c8, sign: 0x8a5a6e, glass: 0xf1c45f },
+  nightclub: { wall: 0x5a3f3a, roof: 0x2a2228, sign: 0xd94f8a, glass: 0x6a4a8a }, stage: { wall: 0xf6f3ec, roof: 0xece6da, sign: 0x2f4a3a, glass: 0xc8674a, open: true },
+  plaza: { wall: 0xe6d9bf, roof: 0xd9cbb0, sign: 0xc8674a, glass: 0x6fb6bf, open: true }, amusement: { wall: 0xf3dcc8, roof: 0xe07d6a, sign: 0xe8504a, glass: 0x5fb0aa, open: true },
+};
+function drawVenue(art: Art, progress: number) {
+  const { g, b } = art;
+  const spec = BUILDINGS[b.kind], look = VENUE_FALLBACK[b.kind]!;
+  const ground = footprint(b.x, b.y, spec.width, spec.height);
+  const height = buildingLift(b, progress);
+  if (look.open) {
+    // Open-air venues: paved ground, a coloured feature and a sign post.
+    polygon(g, ground, look.wall, 1, shade(look.wall, 0.7), 0.5);
+    const center = { x: (ground[0]!.x + ground[2]!.x) / 2, y: (ground[0]!.y + ground[2]!.y) / 2 };
+    g.roundRect(center.x - 14, center.y - height - 4, 28, Math.max(8, height), 3).fill(look.roof).stroke({ color: shade(look.roof, 0.6), width: 1 });
+    g.roundRect(center.x - 10, center.y - height, 20, 4, 1.5).fill(look.sign);
+    return;
+  }
+  dropShadow(g, ground, height);
+  drawMass(g, ground, height, look.wall, look.roof, look.sign);
+  windowsOnWall(art, ground[3]!, ground[2]!, Math.max(2, spec.width), 1, 4, Math.max(10, height * 0.45), look.glass, true);
+  windowsOnWall(art, ground[2]!, ground[1]!, Math.max(1, spec.height), 1, 4, Math.max(10, height * 0.45), shade(look.glass, 0.85), true);
+  const sign = lerp(ground[3]!, ground[2]!, 0.5);
+  g.roundRect(sign.x - 16, sign.y - height * 0.78, 32, 6, 2).fill(look.sign);
+}
+
 export function drawBuildingArt(graphics: Graphics, building: Building, progress: number, options: ArtOptions = {}) {
   const art: Art = { g: graphics, b: building, v: options.variant ?? buildingVariant(building.id, building.kind),
     sides: options.roadSides ?? NO_ROAD_SIDES, lights: options.lights, windowIndex: 0 };
@@ -466,5 +497,6 @@ export function drawBuildingArt(graphics: Graphics, building: Building, progress
     case 'pool': drawPool(art); break;
     case 'mall': drawMall(art, progress); break;
     case 'office': drawTower(art, progress, 8, 5, false); break;
+    default: drawVenue(art, progress);
   }
 }

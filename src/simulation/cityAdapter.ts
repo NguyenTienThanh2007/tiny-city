@@ -24,8 +24,8 @@ export function toCityPlan(city: CityState): CityPlan {
 }
 
 export function createCityWorld(city: CityState): WorldState {
-  // Phase 5: every city runs the economy from its first day. Phase 6: and has transportation.
-  return createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true }, startingFunds: city.funds, economy: {}, transport: true });
+  // Phase 5: every city runs the economy from its first day. Phase 6: and has transportation. Phase 7: and a society.
+  return createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true }, startingFunds: city.funds, economy: {}, transport: true, society: true });
 }
 
 /**

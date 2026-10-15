@@ -3,7 +3,8 @@ import { BUILDING_CATALOG, CONSTRUCTION_COSTS, createBudget, spendBudget, valida
 
 describe('construction catalog and city budget', () => {
   it('keeps prices/footprints/rules in one immutable catalog', () => {
-    expect(CONSTRUCTION_COSTS).toEqual({ villa: 120, duplex: 180, townhouse: 160, apartment: 480, park: 80, clubhouse: 220, pool: 180, mall: 900, office: 640, road: 8 });
+    expect(CONSTRUCTION_COSTS).toEqual({ villa: 120, duplex: 180, townhouse: 160, apartment: 480, park: 80, clubhouse: 220, pool: 180, mall: 900, office: 640, road: 8,
+      cafe: 260, shops: 520, market: 300, cinema: 700, nightclub: 420, stage: 600, plaza: 240, amusement: 1400 });
     expect(BUILDING_CATALOG.villa.cost).toBe(CONSTRUCTION_COSTS.villa);
     expect(BUILDING_CATALOG.clubhouse.requiresRoad).toBe(true);
     expect(BUILDING_CATALOG.park.requiresRoad).toBe(false);

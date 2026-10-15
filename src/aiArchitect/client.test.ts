@@ -22,14 +22,17 @@ describe('AI Architect HTTP client', () => {
   it('creates the versioned payload from one canonical snapshot and revision', () => {
     const snapshot = createCityWorld(initialCity);
     const request = createPlanningRequest('Add a park', snapshot, constraints);
-    // The planner receives the city exactly as it is, without the Phase 5 economy (accounts and ledger) or Phase 6 transport.
-    const { economy, transport, ...city } = snapshot;
+    // The planner receives the city exactly as it is, without the Phase 5 economy (accounts and ledger), Phase 6
+    // transport or the Phase 7 society.
+    const { economy, transport, society, ...city } = snapshot;
     expect(economy).toBeDefined();
     expect(transport).toBeDefined();
+    expect(society).toBeDefined();
     expect(request).toEqual({ contractVersion: 1, prompt: 'Add a park', world: city, sourceRevision: snapshot.revision, constraints });
     expect(request.world).toEqual(plannerWorld(snapshot));
     expect(request.world.economy).toBeUndefined();
     expect(request.world.transport).toBeUndefined();
+    expect(request.world.society).toBeUndefined();
     expect(request.world.plan).toBe(snapshot.plan);
     expect(request.world.budget).toBe(snapshot.budget);
     expect(request.sourceRevision).toBe(snapshot.revision);

@@ -195,3 +195,13 @@ road tiles, integer movement, junction reservations, congestion from lost progre
 - [x] M5 baked vehicle art (5 models × 16 headings, night lamps), renderer, shelters
 - [x] M6 fares / car costs / bus operations, inspectors, Life Mode compatibility
 - [x] M7 browser e2e, captures, benchmarks, acceptance, PR #23, GitHub Actions (all 5 checks green on `60daed4`)
+
+## Phase 7 living society (branch `feature/p7-living-society`, from `origin/main` @ `2838fdd`)
+
+- [x] M1 audit, society state contracts, identity-derived personalities, migration, determinism
+- [x] M2 relationships, needs, utility decisions with reasons, weekdays/weekends, group outings, visits
+- [x] M3 eight venues in the catalog, attendance through Life + transport, purchases and venue businesses
+- [x] M4 city calendar, player events, capacity, attendance, cancellation, event costs
+- [x] M5 baked venue art, venue crowds and lights, resident/venue/society UI, feed, spread hiring
+- [x] M6 Life Mode venues (visit, eat out, events), AI Architect venue types (EN/VI, entertainment district)
+- [ ] M7 benchmarks, captures, docs, full e2e, PR and GitHub Actions

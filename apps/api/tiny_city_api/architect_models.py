@@ -5,7 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 Identifier = Annotated[str, Field(min_length=1, max_length=128)]
 Description = Annotated[str, Field(max_length=256)]
 
-BuildingType = Literal['villa','duplex','townhouse','apartment','park','clubhouse','pool','mall','office']
+BuildingType = Literal['villa','duplex','townhouse','apartment','park','clubhouse','pool','mall','office',
+                       'cafe','shops','market','cinema','nightclub','stage','plaza','amusement']
 
 class WireModel(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -73,7 +74,7 @@ class ArchitectIntent(WireModel):
     demolishTargets: list[TargetSelector] = Field(default_factory=list, max_length=16)
     moveTargets: list[MoveTarget] = Field(default_factory=list, max_length=16)
     preserveRoads: bool = False
-    preserveTypes: list[BuildingType] = Field(default_factory=list, max_length=9)
+    preserveTypes: list[BuildingType] = Field(default_factory=list, max_length=17)
 
 class PlanningConstraints(WireModel):
     allowPartial: bool = False

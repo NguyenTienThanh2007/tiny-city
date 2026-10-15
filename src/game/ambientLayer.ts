@@ -35,6 +35,15 @@ export const VENUE_FX: Readonly<Record<string, VenueFx>> = {
   office: { pool: 1.5, color: 0xd8e6ff, strength: 0.7 },
   pool: { pool: 1.1, color: 0x9fe6ff, strength: 0.55, sparkles: 'pool' },
   park: { pool: 0, color: 0, strength: 0, fireflies: 7 },
+  // Phase 7 venues: warm café and shop windows, lantern-lit market, marquee glow, neon club, stage towers.
+  cafe: { pool: 1.0, color: 0xffc070, strength: 0.9 },
+  shops: { pool: 1.6, color: 0xffcf86, strength: 0.9 },
+  market: { pool: 1.8, color: 0xffa860, strength: 1 },
+  cinema: { pool: 1.4, color: 0xffe0a0, strength: 1 },
+  nightclub: { pool: 1.3, color: 0xff6fbf, strength: 1 },
+  stage: { pool: 1.6, color: 0xbfd8ff, strength: 0.8 },
+  plaza: { pool: 1.2, color: 0xffd28a, strength: 0.7 },
+  amusement: { pool: 2.0, color: 0xffb0a0, strength: 0.9 },
 };
 
 const POOL_RINGS = 7;

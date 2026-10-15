@@ -22,6 +22,8 @@ const ATLASES = [
   // Visual World 3.1 architecture collections (asset IDs are the model ID plus the facing).
   { name: 'luxury', prefixes: ['lm.'] },
   { name: 'collections', prefixes: ['mc.', 'tc.', 'up.', 'fg.'] },
+  // Phase 7 entertainment venues.
+  { name: 'venues', prefixes: ['cafe.', 'shops.', 'market.', 'cinema.', 'nightclub.', 'stage.', 'plaza.', 'amusement.'] },
   { name: 'nature', prefixes: ['tree.', 'prop.'] },
   { name: 'roads', prefixes: ['road.'] },
 ];

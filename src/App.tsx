@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, TRANSPORT, validateRoadPlacement } from '@tiny-city/simulation';
-import type { EconomyPolicy, LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
+import { applyLifeCommand, CONSTRUCTION_COSTS, getGameTime, housingSummary, isPlayerPlaced, OccupancyGrid, playerActionAvailability, playerHomeOptions, RoadGraph, TRANSPORT, validateRoadPlacement, VENUES, visitorCapacity } from '@tiny-city/simulation';
+import type { CityEventKind, EconomyPolicy, LifeCommand, PlayerActionAvailability, SimulationEvent, WorldState } from '@tiny-city/simulation';
 import type { Building as SimBuilding, CityCommand, CitySnapshot } from '@tiny-city/simulation';
 import { PlanError, PlanReview } from '@tiny-city/ai-architect';
 import type { BuildingDesign, PlanProposal, PlanningConstraints, PlanningHost, PlanningResponse, ValidationRequest } from '@tiny-city/ai-architect';
@@ -15,7 +15,7 @@ import { CameraControls } from './ui/CameraControls';
 import { CharacterCreator, type CharacterDraft } from './ui/CharacterCreator';
 import { ActionButton, HomePicker, LifeEntry, LifePanel, LifeStrip, PlaceCard } from './ui/LifePanel';
 import { homeOccupancy, projectWelcome } from './simulation/housingView';
-import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, rejectionText, type PlayerLogState } from './simulation/playerView';
+import { activityNames, emptyPlayerLog, failureText, isLeisure, reducePlayerLog, servesMeals, rejectionText, type PlayerLogState } from './simulation/playerView';
 import { DEFAULT_APPEARANCE } from './game/playerLook';
 import { Icon } from './ui/Icon';
 import { createFootprintStore, MiniMap } from './ui/MiniMap';
@@ -35,6 +35,7 @@ import { lineViews, rejectionText as transportRejectionText, stopTileProblem, tr
 import type { TrafficOverlay } from './game/transportLayer';
 import type { TransportDebug } from './game/CityViewport';
 import { BuildingEconomyCard, CitizenEconomyCard, PlanEconomyCard } from './ui/EconomyCards';
+import { SocialCard, SocietyOverviewCard, VenueCard } from './ui/SocialCards';
 import { alertText, buildingEconomy, citizenEconomy, economyOverview, planEconomy, signedMoney } from './simulation/economyView';
 import { ConnectionBadge, isRecoverablePlannerError, PlannerRecovery, type ConnectionView } from './ui/PlannerConnection';
 import { rejectionFeedback } from './simulation/feedback';
@@ -111,14 +112,17 @@ const buildingKinds = Object.keys(BUILDINGS) as BuildingKind[];
 const toolLabels: Record<BuildingKind, string> = {
   villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt',
   park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office',
+  cafe: 'Café', shops: 'Shops', market: 'Market', cinema: 'Cinema', nightclub: 'Club', stage: 'Stage', plaza: 'Plaza', amusement: 'Fun park',
 };
 const tools: { id: Tool; label: string; shortcut: string; cost?: number }[] = [
   { id: 'select', label: 'Select', shortcut: 'V' },
   { id: 'road', label: 'Road', shortcut: 'R', cost: CONSTRUCTION_COSTS.road },
   { id: 'move', label: 'Move', shortcut: 'M' },
-  ...buildingKinds.map((kind, index) => ({ id: kind, label: toolLabels[kind], shortcut: String(index + 1), cost: BUILDINGS[kind].cost })),
+  // Number keys pick the first nine buildings; Phase 7 venues are picked from the rail or the catalog.
+  ...buildingKinds.map((kind, index) => ({ id: kind, label: toolLabels[kind], shortcut: index < 9 ? String(index + 1) : '', cost: BUILDINGS[kind].cost })),
   { id: 'bulldoze', label: 'Bulldoze', shortcut: 'X' },
 ];
+const FIRST_VENUE_TOOL = tools.findIndex((item) => item.id === 'cafe');
 
 function App() {
   const auth = useAuth();
@@ -126,7 +130,7 @@ function App() {
   const [loaded] = useState(() => loadCitySave());
   const [city, setCity] = useState<CityState>(loaded.city);
   const { world, lastEvent, advance, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity, executeTransport } = useCitySimulation(loaded.city, loaded.world);
+    enablePopulation, speed, setSpeed, subscribe, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity, executeTransport, executeSociety } = useCitySimulation(loaded.city, loaded.world);
   const [baseMode, setBaseMode] = useState<BaseMode>('build');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCitizenId, setSelectedCitizenId] = useState<string | null>(null);
@@ -457,7 +461,7 @@ function App() {
       // Build shortcuts never change tools while you control your character.
       if (baseModeRef.current === 'life' && event.key !== 'Escape' && event.key !== ' ') return;
       const shortcuts: Record<string, Tool> = { v: 'select', r: 'road', m: 'move', x: 'bulldoze',
-        ...Object.fromEntries(buildingKinds.map((kind, index) => [String(index + 1), kind])) };
+        ...Object.fromEntries(buildingKinds.slice(0, 9).map((kind, index) => [String(index + 1), kind])) };
       const next = shortcuts[key];
       if (next) { setTool(next); if (next !== 'move') setMovingBuildingId(null); }
       if (event.key === 'Escape') { setTool('select'); setSelectedBuildingId(null); setMovingBuildingId(null); setSelectedCitizenId(null); setFollowCitizenId(null); setSelectedVehicleId(null); setFollowVehicleId(null); }
@@ -1034,7 +1038,7 @@ function App() {
     const rooms = homeOccupancy(lifePlace.capacity, occupancy, player, lifePlace.id);
     const detail = own ? `Your home · ${rooms.occupied} of ${lifePlace.capacity} rooms taken`
       : lifePlace.kind === 'home' ? `${BUILDINGS[kind].label} · ${rooms.freeRooms > 0 ? `${rooms.freeRooms} free room${rooms.freeRooms === 1 ? '' : 's'}` : 'no free rooms'}`
-      : isLeisure(lifePlace) ? `${BUILDINGS[kind].label} · ${occupancy.visitorIds.length} of ${lifePlace.capacity} visitors now`
+      : isLeisure(lifePlace) ? `${BUILDINGS[kind].label} · ${occupancy.visitorIds.length} of ${visitorCapacity(lifePlace)} visitors now`
       : `${BUILDINGS[kind].label} · ${occupancy.workerIds.length} working here · not open to visit`;
     const walk = <ActionButton key="walk" label="Walk here" icon="walk" hint={own ? 'Go inside' : 'Stop at the entrance'}
       availability={dryRun({ type: 'player.move-to', destination: { type: 'building', buildingId: lifePlace.id } })}
@@ -1043,7 +1047,10 @@ function App() {
       <ActionButton key="rest" label="Rest" icon="bed" hint="120 min · restores energy" availability={dryRun({ type: 'player.start-activity', activity: 'rest' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'rest' })} />,
       <ActionButton key="eat" label="Eat" icon="leaf" hint="30 min · fills hunger" availability={dryRun({ type: 'player.start-activity', activity: 'eat' })} onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'eat' })} />]
       : isLeisure(lifePlace) ? [<ActionButton key="visit" label="Visit" icon="park" hint="60 min · lifts mood" availability={dryRun({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })}
-        onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })} />, walk]
+        onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'visit', buildingId: lifePlace.id })} />,
+        // Phase 7: eat out at a café or the night market.
+        ...(servesMeals(lifePlace) ? [<ActionButton key="eat-out" label="Eat here" icon="food" hint="30 min · fills hunger" availability={dryRun({ type: 'player.start-activity', activity: 'eat', buildingId: lifePlace.id })}
+          onClick={() => runLifeAction({ type: 'player.start-activity', activity: 'eat', buildingId: lifePlace.id })} />] : []), walk]
       : lifePlace.kind === 'home' && rooms.freeRooms > 0 ? [walk, <ActionButton key="move-in" label="Move in here" icon="home" hint="Take a free room" availability={{ action: 'cancel', available: true, reason: null }}
         onClick={() => { setLifeFlow({ step: 'home', draft: null, purpose: 'move', selectedId: lifePlace.id }); setLifePlaceId(null); }} />]
       : [walk];
@@ -1104,6 +1111,17 @@ function App() {
     return result.applied;
   };
   const selectedBuildingEconomy = selectedBuilding ? buildingEconomy(world, selectedBuilding.id) : null;
+  // Phase 7: venues show their hours, visitors and events, and the player can book an event there.
+  const selectedVenue = selectedBuilding && world.society ? world.plan.buildings.find((b) => b.id === selectedBuilding.id && b.type !== undefined && VENUES[b.type]) ?? null : null;
+  const scheduleEvent = (kind: CityEventKind, day: number, startMinute: number) => {
+    if (!selectedVenue) return 'venue-not-found' as const;
+    const result = executeSociety({ type: 'society.schedule-event', venueId: selectedVenue.id, kind, day, startMinute });
+    if (result.applied) setSaved(false);
+    return result.reason;
+  };
+  const cancelEvent = (eventId: string) => {
+    if (executeSociety({ type: 'society.cancel-event', eventId }).applied) { setSaved(false); showNotice('Event cancelled. Residents who planned to go will choose something else.'); }
+  };
   const selectedCitizenEconomy = selectedCitizen ? citizenEconomy(world, selectedCitizen.id) : null;
   // Phase 6: a selected vehicle that parks (or a bus withdrawn) leaves the selection; nothing is shown for it afterwards.
   useEffect(() => {
@@ -1280,15 +1298,15 @@ function App() {
 
       <nav className="tool-rail" aria-label="Build tools" data-camera-inset="left">
         {tools.map((item, index) => <div key={item.id} className="tool-slot">
-          {(index === 3 || index === tools.length - 1) && <span className="rail-divider" aria-hidden="true" />}
+          {(index === 3 || index === FIRST_VENUE_TOOL || index === tools.length - 1) && <span className="rail-divider" aria-hidden="true" />}
           <button className={`tool-button tool-${item.id} ${tool === item.id ? 'active' : ''}`} aria-pressed={tool === item.id} onClick={() => {
             if (item.id !== 'move') setMovingBuildingId(null);
             setTool(item.id);
-          }} title={`${item.label} · ${item.shortcut}`}>
+          }} title={item.shortcut ? `${item.label} · ${item.shortcut}` : item.label}>
             <span className="tool-icon"><Icon name={item.id} size={19} /></span>
             <span className="tool-label">{item.label}</span>
             {item.cost !== undefined && <span className="tool-cost">${item.cost}</span>}
-            <kbd aria-hidden="true">{item.shortcut}</kbd>
+            {item.shortcut && <kbd aria-hidden="true">{item.shortcut}</kbd>}
           </button>
         </div>)}
       </nav>
@@ -1496,10 +1514,13 @@ function App() {
           onFollow={() => setFollowCitizenId((current) => current === selectedCitizen.id ? null : selectedCitizen.id)}
           onClose={() => { setSelectedCitizenId(null); setFollowCitizenId(null); }}
           onSelectBuilding={(id) => { if (lifeActive) { setSelectedCitizenId(null); setLifePlaceId(id); } else selectBuilding(id); }}
+          social={world.society && <SocialCard world={world} citizenId={selectedCitizen.id} onSelectCitizen={(id) => { selectCitizen(id); focusCitizen(id); }}
+            onSelectBuilding={(id) => { if (lifeActive) { setSelectedCitizenId(null); setLifePlaceId(id); } else selectBuilding(id); }} />}
           lifeActions={citizenLifeActions} />}
 
         {view === 'building' && selectedBuilding && <BuildingInspector building={selectedBuilding} roadConnected={roadConnected}
           economy={selectedBuildingEconomy && <BuildingEconomyCard finance={selectedBuildingEconomy.finance} projected={selectedBuildingEconomy.projected} />}
+          venue={selectedVenue && <VenueCard world={world} building={selectedVenue} onSchedule={scheduleEvent} onCancel={cancelEvent} />}
           occupancy={populationEnabled ? getBuildingOccupancy(selectedBuilding.id) : null}
           citizens={citizenMap} populationEnabled={populationEnabled} player={player ?? null}
           onSelectPlayer={() => { setSelectedBuildingId(null); setBaseMode('life'); if (compact) setSheetOpen(true); }}
@@ -1548,7 +1569,8 @@ function App() {
 
         {view === 'live' && <LivePanel populationEnabled={populationEnabled} homes={villas} capacity={homeCapacity} citizens={citizens}
           summary={activitySummary} jobless={jobless} feed={feed.entries} paused={world.clock.paused} selectedCitizenId={selectedCitizenId}
-          onWelcome={welcomeResidents} onResume={() => { resume(); setSaved(false); }} onSelectCitizen={(id) => { selectCitizen(id); focusCitizen(id); }} />}
+          onWelcome={welcomeResidents} onResume={() => { resume(); setSaved(false); }} onSelectCitizen={(id) => { selectCitizen(id); focusCitizen(id); }}
+          society={populationEnabled && world.society && <SocietyOverviewCard world={world} onSelectBuilding={(id) => { selectBuilding(id); if (compact) setSheetOpen(true); }} onCancelEvent={cancelEvent} />} />}
 
         {view === 'life' && lifeFlow?.step === 'home' && <HomePicker options={homeOptions} selectedId={lifeFlow.selectedId} purpose={lifeFlow.purpose}
           populationEnabled={populationEnabled} welcome={welcomeWithPlayer} projection={welcomeProjection} onWelcomeChange={setWelcomeWithPlayer} onSelect={selectHome} onConfirm={confirmHome}

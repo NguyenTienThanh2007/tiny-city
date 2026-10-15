@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { BUILDING_CATALOG, Simulation, deserializeWorld, operatingNet, percentOf, projectEconomyDay, serializeWorld } from '@tiny-city/simulation';
+import { BUILDING_CATALOG, ECONOMY, Simulation, deserializeWorld, officeDemandRate, operatingNet, percentOf, projectEconomyDay, serializeWorld } from '@tiny-city/simulation';
 import type { BuildingType, EconomyDayReport, WorldState } from '@tiny-city/simulation';
 import { createCityWorld } from '../src/simulation/cityAdapter';
 import type { CityState } from '../src/types';
@@ -66,7 +66,8 @@ async function screenOf(page: Page, gx: number, gy: number) {
   return { x: box.x + c.focalX + (world.x - c.x) * c.zoom, y: box.y + c.focalY + (world.y - c.y) * c.zoom };
 }
 async function build(page: Page, type: BuildingType, x: number, y: number) {
-  const label = { villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt', park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office' }[type];
+  const label = { villa: 'Villa', duplex: 'Duplex', townhouse: 'Townhouse', apartment: 'Apt', park: 'Park', clubhouse: 'Clubhouse', pool: 'Pool', mall: 'Mall', office: 'Office',
+    cafe: 'Café', shops: 'Shops', market: 'Market', cinema: 'Cinema', nightclub: 'Club', stage: 'Stage', plaza: 'Plaza', amusement: 'Fun park' }[type];
   await page.getByRole('navigation', { name: 'Build tools' }).getByRole('button', { name: `${label} $${BUILDING_CATALOG[type].cost}`, exact: true }).click();
   const point = await screenOf(page, x + 0.5, y + 0.5);
   await page.mouse.move(point.x, point.y);
@@ -201,8 +202,11 @@ test('D/E/F/G/H/J/K: midnight settles once and exactly as the engine replays it,
   expect(mall.tax).toBe(percentOf(mall.revenue, 6));
   await expect(economyPanel(page).getByRole('list', { name: 'Businesses' })).toContainText('Boutique Mall');
 
-  // Jobs fill in building-ID order, so the mall employs everyone and the office has no staff: no revenue, a full loss.
-  expect(office).toMatchObject({ workers: 0, revenue: 0, status: 'unstaffed', profit: -340 });
+  // Phase 7: with a living society, new hires join the least-staffed workplace, so the office is staffed too. Its day
+  // settles exactly by the office rule: revenue per worker at the client demand for this tax rate, minus wages, upkeep and tax.
+  expect(office.workers).toBeGreaterThan(0);
+  expect(office.revenue).toBe(percentOf(office.workers * ECONOMY.officeRevenuePerWorker, officeDemandRate(e1.policy)));
+  expect(office.profit).toBe(office.revenue - office.payroll - ECONOMY.businessUpkeep.office - office.tax);
   // J. The building inspector shows the same day for the mall.
   await page.getByRole('button', { name: 'Close city economy' }).click();
   await selectBuilding(page, 'mall', 'Boutique Mall');

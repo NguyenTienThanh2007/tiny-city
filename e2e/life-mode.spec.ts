@@ -142,8 +142,13 @@ test('complete life: create, choose a home, walk, visit, meet a resident, rest, 
     await untilInGameTime(page, 'a nearby resident', () => nearby.getByRole('button').count(), (count) => count > 0, { within: 180 });
     // Read the diary before the resident profile replaces the Life panel.
     const stoppedBefore = ((await diary(page).textContent()) ?? '').split('Greeting stopped').length;
-    // The list re-sorts by live distance while the clock runs, so click the resident that was read, not "first" again.
-    const neighbour = (await nearby.getByRole('button').first().evaluate((el) => el.querySelector('span')?.firstChild?.textContent ?? ''));
+    // Phase 7: residents choose their own evenings, so prefer someone whose recorded park outing still has a while to
+    // run (they stay put); otherwise the nearest. The list re-sorts by live distance, so click the resident that was read.
+    const live = (await save(page)).simulation;
+    const park = live.plan.buildings.find((b) => b.name === 'Sunny Park')!.id;
+    const staying = new Set(live.citizens.filter((c) => { const o = live.society?.residents[c.id]?.outing; return o?.venueId === park && o.status === 'present' && o.endTick - live.clock.tick > 25; }).map((c) => c.name));
+    const names = await nearby.getByRole('button').evaluateAll((els) => els.map((el) => el.querySelector('span')?.firstChild?.textContent ?? ''));
+    const neighbour = names.find((n) => staying.has(n)) ?? names[0] ?? '';
     expect(neighbour).not.toBe('');
     await nearby.getByRole('button', { name: new RegExp(`^${neighbour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)`) }).click();
     const profile = page.locator('.citizen-inspector');

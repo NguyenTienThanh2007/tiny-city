@@ -50,7 +50,9 @@ describe('baked art manifest (public/art/vw3)', () => {
     expect([...BAKED_BUILDING_KINDS].sort()).toEqual(Object.keys(BUILDINGS).sort());
     for (const kind of BAKED_BUILDING_KINDS) {
       const list = index.buildings.get(kind) ?? [];
-      expect(list.length, kind).toBeGreaterThanOrEqual(kind === 'pool' || kind === 'mall' ? 2 : 3);
+      // 3.0B types have several variants; Phase 7 venues ship one design (two for the café) in both facings.
+      const venue = ['cafe', 'shops', 'market', 'cinema', 'nightclub', 'stage', 'plaza', 'amusement'].includes(kind);
+      expect(list.length, kind).toBeGreaterThanOrEqual(venue ? kind === 'cafe' ? 4 : 2 : kind === 'pool' || kind === 'mall' ? 2 : 3);
       if (kind !== 'park') expect(new Set(list.map((asset) => asset.front))).toEqual(new Set(['S', 'E']));
     }
     for (let mask = 0; mask < 16; mask += 1) expect(index.roads.get(mask)?.color).toBeDefined();

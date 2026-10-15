@@ -1,7 +1,7 @@
 import { BUILDING_CATALOG } from '@tiny-city/simulation';
 import type { BuildingType, Position } from '@tiny-city/simulation';
 import type { ArchitectIntent, BuildDesignRequest, MoveTarget, TargetRelative, TargetSelector } from './contracts.js';
-import { architectureCollection, architectureModel, findArchitectureMentions } from './architecture.js';
+import { architectureCollection, architectureModel, collectionsFor, findArchitectureMentions } from './architecture.js';
 
 const GENERIC_MODERN = /(hiện đại|đương đại)|\b(modern|contemporary)\b/u;
 
@@ -22,12 +22,30 @@ const ALIASES: readonly (readonly [string, BuildingType])[] = ([
   ['công viên', 'park'], ['parks', 'park'], ['park', 'park'],
   ['nhà câu lạc bộ', 'clubhouse'], ['câu lạc bộ', 'clubhouse'], ['clubhouses', 'clubhouse'], ['clubhouse', 'clubhouse'],
   ['hồ bơi', 'pool'], ['bể bơi', 'pool'], ['swimming pools', 'pool'], ['swimming pool', 'pool'], ['pools', 'pool'], ['pool', 'pool'],
+  // Phase 7 entertainment venues.
+  ['quán cà phê', 'cafe'], ['cà phê', 'cafe'], ['quán ăn', 'cafe'], ['nhà hàng', 'cafe'], ['coffee shops', 'cafe'], ['coffee shop', 'cafe'],
+  ['cafés', 'cafe'], ['cafes', 'cafe'], ['café', 'cafe'], ['cafe', 'cafe'], ['restaurants', 'cafe'], ['restaurant', 'cafe'],
+  ['phố mua sắm', 'shops'], ['khu mua sắm', 'shops'], ['dãy cửa hàng', 'shops'], ['cửa hàng', 'shops'], ['shopping streets', 'shops'], ['shopping street', 'shops'],
+  ['retail streets', 'shops'], ['retail street', 'shops'], ['boutiques', 'shops'], ['shops', 'shops'],
+  ['chợ đêm', 'market'], ['night markets', 'market'], ['night market', 'market'], ['markets', 'market'], ['market', 'market'],
+  ['rạp chiếu phim', 'cinema'], ['rạp phim', 'cinema'], ['movie theaters', 'cinema'], ['movie theater', 'cinema'], ['movie theatre', 'cinema'], ['cinemas', 'cinema'], ['cinema', 'cinema'],
+  ['câu lạc bộ âm nhạc', 'nightclub'], ['quán bar', 'nightclub'], ['hộp đêm', 'nightclub'], ['music clubs', 'nightclub'], ['music club', 'nightclub'],
+  ['nightclubs', 'nightclub'], ['nightclub', 'nightclub'], ['night club', 'nightclub'],
+  ['sân khấu ca nhạc', 'stage'], ['sân khấu hòa nhạc', 'stage'], ['sân khấu', 'stage'], ['concert stages', 'stage'], ['concert stage', 'stage'], ['amphitheatre', 'stage'], ['amphitheater', 'stage'], ['stages', 'stage'], ['stage', 'stage'],
+  ['quảng trường biểu diễn', 'plaza'], ['quảng trường', 'plaza'], ['performance plazas', 'plaza'], ['performance plaza', 'plaza'], ['town square', 'plaza'], ['plazas', 'plaza'], ['plaza', 'plaza'],
+  ['công viên giải trí', 'amusement'], ['khu vui chơi', 'amusement'], ['amusement parks', 'amusement'], ['amusement park', 'amusement'], ['theme parks', 'amusement'], ['theme park', 'amusement'], ['funfair', 'amusement'],
 ] as const).slice().sort((a, b) => b[0].length - a[0].length);
 /** "A residential area" without building types: one apartment building (Phase 5). */
 const DISTRICT = /(khu dân cư|khu nhà ở|khu ở)|\b(residential (area|district|neighbou?rhood|quarter)|housing (area|district|estate))\b/u;
 /** "…with enough jobs": add office towers until the new homes' residents could all be employed (Phase 5). */
 const ENOUGH_JOBS = /((có )?đủ (việc làm|chỗ làm|công việc)|kèm (việc làm|chỗ làm))|\b((with )?enough jobs|jobs for (everyone|all|them|its residents|the residents)|with (its own )?jobs)\b/u;
-const PLURAL_EN = new Set(['malls', 'offices', 'office towers', 'apartments', 'apartment buildings', 'flats', 'villas', 'duplexes', 'semi-detached homes', 'townhouses', 'parks', 'clubhouses', 'pools', 'swimming pools']);
+const PLURAL_EN = new Set(['malls', 'offices', 'office towers', 'apartments', 'apartment buildings', 'flats', 'villas', 'duplexes', 'semi-detached homes', 'townhouses', 'parks', 'clubhouses', 'pools', 'swimming pools',
+  'cafés', 'cafes', 'coffee shops', 'restaurants', 'shopping streets', 'retail streets', 'boutiques', 'shops', 'night markets', 'markets', 'cinemas', 'movie theaters', 'music clubs', 'nightclubs',
+  'concert stages', 'stages', 'performance plazas', 'plazas', 'amusement parks', 'theme parks']);
+/** Phase 7: "an entertainment district" without venue types: two cafés, a cinema, a shopping street and a music club. */
+const ENTERTAINMENT = /(khu (phố )?giải trí|phố giải trí|khu vui chơi giải trí)|\b(entertainment (district|quarter|area|zone|street|hub))\b/u;
+const ENTERTAINMENT_SET: readonly (readonly [BuildingType, number])[] = [['cafe', 2], ['cinema', 1], ['shops', 1], ['nightclub', 1]];
+const VENUE_TYPES: ReadonlySet<BuildingType> = new Set(['cafe', 'shops', 'market', 'cinema', 'nightclub', 'stage', 'plaza', 'amusement']);
 const UNSUPPORTED = ['bệnh viện', 'hospital', 'trường học', 'school', 'nhà máy', 'factory', 'sân bay', 'airport', 'cây cầu', 'bridge', 'nhà ga', 'station', 'khách sạn', 'hotel', 'sân vận động', 'stadium'];
 const NUMBERS: Record<string, number> = {
   một: 1, hai: 2, ba: 3, bốn: 4, tư: 4, năm: 5, sáu: 6, bảy: 7, tám: 8, chín: 9, mười: 10, 'mười một': 11, 'mười hai': 12, 'mười lăm': 15, 'hai mươi': 20,
@@ -41,7 +59,7 @@ const VERBS: readonly (readonly [RegExp, Verb])[] = [
   [new RegExp(`${L}(giữ nguyên|giữ lại|giữ|bảo tồn|không phá|preserve|keep|protect)${R}`, 'gu'), 'preserve'],
   [new RegExp(`${L}(di chuyển|dời|move|relocate)${R}`, 'gu'), 'move'],
   [new RegExp(`${L}(phá bỏ|phá dỡ|phá|dỡ bỏ|xóa bỏ|xoá bỏ|xóa|xoá|demolish|remove|tear down|delete|destroy|knock down|bulldoze)${R}`, 'gu'), 'demolish'],
-  [new RegExp(`${L}(xây dựng|xây|thêm|tạo|build|add|create|construct|place)${R}`, 'gu'), 'build'],
+  [new RegExp(`${L}(xây dựng|xây|thêm|tạo|build|add|create|construct|place|make)${R}`, 'gu'), 'build'],
 ];
 /** Splits a clause at every verb so "phá chung cư và xây biệt thự" becomes two actions in order. */
 function verbSegments(clause: string): { verb: Verb | null; text: string }[] {
@@ -83,9 +101,12 @@ function quantityBefore(text: string, index: number): number | 'all' | null {
   return null;
 }
 const point = (match: RegExpMatchArray): Position => ({ x: Number(match[1]), y: Number(match[2]) });
-const NAMES_VI: Record<BuildingType, string> = { villa: 'biệt thự', duplex: 'nhà song lập', townhouse: 'nhà phố', apartment: 'chung cư', park: 'công viên', clubhouse: 'câu lạc bộ', pool: 'hồ bơi', mall: 'trung tâm thương mại', office: 'văn phòng' };
+const NAMES_VI: Record<BuildingType, string> = { villa: 'biệt thự', duplex: 'nhà song lập', townhouse: 'nhà phố', apartment: 'chung cư', park: 'công viên', clubhouse: 'câu lạc bộ', pool: 'hồ bơi', mall: 'trung tâm thương mại', office: 'văn phòng',
+  cafe: 'quán cà phê', shops: 'phố mua sắm', market: 'chợ đêm', cinema: 'rạp chiếu phim', nightclub: 'câu lạc bộ âm nhạc', stage: 'sân khấu ca nhạc', plaza: 'quảng trường biểu diễn', amusement: 'công viên giải trí' };
 const NAMES_EN: Record<BuildingType, [string, string]> = { villa: ['villa', 'villas'], duplex: ['duplex', 'duplexes'], townhouse: ['townhouse', 'townhouses'], apartment: ['apartment building', 'apartment buildings'],
-  park: ['park', 'parks'], clubhouse: ['clubhouse', 'clubhouses'], pool: ['pool', 'pools'], mall: ['mall', 'malls'], office: ['office tower', 'office towers'] };
+  park: ['park', 'parks'], clubhouse: ['clubhouse', 'clubhouses'], pool: ['pool', 'pools'], mall: ['mall', 'malls'], office: ['office tower', 'office towers'],
+  cafe: ['café', 'cafés'], shops: ['shopping street', 'shopping streets'], market: ['night market', 'night markets'], cinema: ['cinema', 'cinemas'], nightclub: ['music club', 'music clubs'],
+  stage: ['concert stage', 'concert stages'], plaza: ['performance plaza', 'performance plazas'], amusement: ['amusement park', 'amusement parks'] };
 
 export interface InterpretContext { readonly buildings?: readonly { readonly id: string; readonly name: string }[] }
 
@@ -152,9 +173,14 @@ export function interpretLocally(prompt: string, context: InterpretContext = {})
       const models = arch.filter((a) => a.model);
       const style = arch.find((a) => !a.model)?.collection ?? (!arch.length && GENERIC_MODERN.test(raw) ? 'luxury-minimalist' : null);
       if (style && !arch.length) summary.push(vi ? 'phong cách hiện đại = Luxury Minimalist' : 'modern style = Luxury Minimalist');
+      // A style only implied by "modern" applies where that collection has models (Phase 7 venues keep the classic look);
+      // a style the user named stays strict, and the planner refuses types it does not cover.
+      const implied = style !== null && !arch.length;
       const designFor = (type: BuildingType): BuildDesignRequest | null => {
         const model = models.find((a) => a.model!.buildingType === type)?.model;
-        return model ? { collection: model.collection, model: model.id } : style ? { collection: style, model: null } : null;
+        if (model) return { collection: model.collection, model: model.id };
+        if (!style || implied && !collectionsFor(type).some((c) => c.id === style)) return null;
+        return { collection: style, model: null };
       };
       // "three Glass Pavilion Villas" / "5 Luxury Minimalist villas": the count stands before the style phrase that
       // contains or directly precedes the building word.
@@ -163,7 +189,9 @@ export function interpretLocally(prompt: string, context: InterpretContext = {})
         const phrase = arch.find((a) => a.at <= m.at && a.at + a.phrase.length >= m.at - 1);
         return phrase ? quantityBefore(clause, phrase.at) : null;
       };
-      const builds: { type: BuildingType; quantity: number | 'all' | null; design: BuildDesignRequest | null }[] = mentions.map((m) => ({ type: m.type, quantity: countOf(m), design: designFor(m.type) }));
+      // A word inside a named model of another type ("Premium Community Plaza" is a park model) is part of that name.
+      const ownWord = (m: typeof mentions[number]) => !models.some((a) => a.model!.buildingType !== m.type && m.at >= a.at && m.at < a.at + a.phrase.length);
+      const builds: { type: BuildingType; quantity: number | 'all' | null; design: BuildDesignRequest | null }[] = mentions.filter(ownWord).map((m) => ({ type: m.type, quantity: countOf(m), design: designFor(m.type) }));
       // A model named without its building word ("a Premium Glass Residence") is a build of that model's type.
       for (const a of models) if (!mentions.some((m) => m.type === a.model!.buildingType)) builds.push({ type: a.model!.buildingType, quantity: quantityBefore(raw, a.at), design: { collection: a.model!.collection, model: a.model!.id } });
       if (arch.length && !builds.length) intent.ambiguities.push(vi ? 'Hãy nêu số lượng và loại công trình cho phong cách đã chọn (ví dụ “xây 3 biệt thự Luxury Minimalist”).' : 'Name how many of which buildings to build in that style (e.g. “build 3 Luxury Minimalist villas”).');
@@ -171,6 +199,10 @@ export function interpretLocally(prompt: string, context: InterpretContext = {})
       if (DISTRICT.test(raw) && !builds.some((m) => BUILDING_CATALOG[m.type].kind === 'home')) {
         builds.push({ type: 'apartment', quantity: 1, design: designFor('apartment') });
         summary.push(vi ? 'khu dân cư = 1 chung cư' : 'residential area = 1 apartment building');
+      }
+      if (ENTERTAINMENT.test(raw) && !builds.some((m) => VENUE_TYPES.has(m.type))) {
+        for (const [type, quantity] of ENTERTAINMENT_SET) builds.push({ type, quantity, design: designFor(type) });
+        summary.push(vi ? 'khu giải trí = 2 quán cà phê, 1 rạp chiếu phim, 1 phố mua sắm, 1 câu lạc bộ âm nhạc' : 'entertainment district = 2 cafés, 1 cinema, 1 shopping street, 1 music club');
       }
       if (ENOUGH_JOBS.test(raw) && !builds.some((m) => m.type === 'office' || m.type === 'mall')) {
         const rooms = builds.reduce((sum, m) => sum + (BUILDING_CATALOG[m.type].kind === 'home' && typeof m.quantity !== 'string' ? BUILDING_CATALOG[m.type].capacity * (m.quantity ?? 1) : 0), 0);

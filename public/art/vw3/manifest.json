@@ -80,6 +80,22 @@
    "sha256": "0338e514d0b17e64"
   },
   {
+   "file": "venues-0.json",
+   "image": "venues-0.webp",
+   "scale": 2,
+   "width": 2048,
+   "height": 1072,
+   "sha256": "3131896120f451ff"
+  },
+  {
+   "file": "venues-soft-0.json",
+   "image": "venues-soft-0.webp",
+   "scale": 1,
+   "width": 2048,
+   "height": 312,
+   "sha256": "3bbfb2b074b3e44f"
+  },
+  {
    "file": "nature-0.json",
    "image": "nature-0.webp",
    "scale": 2,
@@ -1851,6 +1867,258 @@
    "heightPx": 35.4,
    "color": "fg.pool.community.E#color",
    "shadow": "fg.pool.community.E#shadow"
+  },
+  "cafe.v0.S": {
+   "kind": "cafe",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "heightPx": 30.1,
+   "color": "cafe.v0.S#color",
+   "shadow": "cafe.v0.S#shadow",
+   "emissive": "cafe.v0.S#emissive"
+  },
+  "cafe.v0.E": {
+   "kind": "cafe",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "heightPx": 29,
+   "color": "cafe.v0.E#color",
+   "shadow": "cafe.v0.E#shadow",
+   "emissive": "cafe.v0.E#emissive"
+  },
+  "cafe.v1.S": {
+   "kind": "cafe",
+   "category": "building",
+   "variant": 1,
+   "front": "S",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "heightPx": 28.2,
+   "color": "cafe.v1.S#color",
+   "shadow": "cafe.v1.S#shadow",
+   "emissive": "cafe.v1.S#emissive"
+  },
+  "cafe.v1.E": {
+   "kind": "cafe",
+   "category": "building",
+   "variant": 1,
+   "front": "E",
+   "footprint": {
+    "w": 2,
+    "d": 2
+   },
+   "heightPx": 30.1,
+   "color": "cafe.v1.E#color",
+   "shadow": "cafe.v1.E#shadow",
+   "emissive": "cafe.v1.E#emissive"
+  },
+  "shops.v0.S": {
+   "kind": "shops",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 2
+   },
+   "heightPx": 35,
+   "color": "shops.v0.S#color",
+   "shadow": "shops.v0.S#shadow",
+   "emissive": "shops.v0.S#emissive"
+  },
+  "shops.v0.E": {
+   "kind": "shops",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 2
+   },
+   "heightPx": 35,
+   "color": "shops.v0.E#color",
+   "shadow": "shops.v0.E#shadow",
+   "emissive": "shops.v0.E#emissive"
+  },
+  "market.v0.S": {
+   "kind": "market",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 3
+   },
+   "heightPx": 39.8,
+   "color": "market.v0.S#color",
+   "shadow": "market.v0.S#shadow",
+   "emissive": "market.v0.S#emissive"
+  },
+  "market.v0.E": {
+   "kind": "market",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 3
+   },
+   "heightPx": 39.8,
+   "color": "market.v0.E#color",
+   "shadow": "market.v0.E#shadow",
+   "emissive": "market.v0.E#emissive"
+  },
+  "cinema.v0.S": {
+   "kind": "cinema",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 33.6,
+   "color": "cinema.v0.S#color",
+   "shadow": "cinema.v0.S#shadow",
+   "emissive": "cinema.v0.S#emissive"
+  },
+  "cinema.v0.E": {
+   "kind": "cinema",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 34,
+   "color": "cinema.v0.E#color",
+   "shadow": "cinema.v0.E#shadow",
+   "emissive": "cinema.v0.E#emissive"
+  },
+  "nightclub.v0.S": {
+   "kind": "nightclub",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 32.6,
+   "color": "nightclub.v0.S#color",
+   "shadow": "nightclub.v0.S#shadow",
+   "emissive": "nightclub.v0.S#emissive"
+  },
+  "nightclub.v0.E": {
+   "kind": "nightclub",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 2
+   },
+   "heightPx": 32.6,
+   "color": "nightclub.v0.E#color",
+   "shadow": "nightclub.v0.E#shadow",
+   "emissive": "nightclub.v0.E#emissive"
+  },
+  "stage.v0.S": {
+   "kind": "stage",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 37.4,
+   "color": "stage.v0.S#color",
+   "shadow": "stage.v0.S#shadow",
+   "emissive": "stage.v0.S#emissive"
+  },
+  "stage.v0.E": {
+   "kind": "stage",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 4,
+    "d": 4
+   },
+   "heightPx": 37.2,
+   "color": "stage.v0.E#color",
+   "shadow": "stage.v0.E#shadow",
+   "emissive": "stage.v0.E#emissive"
+  },
+  "plaza.v0.S": {
+   "kind": "plaza",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 34.1,
+   "color": "plaza.v0.S#color",
+   "shadow": "plaza.v0.S#shadow",
+   "emissive": "plaza.v0.S#emissive"
+  },
+  "plaza.v0.E": {
+   "kind": "plaza",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 3,
+    "d": 3
+   },
+   "heightPx": 35.9,
+   "color": "plaza.v0.E#color",
+   "shadow": "plaza.v0.E#shadow",
+   "emissive": "plaza.v0.E#emissive"
+  },
+  "amusement.v0.S": {
+   "kind": "amusement",
+   "category": "building",
+   "variant": 0,
+   "front": "S",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "heightPx": 58.9,
+   "color": "amusement.v0.S#color",
+   "shadow": "amusement.v0.S#shadow",
+   "emissive": "amusement.v0.S#emissive"
+  },
+  "amusement.v0.E": {
+   "kind": "amusement",
+   "category": "building",
+   "variant": 0,
+   "front": "E",
+   "footprint": {
+    "w": 6,
+    "d": 5
+   },
+   "heightPx": 58.9,
+   "color": "amusement.v0.E#color",
+   "shadow": "amusement.v0.E#shadow",
+   "emissive": "amusement.v0.E#emissive"
   },
   "tree.broadleaf.0": {
    "kind": "tree",

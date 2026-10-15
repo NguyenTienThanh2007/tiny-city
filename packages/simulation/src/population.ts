@@ -1,4 +1,5 @@
 import { randomInteger } from './random.js';
+import { visitorCapacity } from './catalog.js';
 import { buildingCenter, containsPosition, NPC_LIMITS, RoadNavigator } from './navigation.js';
 import type { Building, Citizen, CitizenAttributes, CitizenMovement, DailySchedule, PopulationOptions, SimulationEvent, WorldState } from './types.js';
 
@@ -21,6 +22,17 @@ export function createDailyRoutine(home: string, work: string | null, offset: nu
     { startMinute: 1140 + offset, activity: 'home', targetBuildingId: home },
     { startMinute: 1380 + offset, activity: 'sleep', targetBuildingId: home },
   ] };
+}
+
+/** The workplace with a vacancy and the lowest filled share (exact integer comparison), ties by building ID. */
+function leastStaffed(jobs: readonly Building[], counts: ReadonlyMap<string, number>): Building | undefined {
+  let best: Building | undefined;
+  for (const b of jobs) {
+    const n = counts.get(b.id) ?? 0;
+    if (n >= b.capacity) continue;
+    if (!best || n * best.capacity < (counts.get(best.id) ?? 0) * b.capacity) best = b;
+  }
+  return best;
 }
 
 /** Pure city-side population reconciliation. Speculative edits never mutate live RNG/IDs. */
@@ -68,7 +80,13 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
   }
   const assign = (c: Citizen, isNew = false): Citizen => {
     let work = validJobs.get(c.id) ?? null;
-    if (!work) { const job = jobs.find(b => (jobCounts.get(b.id) ?? 0) < b.capacity); if (job) { work = job.id; reserve(jobCounts, work); } }
+    if (!work) {
+      // Phase 7: with a living society the city has many small employers, so a new hire joins the least-staffed
+      // workplace (lowest share of its jobs filled, ties by ID) instead of the first with a vacancy. Residents who
+      // already hold a job keep it; worlds without society keep the original rule exactly.
+      const job = world.society ? leastStaffed(jobs, jobCounts) : jobs.find(b => (jobCounts.get(b.id) ?? 0) < b.capacity);
+      if (job) { work = job.id; reserve(jobCounts, work); }
+    }
     const home = buildings.get(c.homeBuildingId)!;
     const old = previousCitizens.get(c.id) ?? c;
     const attrs = c.attributes ?? attributes();
@@ -93,8 +111,9 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
       const current = interior && containsPosition(interior, position) ? interior : undefined;
       // Stopped on a building's entrance leg: the resident is inside it only if that building is theirs to be in, and
       // then does what that building is for (never the activity of a destination it had not reached yet).
+      // Phase 7: a leisure visitor may be at any venue society sent them to, or a friend's home.
       const inside = current === undefined ? null : current.id === home.id ? 'home' : current.id === work ? 'work' :
-        providesLeisure(current) && movement.arrivalActivity === 'leisure' && movement.destinationBuildingId === current.id ? 'leisure' : null;
+        (providesLeisure(current) || world.society !== undefined) && movement.arrivalActivity === 'leisure' && movement.destinationBuildingId === current.id ? 'leisure' : null;
       if (current && inside) { position = buildingCenter(current); movement = insideMovement(current.id, world.revision, inside); }
       else movement = { ...movement, currentBuildingId: current?.id ?? null, destinationBuildingId: movement.destinationBuildingId !== null && buildings.has(movement.destinationBuildingId) ? movement.destinationBuildingId : null,
         route: [], nextWaypoint: 0, plannedRevision: -1, status: 'waiting', heading: { x: 0, y: 0 } };
@@ -124,7 +143,7 @@ export function reconcilePopulation(world: WorldState, previous?: WorldState): {
     const c=citizens[i]!,m=c.movement!,b=m.currentBuildingId===null?undefined:buildings.get(m.currentBuildingId);
     if(c.activity==='leisure'&&m.status==='inside'&&b) {
       const count=visitors.get(b.id)??0;
-      if(count>=b.capacity) citizens[i]={...c,activity:'idle',movement:{...m,status:'waiting',destinationBuildingId:null,arrivalActivity:'idle',plannedRevision:-1}};
+      if(count>=visitorCapacity(b)) citizens[i]={...c,activity:'idle',movement:{...m,status:'waiting',destinationBuildingId:null,arrivalActivity:'idle',plannedRevision:-1}};
       else visitors.set(b.id,count+1);
     }
   }

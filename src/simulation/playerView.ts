@@ -1,4 +1,4 @@
-import { getGameTime, PLAYER_BALANCE } from '@tiny-city/simulation';
+import { getGameTime, PLAYER_BALANCE, VENUES } from '@tiny-city/simulation';
 import type {
   Building, Citizen, LifeRejectionReason, PlayerActivityKind, PlayerCharacter, PlayerFailureReason, PlayerNeed, PlayerNeedLevel,
   PlayerSocialTopic, SimulationEvent, WorldState,
@@ -31,9 +31,10 @@ export const rejectionText: Record<LifeRejectionReason, string> = {
   'unreachable': 'No road connects you to that place.',
   'stranded': 'There is no road near you. Build a road, or move into a home.',
   'building-not-found': 'That place no longer exists.',
-  'not-leisure': 'Only parks, pools and the clubhouse can be visited.',
-  'no-venue': 'There is no park, pool or clubhouse yet. Build one in Build mode.',
+  'not-leisure': 'Only parks, pools, the clubhouse and entertainment venues can be visited.',
+  'no-venue': 'There is nowhere open to visit right now. Build a park or a venue in Build mode.',
   'venue-full': 'That place is full right now. Try again later.',
+  'venue-closed': 'That place is closed right now. Check its opening hours.',
   'citizen-not-found': 'That resident has left the city.',
   'citizen-unavailable': 'They are inside a home or workplace. Catch them on the street or at a park.',
   'too-tired': 'You are exhausted. Rest at home first.',
@@ -93,12 +94,15 @@ export function describePlayer(player: PlayerCharacter, world: WorldState): Play
   const target = a.citizenId ? citizen(a.citizenId)?.name ?? 'a resident' : building(a.buildingId)?.name ?? (a.tile ? `the street at ${a.tile.x}, ${a.tile.y}` : 'your destination');
   if (a.phase === 'travelling') {
     const tiles = remainingTiles(player);
-    const verb = a.kind === 'move' ? `Walking to ${target}` : a.kind === 'rest' || a.kind === 'eat' ? `Heading home to ${a.kind}` :
+    // Phase 7: eating out at a café or the night market.
+    const eatingOut = a.kind === 'eat' && a.buildingId !== null && a.buildingId !== player.homeBuildingId;
+    const verb = a.kind === 'move' ? `Walking to ${target}` : eatingOut ? `Walking to ${target} to eat` : a.kind === 'rest' || a.kind === 'eat' ? `Heading home to ${a.kind}` :
       a.kind === 'visit' ? `Walking to ${target}` : `Walking over to ${target}`;
     return { headline: verb, detail: m.status === 'travelling' ? `${tiles} tile${tiles === 1 ? '' : 's'} to go` : 'Finding a route…', phase: 'travelling', progress: null, location };
   }
   if (a.phase === 'performing') {
-    const verb = a.kind === 'greet' || a.kind === 'socialize' ? `${activityNames[a.kind]} with ${target}` : a.kind === 'visit' ? `Enjoying ${target}` : `${activityNames[a.kind]} at home`;
+    const out = a.kind === 'eat' && a.buildingId !== null && a.buildingId !== player.homeBuildingId;
+    const verb = a.kind === 'greet' || a.kind === 'socialize' ? `${activityNames[a.kind]} with ${target}` : a.kind === 'visit' ? `Enjoying ${target}` : out ? `Eating at ${target}` : `${activityNames[a.kind]} at home`;
     return { headline: verb, detail: `${Math.floor(a.elapsedMinutes)} of ${a.durationMinutes} min`, phase: 'performing', progress: a.durationMinutes ? a.elapsedMinutes / a.durationMinutes : null, location };
   }
   return { headline: inside ? location : 'Free to explore', detail: inside ? 'Choose an action, or click a road to walk.' : 'Click a road to walk, or a building or resident to interact.', phase: 'idle', progress: null, location };
@@ -176,5 +180,11 @@ export function needAdvice(need: PlayerNeed): string {
 export const ACTIVITY_MINUTES = Object.fromEntries(Object.entries(PLAYER_BALANCE.activities).map(([k, v]) => [k, v.minutes])) as Record<'rest' | 'eat' | 'visit' | 'greet' | 'socialize', number>;
 
 export function isLeisure(building: Building | undefined): boolean {
-  return !!building && (building.kind === 'park' || building.type === 'clubhouse');
+  // Phase 7: every entertainment venue is a place to visit too.
+  return !!building && (building.kind === 'park' || building.type === 'clubhouse' || (building.type !== undefined && VENUES[building.type] !== undefined));
+}
+/** Phase 7: the café and the night market serve meals. */
+export function servesMeals(building: Building | undefined): boolean {
+  const kind = building?.type !== undefined ? VENUES[building.type]?.kind : undefined;
+  return kind === 'dine' || kind === 'market';
 }

@@ -2,13 +2,14 @@ import { createClock, validateClock } from './clock.js';
 import type { ClockOptions } from './clock.js';
 import { createRandomState, validateRandomState } from './random.js';
 import { createBudget, validateBudget } from './budget.js';
-import { BUILDING_CATALOG, isBuildingType } from './catalog.js';
+import { BUILDING_CATALOG, isBuildingType, visitorCapacity } from './catalog.js';
 import { OccupancyGrid } from './grid.js';
 import { containsPosition, NPC_LIMITS } from './navigation.js';
 import { initializePopulation, providesJobs, providesLeisure } from './population.js';
 import { clonePlayer, validatePlayer } from './player.js';
 import { cloneEconomy, createEconomy, validateEconomy } from './economy.js';
 import { cloneTransport, createTransport, validateTransport } from './transport.js';
+import { cloneSociety, createSociety, isLeisureVenue, validateSociety } from './society.js';
 import type { CityPlan, CityPlanInput, Citizen, DailySchedule, EconomyOptions, PopulationOptions, Position, WorldState } from './types.js';
 
 const ACTIVITIES = new Set(['sleep', 'home', 'work', 'leisure', 'idle', 'travel']);
@@ -135,8 +136,10 @@ export function validateWorld(world: WorldState): void {
       assert(m.status === 'travelling' || m.route.length === 0 && m.nextWaypoint === 0, 'stationary citizen cannot retain a route');
       if (citizen.activity === 'leisure' && m.status === 'inside' && m.currentBuildingId !== null) {
         const id=m.currentBuildingId; visitorCounts.set(id,(visitorCounts.get(id)??0)+1);
-        assert(visitorCounts.get(id)! <= byId.get(id)!.capacity,'leisure capacity exceeded');
-        assert(providesLeisure(byId.get(id)!), 'invalid leisure destination role');
+        const venue = byId.get(id)!;
+        assert(visitorCounts.get(id)! <= visitorCapacity(venue),'leisure capacity exceeded');
+        // Phase 7: with society, residents also spend leisure time at entertainment venues and friends' homes.
+        assert(providesLeisure(venue) || world.society !== undefined && (isLeisureVenue(venue) || venue.kind === 'home'), 'invalid leisure destination role');
       }
       if (m.status === 'travelling') {
         let from = citizen.position;
@@ -156,6 +159,7 @@ export function validateWorld(world: WorldState): void {
   validatePlayer(world, assert);
   validateEconomy(world, assert);
   validateTransport(world, assert);
+  validateSociety(world, assert);
 }
 
 /** Copies plain contract data so callers retain ownership of their input objects. */
@@ -172,6 +176,7 @@ export function cloneWorld(world: WorldState): WorldState {
     ...(world.player === undefined ? {} : { player: clonePlayer(world.player) }),
     ...(world.economy === undefined ? {} : { economy: cloneEconomy(world.economy) }),
     ...(world.transport === undefined ? {} : { transport: cloneTransport(world.transport) }),
+    ...(world.society === undefined ? {} : { society: cloneSociety(world.society) }),
     plan: { id: world.plan.id, name: world.plan.name, width: world.plan.width, height: world.plan.height,
       roads: world.plan.roads.map((tile) => ({ x: tile.x, y: tile.y })),
       blockedTiles: world.plan.blockedTiles.map((tile) => ({ x: tile.x, y: tile.y })),
@@ -218,6 +223,8 @@ export function createWorld(options: {
   readonly economy?: EconomyOptions;
   /** Phase 6: enables transportation (no vehicles until residents travel). */
   readonly transport?: boolean;
+  /** Phase 7: enables the living society (personalities now, relationships and outings as residents live). */
+  readonly society?: boolean;
 }): WorldState {
   const world: WorldState = {
     schemaVersion: 2,
@@ -231,7 +238,8 @@ export function createWorld(options: {
   validateWorld(world);
   const populated = options.population === undefined ? world : initializePopulation(world, options.population).state;
   const economic = options.economy === undefined ? populated : { ...populated, economy: createEconomy(populated, options.economy) };
-  const initialized = options.transport ? { ...economic, transport: createTransport(economic) } : economic;
+  const transported = options.transport ? { ...economic, transport: createTransport(economic) } : economic;
+  const initialized = options.society ? { ...transported, society: createSociety(transported) } : transported;
   validateWorld(initialized);
   return freeze(cloneWorld(initialized));
 }

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Simulation } from '@tiny-city/simulation';
-import type { CityCommand, CitySnapshot, EconomyCommand, LifeCommand, PopulationOptions, SimulationEvent, SimulationResult, TransportCommand, WorldState } from '@tiny-city/simulation';
+import type { CityCommand, CitySnapshot, EconomyCommand, LifeCommand, PopulationOptions, SimulationEvent, SimulationResult, SocietyCommand, TransportCommand, WorldState } from '@tiny-city/simulation';
 import type { CityState } from '../types';
 import { createCityWorld } from './cityAdapter';
 
@@ -11,15 +11,19 @@ type EventListener = (events: readonly SimulationEvent[], state: WorldState) => 
 /** Frequent per-tick bookkeeping that should not, on its own, force a React render of the whole HUD. */
 const ROUTINE_EVENTS = new Set<SimulationEvent['type']>(['clock.ticked', 'citizen.moved',
   // Phase 6: trips start and end every few ticks at rush hour; the HUD refresh cadence covers them.
-  'transport.trip-started', 'transport.trip-completed', 'transport.boarded', 'transport.alighted']);
+  'transport.trip-started', 'transport.trip-completed', 'transport.boarded', 'transport.alighted',
+  // Phase 7: outings are planned, start and end all evening; the feed and HUD refresh cadence cover them.
+  'society.outing-planned', 'society.outing-arrived', 'society.outing-ended', 'society.turned-away']);
 const CONSEQUENCE_EVENTS = new Set<SimulationEvent['type']>(['transport.trip-cancelled']);
 /**
  * Phase 5: older saves start their economy when loaded (from the next full day, so nothing is billed retroactively).
  * Phase 6: every city has transportation; older saves start with no vehicles (they appear as residents travel).
+ * Phase 7: every city has a living society; older saves give residents personalities now and replay nothing.
  */
 function withEconomy(simulation: Simulation): Simulation {
   simulation.enableEconomy();
   simulation.enableTransport();
+  simulation.enableSociety();
   return simulation;
 }
 /** HUD refresh cadence while only routine movement happens. Pixi reads live state every frame regardless. */
@@ -101,6 +105,12 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
     publish(result);
     return result;
   }, [simulation, publish]);
+  /** Phase 7 event scheduling applies immediately (not city history). */
+  const executeSociety = useCallback((command: SocietyCommand) => {
+    const result = simulation.executeSociety(command);
+    publish(result);
+    return result;
+  }, [simulation, publish]);
   const canRestoreCity = useCallback((snapshot: CitySnapshot) => simulation.canRestoreCity(snapshot), [simulation]);
   const getNavigator = useCallback(() => simulation.getNavigator(), [simulation]);
   const restoreCity = useCallback((snapshot: CitySnapshot) => publish(simulation.restoreCity(snapshot)), [simulation, publish]);
@@ -136,5 +146,5 @@ export function useCitySimulation(city: CityState, restoredWorld?: WorldState) {
   const getBuildingOccupancy = useCallback((id: string) => simulation.getBuildingOccupancy(id), [simulation]);
   const enablePopulation = useCallback((options: PopulationOptions = {}) => publish(simulation.enablePopulation(options)), [simulation, publish]);
   return { world, lastEvent, advance, execute, executeBatch, restoreCity, getCitySnapshot, togglePause, resume, step, getSnapshot,
-    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity, executeTransport };
+    enablePopulation, speed, setSpeed, subscribe, getCitizen, getBuildingOccupancy, executeLife, getNavigator, executeEconomy, canRestoreCity, executeTransport, executeSociety };
 }

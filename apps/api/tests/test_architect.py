@@ -53,7 +53,8 @@ def test_bilingual_provider_and_real_ts_planner(language,prompt):
         assert proposal['intent']['language']==language
         assert proposal['estimatedCost']<=1000
         assert provider.calls[0][0]==prompt
-        assert set(provider.calls[0][1]['catalog'])=={'villa','duplex','townhouse','apartment','park','clubhouse','pool','mall','office'}
+        assert set(provider.calls[0][1]['catalog'])=={'villa','duplex','townhouse','apartment','park','clubhouse','pool','mall','office',
+                                                   'cafe','shops','market','cinema','nightclub','stage','plaza','amusement'}
         assert response.headers['x-request-id']==result['requestId']
     assert data==before
 

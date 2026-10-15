@@ -49,6 +49,7 @@ export interface CityState {
 const buildingTints: Record<BuildingType, number> = {
   villa: 0xe9d3a3, duplex: 0xe7cda0, townhouse: 0xd9b886, apartment: 0x9db9bb,
   park: 0x74a979, clubhouse: 0xe7a66d, pool: 0x63b9c5, mall: 0x9fb7ba, office: 0x91aabd,
+  cafe: 0xe9b27a, shops: 0xd9a48f, market: 0xe8925f, cinema: 0xb98a9e, nightclub: 0x7f6f9c, stage: 0xd8d2c4, plaza: 0xd9cbb0, amusement: 0xe07d6a,
 };
 
 export const BUILDINGS: Record<BuildingKind, BuildingSpec> = Object.fromEntries(

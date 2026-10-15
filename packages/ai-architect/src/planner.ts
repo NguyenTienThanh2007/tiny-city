@@ -45,7 +45,7 @@ export function decodeIntent(value: unknown): ArchitectIntent {
     (value.moveTargets !== undefined && !(Array.isArray(value.moveTargets) && value.moveTargets.length <= 16 && value.moveTargets.every(m => record(m) &&
       Object.keys(m).every(k => ['target','near','position'].includes(k)) && validSelector(m.target) && ['existing','park','road','center'].includes(String(m.near)) && (m.position === null || point(m.position))))) ||
     (value.preserveRoads !== undefined && typeof value.preserveRoads !== 'boolean') ||
-    (value.preserveTypes !== undefined && !(Array.isArray(value.preserveTypes) && value.preserveTypes.length <= 9 && value.preserveTypes.every(isBuildingType))) ||
+    (value.preserveTypes !== undefined && !(Array.isArray(value.preserveTypes) && value.preserveTypes.length <= 17 && value.preserveTypes.every(isBuildingType))) ||
     typeof value.summary !== 'string' || value.summary.length > 512 || !['en','vi'].includes(String(value.language)) ||
     !['compact','coastal','mixed'].includes(String(value.style)) || !['existing','park','road','center'].includes(String(value.near)) ||
     typeof value.connectRoads !== 'boolean' || !(value.budgetLimit === null || integer(value.budgetLimit)) ||

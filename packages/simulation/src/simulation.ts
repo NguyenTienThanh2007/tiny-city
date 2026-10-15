@@ -1,5 +1,5 @@
 import { advanceClock, getGameTime, stepClock } from './clock.js';
-import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, EconomyCommand, EconomyCommandResult, EconomyOptions, EconomyRejectionReason, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, TransportCommand, TransportCommandResult, WorldCommand, WorldState } from './types.js';
+import type { BuildingOccupancy, CityCommand, CityCommandResult, CityPlan, CitySnapshot, ClockState, Citizen, EconomyCommand, EconomyCommandResult, EconomyOptions, EconomyRejectionReason, LifeCommand, LifeCommandResult, PlayerCharacter, PopulationOptions, SimulationEvent, SimulationResult, SocietyCommand, SocietyCommandResult, TransportCommand, TransportCommandResult, WorldCommand, WorldState } from './types.js';
 import { cloneWorld, freeze, isPositionInPlan, validateSchedule, validateWorld } from './world.js';
 import { applyCityCommand, applyCityCommandBatch, copyCityCommand } from './cityCommands.js';
 import { compareTiles, OccupancyGrid } from './grid.js';
@@ -13,6 +13,8 @@ import { createEconomy, isValidPolicy, recordVisit, settleEconomyDay } from './e
 import { applyTransportCommand, createTransport, reconcileTransport, TripPlanner } from './transport.js';
 import { advanceTransport } from './transportStep.js';
 import { TransportNetwork } from './transportGraph.js';
+import { applySocietyCommand, createSociety, reconcileSociety } from './society.js';
+import { lifeOverride, stepSocietyAfter, stepSocietyBefore } from './societyStep.js';
 
 function copyCommand(command: WorldCommand): WorldCommand {
   switch (command.type) {
@@ -34,7 +36,7 @@ function copyCommand(command: WorldCommand): WorldCommand {
  * transport are checked as plain walkers here; transport reconciliation decides what happens to their trips.
  */
 function withoutPlayer(world: WorldState): WorldState {
-  const { player: _player, transport: _transport, ...rest } = world;
+  const { player: _player, transport: _transport, society: _society, ...rest } = world;
   return rest;
 }
 const asWalkers = (citizens: readonly Citizen[]): Citizen[] => citizens.map((c) => c.movement?.status === 'vehicle' ? { ...c, movement: { ...c.movement, status: 'waiting' } } : c);
@@ -66,8 +68,10 @@ export class Simulation {
 
   enablePopulation(options: PopulationOptions = {}): SimulationResult {
     const change = initializePopulation(this.state, options);
-    if(change.state!==this.state) { validateWorld(change.state); this.state = freeze(cloneWorld(change.state)); }
-    return freeze({ state: this.state, events: change.events, steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    // Phase 7: residents who just moved in get their social profiles.
+    const social = reconcileSociety(change.state, this.state);
+    if(social.state!==this.state) { validateWorld(social.state); this.state = freeze(cloneWorld(social.state)); }
+    return freeze({ state: this.state, events: [...change.events, ...social.events], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
   /**
@@ -94,6 +98,29 @@ export class Simulation {
     validateWorld(next);
     this.state = freeze(cloneWorld(next));
     return freeze({ state: this.state, events: [{ type: 'transport.enabled', tick: this.state.clock.tick }], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /**
+   * Phase 7: starts the living society. Residents get their personalities now; relationships, outings and events
+   * only happen from here on (nothing is replayed for time that has passed). Idempotent.
+   */
+  enableSociety(): SimulationResult {
+    if (this.state.society) return freeze({ state: this.state, events: [], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+    const next = { ...this.state, society: createSociety(this.state) };
+    validateWorld(next);
+    this.state = freeze(cloneWorld(next));
+    return freeze({ state: this.state, events: [{ type: 'society.enabled', tick: this.state.clock.tick }], steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
+  }
+
+  /** Event scheduling and cancelling apply immediately (not city history). */
+  executeSociety(command: SocietyCommand): SocietyCommandResult {
+    const change = applySocietyCommand(this.state, command);
+    if (change.reason === null && change.state !== this.state) {
+      validateWorld(change.state);
+      this.state = freeze(cloneWorld(change.state));
+    }
+    return freeze({ state: this.state, events: change.events, steps: 0, applied: change.reason === null, reason: change.reason, eventId: change.eventId,
+      alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
   /** The vehicle network for the current roads and routing snapshot (rebuilt when either changes). */
@@ -225,9 +252,11 @@ export class Simulation {
       next = life.state;
       const transport = reconcileTransport(next, this.state);
       next = transport.state;
+      const society = reconcileSociety(next, this.state);
+      next = society.state;
       validateWorld(next);
       this.state = freeze(cloneWorld(next));
-      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events, ...life.events, ...transport.events],
+      return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...population.events, ...life.events, ...transport.events, ...society.events],
         steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
     }
     // Validate the city before reconciling the player's references into it.
@@ -236,9 +265,11 @@ export class Simulation {
     next = life.state;
     const transport = reconcileTransport(next, this.state);
     next = transport.state;
+    const society = reconcileSociety(next, this.state);
+    next = society.state;
     validateWorld(next);
     this.state = freeze(cloneWorld(next));
-    return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...life.events, ...transport.events],
+    return freeze({ state: this.state, events: [{ type: 'city.restored', tick: this.state.clock.tick, revision: this.state.revision }, ...life.events, ...transport.events, ...society.events],
       steps: 0, alpha: this.state.clock.accumulatedMs / this.state.clock.fixedStepMs });
   }
 
@@ -371,11 +402,18 @@ export class Simulation {
     }
     this.commands = [];
     const lifeEvents = events.length;
+    // Phase 7: society first (calendar, events, decisions), so a new outing takes effect this tick.
+    const social = this.state.society && this.state.population;
+    if (social) {
+      const before = stepSocietyBefore(this.state, this.getNavigator());
+      events.push(...before.events);
+      this.state = freeze(before.state);
+    }
     // Phase 6: residents leaving a building may drive or take the bus (decided during Life, applied by transport).
     const network = this.state.transport && this.state.population ? this.getTransportNetwork() : null;
     const planner = network ? new TripPlanner(this.state, network) : undefined;
     let citizens: readonly Citizen[] = this.state.population ? (() => {
-      const life=advanceDailyLife(this.state,this.getNavigator(),time.minuteOfDay,planner);
+      const life=advanceDailyLife(this.state,this.getNavigator(),time.minuteOfDay,planner,social ? lifeOverride(this.state) : undefined);
       events.push(...life.events); return life.state.citizens;
     })() : this.state.citizens.map((citizen) => {
       const entry = scheduledEntry(citizen, time.minuteOfDay);
@@ -415,5 +453,11 @@ export class Simulation {
       }
     }
     this.state = freeze({ ...this.state, clock, citizens, ...(economy ? { economy } : {}) });
+    if (social) {
+      // Arrivals (and their charges), endings, needs and the time residents spend together.
+      const after = stepSocietyAfter(this.state, this.getNavigator());
+      events.push(...after.events);
+      this.state = freeze(after.state);
+    }
   }
 }

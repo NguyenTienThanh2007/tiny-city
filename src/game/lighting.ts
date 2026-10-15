@@ -1,3 +1,5 @@
+import { VENUES } from '@tiny-city/simulation';
+import type { BuildingType } from '@tiny-city/simulation';
 /**
  * Time-of-day lighting from the authoritative minute of day. Applied as cheap per-container tints in Pixi
  * (no full-screen overlay or filter), with an unlit layer for windows and streetlights.
@@ -69,6 +71,15 @@ export function windowsOn(type: string | undefined, id: string, minuteOfDay: num
   // Closing fades over 20 minutes so storefronts never snap off.
   if (type === 'mall' || type === 'office') return m >= 12 * 60 ? 1 - 0.82 * ramp(21 * 60 + 40, 22 * 60) : m < 6 * 60 ? 0.18 : 1;
   if (type === 'clubhouse') return m >= 12 * 60 ? 1 - 0.75 * ramp(23 * 60 + 35, 23 * 60 + 55) : m < 6 * 60 ? 0.25 : 1;
+  // Phase 7 venues light up for their opening hours (the night market and the music club after dark, the cinema
+  // until the last screening ends); the concert stage's towers are lit in the evening.
+  const venue = type === 'stage' ? { open: 18 * 60, close: 23 * 60 + 30 } : type ? VENUES[type as BuildingType] : undefined;
+  if (venue && type !== 'park' && type !== 'pool') {
+    const t = venue.close > 1440 && m < 12 * 60 ? m + 1440 : m;
+    const fade = (from: number, to: number) => Math.max(0, Math.min(1, (t - from) / (to - from)));
+    if (t >= venue.open - 20 && t <= venue.close) return Math.max(0.12, Math.min(fade(venue.open - 20, venue.open), 1 - fade(venue.close - 20, venue.close)));
+    return 0.12;
+  }
   // Each home picks its own bedtime between 23:00 and 01:30 and wakes between 05:30 and 06:30.
   const bed = 23 * 60 + r * 150, wake = 5.5 * 60 + r * 60;
   const dim = (at: number) => 1 - ramp(at - 20, at) * 0.85;
