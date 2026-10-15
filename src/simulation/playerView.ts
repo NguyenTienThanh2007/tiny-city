@@ -94,12 +94,15 @@ export function describePlayer(player: PlayerCharacter, world: WorldState): Play
   const target = a.citizenId ? citizen(a.citizenId)?.name ?? 'a resident' : building(a.buildingId)?.name ?? (a.tile ? `the street at ${a.tile.x}, ${a.tile.y}` : 'your destination');
   if (a.phase === 'travelling') {
     const tiles = remainingTiles(player);
-    const verb = a.kind === 'move' ? `Walking to ${target}` : a.kind === 'rest' || a.kind === 'eat' ? `Heading home to ${a.kind}` :
+    // Phase 7: eating out at a café or the night market.
+    const eatingOut = a.kind === 'eat' && a.buildingId !== null && a.buildingId !== player.homeBuildingId;
+    const verb = a.kind === 'move' ? `Walking to ${target}` : eatingOut ? `Walking to ${target} to eat` : a.kind === 'rest' || a.kind === 'eat' ? `Heading home to ${a.kind}` :
       a.kind === 'visit' ? `Walking to ${target}` : `Walking over to ${target}`;
     return { headline: verb, detail: m.status === 'travelling' ? `${tiles} tile${tiles === 1 ? '' : 's'} to go` : 'Finding a route…', phase: 'travelling', progress: null, location };
   }
   if (a.phase === 'performing') {
-    const verb = a.kind === 'greet' || a.kind === 'socialize' ? `${activityNames[a.kind]} with ${target}` : a.kind === 'visit' ? `Enjoying ${target}` : `${activityNames[a.kind]} at home`;
+    const out = a.kind === 'eat' && a.buildingId !== null && a.buildingId !== player.homeBuildingId;
+    const verb = a.kind === 'greet' || a.kind === 'socialize' ? `${activityNames[a.kind]} with ${target}` : a.kind === 'visit' ? `Enjoying ${target}` : out ? `Eating at ${target}` : `${activityNames[a.kind]} at home`;
     return { headline: verb, detail: `${Math.floor(a.elapsedMinutes)} of ${a.durationMinutes} min`, phase: 'performing', progress: a.durationMinutes ? a.elapsedMinutes / a.durationMinutes : null, location };
   }
   return { headline: inside ? location : 'Free to explore', detail: inside ? 'Choose an action, or click a road to walk.' : 'Click a road to walk, or a building or resident to interact.', phase: 'idle', progress: null, location };
