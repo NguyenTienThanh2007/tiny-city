@@ -5,7 +5,7 @@
 // then run live at 1× to the moment and paused. Every figure on screen is a real resident doing what the simulation
 // says; every number is read from the simulation.
 import { chromium } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createWorld, Simulation } from '@tiny-city/simulation';
 import { cityAt, coralBayNights, LINE_STOPS, toCityPlan } from './p7_city.mjs';
 
@@ -101,7 +101,8 @@ async function scene(name, minute, act, viewport) {
   await context.close();
 }
 
-const evidence = {};
+// Partial runs (--only=…) update their own entries and keep the rest.
+const evidence = existsSync(`${out}/evidence.json`) ? JSON.parse(readFileSync(`${out}/evidence.json`, 'utf8')) : {};
 // 01 · A café after work (Monday): residents eat on the terrace, friends at one table.
 await scene('01', want('01') ? busiest('Corner Café', 17 * 60 + 10, 20 * 60) : 0, async (page, state) => {
   const cafe = building(state, 'Corner Café');
@@ -109,8 +110,8 @@ await scene('01', want('01') ? busiest('Corner Café', 17 * 60 + 10, 20 * 60) : 
   evidence.cafe = present(state, cafe.id);
   await shot(page, '01-cafe-social-gathering');
 });
-// 02 · The shopping street on Saturday afternoon.
-await scene('02', want('02') ? busiest('Harbour Arcade', 5 * DAY + 12 * 60, 5 * DAY + 17 * 60) : 0, async (page, state) => {
+// 02 · The shopping street on Saturday morning (its busiest time).
+await scene('02', want('02') ? busiest('Harbour Arcade', 5 * DAY + 9 * 60, 5 * DAY + 13 * 60) : 0, async (page, state) => {
   const shops = building(state, 'Harbour Arcade');
   await look(page, centre(shops).x, centre(shops).y, 5);
   evidence.shops = present(state, shops.id);
@@ -130,8 +131,8 @@ await scene('04', want('04') ? busiest('Lantern Night Market', 5 * DAY + 20 * 60
   evidence.market = present(state, market.id);
   await shot(page, '04-night-market');
 });
-// 05 · The cinema: its inspector during an evening screening (visitors are indoors) with the marquee at dusk.
-await scene('05', 5 * DAY + 19 * 60 + 40, async (page, state) => {
+// 05 · The cinema on Friday night: its inspector during the screening (visitors are indoors) and the lit marquee.
+await scene('05', want('05') ? busiest('Bayside Cinema', 4 * DAY + 18 * 60, 4 * DAY + 23 * 60) : 0, async (page, state) => {
   const cinema = building(state, 'Bayside Cinema');
   await look(page, centre(cinema).x, centre(cinema).y, 4);
   await live(page);
