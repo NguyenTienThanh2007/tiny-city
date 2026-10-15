@@ -40,6 +40,8 @@ export const rejectionText: Record<LifeRejectionReason, string> = {
   'too-tired': 'You are exhausted. Rest at home first.',
   'nothing-to-cancel': 'You are not doing anything right now.',
   'not-placed': 'Choose a home first — your life starts when you move in.',
+  'step-too-long': 'That step is too far to walk at once.',
+  'not-walkable': 'You can only walk on streets, sidewalks and squares.',
 };
 
 export const failureText: Record<PlayerFailureReason, string> = {

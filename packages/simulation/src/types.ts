@@ -728,12 +728,17 @@ export type LifeCommand =
   | { readonly type: 'player.move-in'; readonly homeBuildingId: string }
   | { readonly type: 'player.move-to'; readonly destination: PlayerDestination }
   | { readonly type: 'player.start-activity'; readonly activity: PlayerActionKind; readonly buildingId?: string; readonly citizenId?: string }
-  | { readonly type: 'player.cancel' };
+  | { readonly type: 'player.cancel' }
+  /**
+   * Phase 8A: direct (third-person) control. Moves the player straight to `position`, a short step validated against
+   * the same walkable ground as routes (roads, or the building they are leaving). Applied at the current tick.
+   */
+  | { readonly type: 'player.walk'; readonly position: Position };
 
 export type LifeRejectionReason = 'invalid-command' | 'player-exists' | 'player-not-found' | 'invalid-name' |
   'invalid-appearance' | 'home-not-found' | 'not-a-home' | 'home-full' | 'already-home' | 'no-home' |
   'invalid-destination' | 'unreachable' | 'stranded' | 'building-not-found' | 'not-leisure' | 'no-venue' | 'venue-full' | 'venue-closed' |
-  'citizen-not-found' | 'citizen-unavailable' | 'too-tired' | 'nothing-to-cancel' | 'not-placed';
+  'citizen-not-found' | 'citizen-unavailable' | 'too-tired' | 'nothing-to-cancel' | 'not-placed' | 'step-too-long' | 'not-walkable';
 
 export type PlayerSocialTopic = 'introduction' | 'commute' | 'leisure' | 'neighbourhood' | 'rest';
 

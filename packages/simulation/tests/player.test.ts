@@ -507,3 +507,89 @@ describe('integration, persistence and determinism', () => {
     for (const edit of bad) expect(() => mutate(world, edit)).toThrow(/Invalid world snapshot/);
   });
 });
+
+describe('direct control (Phase 8A player.walk)', () => {
+  const walk = (x: number, y: number): LifeCommand => ({ type: 'player.walk', position: { x, y } });
+  /** The life street plus a spur tile north of the road at (10, 4), for corner checks. */
+  function spurSim() {
+    const base = lifeWorld();
+    const sim = new Simulation({ ...base, plan: { ...base.plan, roads: [...base.plan.roads, { x: 10, y: 4 }] } });
+    expect(sim.executeLife(create()).reason).toBeNull();
+    return sim;
+  }
+
+  it('steps out of the home through its door onto an access tile, then walks along the street', () => {
+    const sim = withPlayer();
+    expect(sim.executeLife(walk(6.5, 5.5)).reason).toBe('not-walkable');
+    const out = sim.executeLife(walk(2.5, 5.3));
+    expect(out.reason).toBeNull();
+    expect(sim.getPlayer()).toMatchObject({ position: { x: 2.5, y: 5.3 }, movement: { status: 'standing', currentBuildingId: null, route: [] } });
+    for (let x = 3.3; x <= 8.5; x += 0.8) expect(sim.executeLife(walk(Math.round(x * 10) / 10, 5.5)).reason).toBeNull();
+    expect(sim.getPlayer()!.position).toEqual({ x: 8.1, y: 5.5 });
+    valid(sim);
+  });
+
+  it('refuses long steps, open ground, other buildings and positions outside the map', () => {
+    const sim = withPlayer();
+    sim.executeLife(walk(3.5, 5.5));
+    const before = sim.getState();
+    expect(sim.executeLife(walk(4.8, 5.5)).reason).toBe('step-too-long');
+    expect(sim.executeLife(walk(3.5, 4.6)).reason).toBe('not-walkable');
+    expect(sim.executeLife(walk(4.0, 6.2)).reason).toBe('not-walkable');
+    expect(sim.executeLife(walk(Number.NaN, 5.5)).reason).toBe('invalid-destination');
+    expect(sim.executeLife(walk(-0.1, 5.5)).reason).toBe('invalid-destination');
+    expect(sim.getState()).toBe(before);
+  });
+
+  it('never cuts a corner through a tile that is not walkable', () => {
+    const sim = spurSim();
+    sim.executeLife(walk(3.5, 5.1));
+    for (const x of [4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 9.9]) expect(sim.executeLife(walk(x, 5.1)).reason).toBeNull();
+    // Crossing y = 5 at x = 9.95 enters the open tile (9, 4); crossing exactly through the corner (10, 5) also counts it.
+    expect(sim.executeLife(walk(10.1, 4.85)).reason).toBe('not-walkable');
+    expect(sim.executeLife(walk(10.1, 4.9)).reason).toBe('not-walkable');
+    expect(sim.executeLife(walk(10.1, 4.95)).reason).toBeNull();
+    expect(sim.getPlayer()!.position).toEqual({ x: 10.1, y: 4.95 });
+    valid(sim);
+  });
+
+  it('replaces a route or an activity, like choosing a new destination', () => {
+    const sim = withPlayer();
+    expect(sim.executeLife({ type: 'player.start-activity', activity: 'visit', buildingId: 'park' }).reason).toBeNull();
+    sim.step(); sim.step();
+    const p = sim.getPlayer()!;
+    expect(p.movement.status).toBe('travelling');
+    // Wherever the walk has got to (still on the home's entrance leg, or on the street), direct control takes over.
+    const result = sim.executeLife(walk(p.position.x, p.position.y - 0.05));
+    expect(result.reason).toBeNull();
+    expect(result.events).toContainEqual(expect.objectContaining({ type: 'player.activity-ended', outcome: expect.objectContaining({ kind: 'visit', result: 'cancelled' }) }));
+    expect(sim.getPlayer()).toMatchObject({ activity: { kind: 'idle' }, movement: { status: 'standing', route: [] } });
+    // Click-to-move still works from wherever direct control left the character.
+    expect(sim.executeLife({ type: 'player.move-to', destination: { type: 'building', buildingId: 'park' } }).reason).toBeNull();
+    valid(sim);
+  });
+
+  it('tires the character by the distance walked, and saves and replays exactly', () => {
+    const run = () => {
+      const sim = withPlayer();
+      sim.executeLife(walk(2.5, 5.5));
+      for (let i = 1; i <= 10; i += 1) { sim.executeLife(walk(2.5 + i * 0.9, 5.5)); sim.step(); }
+      return sim;
+    };
+    const a = run(), b = run();
+    expect(serializeWorld(a.getState())).toBe(serializeWorld(b.getState()));
+    const reference = withPlayer();
+    for (let i = 0; i < 10; i += 1) reference.step();
+    const spent = reference.getPlayer()!.needs.energy - a.getPlayer()!.needs.energy;
+    expect(spent).toBeCloseTo(9 * PLAYER_BALANCE.walkingEnergy / PLAYER_BALANCE.walkingSpeed, 3);
+    const loaded = deserializeWorld(serializeWorld(a.getState()));
+    expect(loaded.player).toEqual(a.getPlayer());
+  });
+
+  it('needs a placed character', () => {
+    const sim = new Simulation(lifeWorld());
+    expect(sim.executeLife(walk(2.5, 5.5)).reason).toBe('player-not-found');
+    sim.executeLife({ type: 'player.create', name: 'Mai', appearance: look });
+    expect(sim.executeLife(walk(2.5, 5.5)).reason).toBe('not-placed');
+  });
+});

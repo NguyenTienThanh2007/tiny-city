@@ -91,6 +91,11 @@ function randomStep(world: WorldState, r: ReturnType<typeof prng>): Step {
   if (lifeRoll < 0.6) return { kind: 'life', command: { type: 'player.move-to', destination: { type: 'tile', position: road() } } };
   if (lifeRoll < 0.75) return { kind: 'life', command: { type: 'player.start-activity', activity: r.pick(['rest', 'eat', 'visit'] as const) } };
   if (lifeRoll < 0.85 && world.citizens.length) return { kind: 'life', command: { type: 'player.start-activity', activity: 'greet', citizenId: r.pick(world.citizens).id } };
+  // Phase 8A direct control: short steps in any direction (some leave the walkable ground or are too long, and must be refused).
+  if (lifeRoll < 0.93) {
+    const p = world.player.position;
+    return { kind: 'life', command: { type: 'player.walk', position: { x: p.x + (r.next() - 0.5) * 2.4, y: p.y + (r.next() - 0.5) * 2.4 } } };
+  }
   return { kind: 'life', command: { type: 'player.cancel' } };
 }
 
