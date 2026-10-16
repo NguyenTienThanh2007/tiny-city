@@ -62,7 +62,7 @@ export class ResidentActors {
       if (!d) {
         let model = this.pool.get(r.id);
         if (model) this.pool.delete(r.id);
-        else { if (builds >= this.limits.builds) continue; model = buildCharacter(citizenLook(r.id), { contact: false }); builds += 1; }
+        else { if (builds >= this.limits.builds) continue; model = buildCharacter(citizenLook(r.id), { contact: false, detail: 0.4 }); builds += 1; }
         let seed = 0; for (let i = 0; i < r.id.length; i += 1) seed = (seed * 31 + r.id.charCodeAt(i)) >>> 0;
         const offset = r.mode === 'walking' || r.mode === 'waiting' ? walkerOffset(r.heading) : { x: 0, y: 0 };
         d = { model, x: r.x + offset.x, y: r.y + offset.y, yaw: Math.atan2(r.heading.x, r.heading.y || 1), stride: 0, speed: 0, seed, entity: r, offset };

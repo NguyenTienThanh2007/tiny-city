@@ -10,3 +10,5 @@ export function applyPose(skeleton: Skeleton, name: 'walk' | 'idle' | 'wave' | '
 export const LAYERS: Readonly<Record<string, { readonly tint: string | null; readonly front?: boolean;
   readonly variants: Readonly<Record<string, (skeleton: Skeleton, side: 'armR' | 'armL' | 'legR' | 'legL') => Mesh[]>> }>>;
 export const CHARACTER_HEIGHT: number;
+/** Tessellation scale for real-time builds (1 = exactly as baked). */
+export function setRigDetail(detail: number): void;

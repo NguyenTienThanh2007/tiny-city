@@ -208,7 +208,7 @@ export function buildAsset(id: string): BuiltAsset | null {
     if (role !== 'foliage' && meshBox.max.y > 0.16 && meshBox.max.y - meshBox.min.y > 0.08 && footprint > 0.03) solid.union(meshBox);
     triangles += geometry.attributes.position!.count / 3;
     const size = meshBox.getSize(new THREE.Vector3());
-    if (Math.max(size.x, size.z) > 0.16 || size.y > 0.2) {
+    if (Math.max(size.x, size.z) > 0.24 || size.y > 0.3) {
       const g = geometry.clone();
       for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'color') g.deleteAttribute(name);
       if (!g.attributes.color) {

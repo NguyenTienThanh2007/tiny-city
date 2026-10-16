@@ -79,7 +79,9 @@ export interface ImmersiveDebug {
     /** Mean CPU time of the engine's frame callback (simulation advance, controller, camera, scene update, render submit). */
     cpuMs: number;
     /** Estimated GPU memory of the static scene: vertex buffers plus textures (mipmapped RGBA8), in bytes. */
-    gpuBytes: number };
+    gpuBytes: number;
+    /** Mean per-frame CPU split: the simulation advance, scene/actor synchronisation, and render submission. */
+    simMs: number; syncMs: number; renderMs: number };
   /** Drawn residents (simulation IDs) with how they appear, and drawn vehicles. */
   residents: { id: string; name: string; mode: string; action: string; x: number; y: number }[];
   vehicles: { id: string; kind: string; passengers: number; x: number; y: number }[];
@@ -96,6 +98,8 @@ export interface ImmersiveDebug {
   character: readonly string[];
   input: MoveInput;
 }
+
+const mean = (list: readonly number[]) => Math.round(list.reduce((a, b) => a + b, 0) / Math.max(1, list.length) * 100) / 100;
 
 /** Vertex buffers (instance matrices included) and textures of a scene, counted once each. */
 function estimateGpuBytes(scene: THREE.Scene): number {
@@ -171,6 +175,7 @@ export class ImmersiveEngine {
   private drag: { id: number; x: number; y: number; travel: number; at: number } | null = null;
   private frameTimes: number[] = [];
   private frameCosts: number[] = [];
+  private split = { sim: [] as number[], sync: [] as number[], render: [] as number[] };
   private gpuBytes = 0;
   private hudAt = 0;
   private initMs = 0;
@@ -395,7 +400,9 @@ export class ImmersiveEngine {
     this.last = now;
     const dt = elapsedMs / 1000;
     // One clock: the simulation advances from this loop while the Character View is open.
+    const simStart = performance.now();
     this.host.advance(elapsedMs);
+    const simMs = performance.now() - simStart;
     let world = this.host.getWorld();
     const player = world.player;
     if (!player) { this.host.onFailure('spawn', 'no-character'); return; }
@@ -477,7 +484,11 @@ export class ImmersiveEngine {
     // The camera never comes closer than ORBIT.nearest; this only guards against looking out through the head.
     this.character.root.visible = this.orbit.actual > 0.12;
     this.neighbourhood.update(getGameTime(world.clock).minuteOfDay, c.position, this.camera.position);
+    const renderStart = performance.now();
     this.renderer.render(this.neighbourhood.scene, this.camera);
+    const renderMs = performance.now() - renderStart;
+    const push = (list: number[], v: number) => { list.push(v); if (list.length > 120) list.shift(); };
+    push(this.split.sim, simMs); push(this.split.render, renderMs); push(this.split.sync, Math.max(0, renderStart - frameStart - simMs));
 
     const cost = performance.now() - frameStart;
     this.frameTimes.push(elapsedMs);
@@ -513,7 +524,8 @@ export class ImmersiveEngine {
       commits: this.commits, rejected: this.rejected, pointerLocked: document.pointerLockElement === this.canvas,
       stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
         fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs,
-        cpuMs: Math.round(this.frameCosts.reduce((a, b) => a + b, 0) / Math.max(1, this.frameCosts.length) * 100) / 100, gpuBytes: this.gpuBytes },
+        cpuMs: Math.round(this.frameCosts.reduce((a, b) => a + b, 0) / Math.max(1, this.frameCosts.length) * 100) / 100, gpuBytes: this.gpuBytes,
+        simMs: mean(this.split.sim), syncMs: mean(this.split.sync), renderMs: mean(this.split.render) },
       residents: this.residents?.list() ?? [],
       vehicles: (this.vehicles?.list() ?? []).map((v) => { const sim = world.transport?.vehicles.find((x) => x.id === v.id); return { ...v, kind: sim?.kind ?? 'unknown', passengers: sim?.passengers.length ?? 0 }; }),
       sky: { phase: this.neighbourhood.skyNow?.lighting.phase ?? 'day', sun: this.neighbourhood.skyNow?.lighting.sun ?? 1, glow: this.neighbourhood.skyNow?.glow ?? 0,

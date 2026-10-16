@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { applyPose, createSkeleton, LAYERS, CHARACTER_HEIGHT, type Skeleton } from '../../../scripts/art/characters/rig.js';
+import { applyPose, createSkeleton, LAYERS, CHARACTER_HEIGHT, setRigDetail, type Skeleton } from '../../../scripts/art/characters/rig.js';
 import { characterLayers, type CharacterLook } from '../../game/art/characterLook';
 
 /**
@@ -43,7 +43,9 @@ export interface CharacterModel {
 const limbBone = (layer: string, side: 'L' | 'R' | '-') => side === '-' ? undefined
   : layer === 'legs' || layer === 'shoes' ? (side === 'L' ? 'legL' : 'legR') : (side === 'L' ? 'armL' : 'armR');
 
-export function buildCharacter(look: CharacterLook, options: { contact?: boolean } = {}): CharacterModel {
+export function buildCharacter(look: CharacterLook, options: { contact?: boolean; detail?: number } = {}): CharacterModel {
+  // Residents are built with coarser tessellation (about a sixth of the triangles); the player at full detail.
+  setRigDetail(options.detail ?? 1);
   const skeleton = createSkeleton();
   const names: string[] = [];
   const refs = characterLayers(look, 'front');
@@ -61,6 +63,7 @@ export function buildCharacter(look: CharacterLook, options: { contact?: boolean
     }
     names.push(key);
   }
+  setRigDetail(1);
   // Mirror the rig's bone groups as skinning bones, in the rest pose.
   applyPose(skeleton, 'idle', 0);
   skeleton.root.updateMatrixWorld(true);
@@ -82,6 +85,8 @@ export function buildCharacter(look: CharacterLook, options: { contact?: boolean
     parts.push(g);
     mesh.geometry.dispose();
   }
+  // The layer meshes now live in the skinned geometry; detach them so posing only walks the ~16 bone groups.
+  for (const { mesh } of colored) mesh.removeFromParent();
   const geometry = mergeGeometries(parts, false)!;
   for (const p of parts) p.dispose();
   const skinned = new THREE.SkinnedMesh(geometry, SKIN_MATERIAL);
