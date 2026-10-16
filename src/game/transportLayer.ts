@@ -6,7 +6,7 @@ import { currentArt, type ArtLibrary } from './art/artLibrary';
 import { congestionLevel, networkFor } from '../simulation/transportView';
 import type { LocalBounds } from './npcLayer';
 import {
-  directionFrame, vehicleColor, frontOf, LINE_COLORS, lengthOf, nextSample, sampleFront, vehiclePose,
+  directionFrame, stopSide, vehicleColor, frontOf, LINE_COLORS, lengthOf, nextSample, sampleFront, vehiclePose,
   type VehiclePose, type VehicleSample,
 } from './vehicleMotion';
 
@@ -39,14 +39,7 @@ interface StopSprite { root: Container; shadow: Sprite; light: Sprite; key: stri
 const SHADOW_ALPHA = 0.3;
 const CONGESTION_COLORS: readonly [number, number][] = [[0, 0x62c797], [TRANSPORT.congestion.levels.slow, 0xf2c14e], [TRANSPORT.congestion.levels.heavy, 0xe8873f], [TRANSPORT.congestion.levels.jammed, 0xd2484a]];
 
-/** Which curb of a road tile a stop shelter stands on: a side without a road neighbour (back curbs first). */
-export function stopSide(tile: Position, roads: ReadonlySet<string>): 'N' | 'E' | 'S' | 'W' {
-  const free = (dx: number, dy: number) => !roads.has(`${tile.x + dx},${tile.y + dy}`);
-  if (free(0, -1)) return 'N';
-  if (free(-1, 0)) return 'W';
-  if (free(0, 1)) return 'S';
-  return free(1, 0) ? 'E' : 'N';
-}
+export { stopSide };
 
 export class TransportLayer {
   private readonly vehicles = new Map<string, VehicleSprite>();

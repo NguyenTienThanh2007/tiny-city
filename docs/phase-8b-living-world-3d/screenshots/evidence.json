@@ -1,0 +1,782 @@
+{
+  "15a-city-view": {
+    "note": "City View (Life View) at the same moment as 15b: the character at Wave Villa on the same street."
+  },
+  "01-luxury-street-player": {
+    "note": "Wave Villa (Luxury Minimalist) and its street at the evening rush, the player at the door.",
+    "tick": 1040,
+    "minute": 1040,
+    "player": {
+      "x": 35.5,
+      "y": 30.13
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 2,
+      "walking": 57,
+      "at-venue": 1
+    },
+    "vehiclesDrawn": 69,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 19,
+      "onLot": 34,
+      "riding": 0,
+      "driving": 106
+    },
+    "target": null,
+    "fps": 60,
+    "drawCalls": 664,
+    "levels": {
+      "near": 22,
+      "mid": 40,
+      "far": 0
+    }
+  },
+  "15b-character-view": {
+    "note": "Character View at the same moment and place as 15a.",
+    "tick": 1040,
+    "minute": 1040,
+    "player": {
+      "x": 35.5,
+      "y": 30.13
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 2,
+      "walking": 57,
+      "at-venue": 1
+    },
+    "vehiclesDrawn": 69,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 19,
+      "onLot": 34,
+      "riding": 0,
+      "driving": 106
+    },
+    "target": null,
+    "fps": 60,
+    "drawCalls": 521,
+    "levels": {
+      "near": 22,
+      "mid": 40,
+      "far": 0
+    }
+  },
+  "02-npcs-on-sidewalks": {
+    "note": "Residents on the high-street sidewalks after work, each drawn on the curb side of its heading at its simulated position.",
+    "tick": 1110,
+    "minute": 1110,
+    "player": {
+      "x": 42.5,
+      "y": 20.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 1,
+      "at-venue": 19,
+      "walking": 39,
+      "waiting": 1
+    },
+    "vehiclesDrawn": 56,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 53,
+      "onLot": 11,
+      "riding": 1,
+      "driving": 84
+    },
+    "target": {
+      "kind": "resident",
+      "id": "npc-197",
+      "label": "Nam 197",
+      "distance": 0.4686149805544152
+    },
+    "fps": 60,
+    "drawCalls": 633,
+    "levels": {
+      "near": 23,
+      "mid": 39,
+      "far": 0
+    }
+  },
+  "03-traffic-at-intersection": {
+    "note": "Rush-hour traffic at the junction (38, 30): real cars queuing and turning, kept to their lanes.",
+    "tick": 1057,
+    "minute": 1057,
+    "player": {
+      "x": 37.5,
+      "y": 30.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 2,
+      "at-venue": 6,
+      "walking": 52
+    },
+    "vehiclesDrawn": 72,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 23,
+      "onLot": 18,
+      "riding": 0,
+      "driving": 107
+    },
+    "target": {
+      "kind": "building",
+      "id": "cb-clubhouse-46",
+      "label": "Bay Club",
+      "distance": 0.7071067811865476
+    },
+    "fps": 60,
+    "drawCalls": 584,
+    "levels": {
+      "near": 20,
+      "mid": 42,
+      "far": 0
+    }
+  },
+  "05-npc-at-bus-stop": {
+    "note": "A resident waiting at Stop 4 beside the shelter (Phase 6 trip phase “waiting”) as the Line 1 bus pulls in.",
+    "tick": 1066,
+    "minute": 1066,
+    "player": {
+      "x": 57.5,
+      "y": 30.5
+    },
+    "residentsDrawn": 31,
+    "residentModes": {
+      "at-stop": 5,
+      "at-venue": 6,
+      "walking": 20
+    },
+    "vehiclesDrawn": 40,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 33,
+      "onLot": 18,
+      "riding": 0,
+      "driving": 107
+    },
+    "target": null,
+    "fps": 60,
+    "drawCalls": 580,
+    "levels": {
+      "near": 5,
+      "mid": 34,
+      "far": 23
+    }
+  },
+  "04-bus-on-route": {
+    "note": "The Line 1 bus at Stop 4 moments later: the resident who was waiting (05) has boarded, so they are counted on the bus and no longer drawn at the shelter.",
+    "tick": 1072,
+    "minute": 1072,
+    "player": {
+      "x": 57.5,
+      "y": 30.5
+    },
+    "residentsDrawn": 38,
+    "residentModes": {
+      "at-stop": 4,
+      "at-venue": 9,
+      "walking": 25
+    },
+    "vehiclesDrawn": 38,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 34,
+      "onLot": 15,
+      "riding": 1,
+      "driving": 102
+    },
+    "target": null,
+    "fps": 60,
+    "drawCalls": 574,
+    "levels": {
+      "near": 5,
+      "mid": 34,
+      "far": 23
+    }
+  },
+  "06-commercial-district": {
+    "note": "The commercial district: Corner Café, Harbour Arcade, Bayside Cinema and Blue Note Club, with real shoppers and traffic.",
+    "tick": 1110,
+    "minute": 1110,
+    "player": {
+      "x": 42.5,
+      "y": 20.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 1,
+      "at-venue": 19,
+      "walking": 39,
+      "waiting": 1
+    },
+    "vehiclesDrawn": 56,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 53,
+      "onLot": 11,
+      "riding": 1,
+      "driving": 84
+    },
+    "target": {
+      "kind": "resident",
+      "id": "npc-197",
+      "label": "Nam 197",
+      "distance": 0.4686149805544152
+    },
+    "fps": 60,
+    "drawCalls": 647,
+    "levels": {
+      "near": 23,
+      "mid": 39,
+      "far": 0
+    }
+  },
+  "07-cafe-activity": {
+    "note": "Dune Café terrace at 19:45: 38 residents drawn at venues, each a real visitor whose outing is “present”.",
+    "tick": 1185,
+    "minute": 1185,
+    "player": {
+      "x": 53.5,
+      "y": 20.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-venue": 38,
+      "walking": 22
+    },
+    "vehiclesDrawn": 42,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 64,
+      "onLot": 11,
+      "riding": 1,
+      "driving": 44
+    },
+    "target": {
+      "kind": "building",
+      "id": "cn-plaza-9",
+      "label": "Fountain Plaza",
+      "distance": 0.5
+    },
+    "fps": 60,
+    "drawCalls": 485,
+    "levels": {
+      "near": 14,
+      "mid": 29,
+      "far": 19
+    }
+  },
+  "10-inspect-citizen": {
+    "note": "Inspecting Minh 203 (resident): the live record from the simulation.",
+    "tick": 1117,
+    "minute": 1117,
+    "player": {
+      "x": 42.5,
+      "y": 20.49
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "walking": 37,
+      "at-venue": 23
+    },
+    "vehiclesDrawn": 56,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 47,
+      "onLot": 16,
+      "riding": 1,
+      "driving": 83
+    },
+    "target": {
+      "kind": "resident",
+      "id": "npc-118",
+      "label": "Nam 118",
+      "distance": 0.36807936487662407
+    },
+    "fps": 60,
+    "drawCalls": 729,
+    "levels": {
+      "near": 23,
+      "mid": 39,
+      "far": 0
+    }
+  },
+  "11-inspect-building": {
+    "note": "Inspecting Harbour Arcade: opening hours, shoppers inside, staff, prices and yesterday’s accounts, all from the simulation.",
+    "tick": 1188,
+    "minute": 1188,
+    "player": {
+      "x": 44.5,
+      "y": 20.53
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-venue": 36,
+      "walking": 24
+    },
+    "vehiclesDrawn": 47,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 66,
+      "onLot": 9,
+      "riding": 1,
+      "driving": 45
+    },
+    "target": {
+      "kind": "building",
+      "id": "cn-shops-7",
+      "label": "Harbour Arcade",
+      "distance": 0.47443387773675383
+    },
+    "fps": 60,
+    "drawCalls": 618,
+    "levels": {
+      "near": 22,
+      "mid": 40,
+      "far": 0
+    }
+  },
+  "14-large-city-distance": {
+    "note": "The city from above the character: near buildings in full detail, mid ones simplified, far ones as massing.",
+    "tick": 1110,
+    "minute": 1110,
+    "player": {
+      "x": 42.5,
+      "y": 20.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 1,
+      "at-venue": 19,
+      "walking": 39,
+      "waiting": 1
+    },
+    "vehiclesDrawn": 56,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 53,
+      "onLot": 11,
+      "riding": 1,
+      "driving": 84
+    },
+    "target": {
+      "kind": "resident",
+      "id": "npc-197",
+      "label": "Nam 197",
+      "distance": 0.4686149805544152
+    },
+    "fps": 60,
+    "drawCalls": 525,
+    "levels": {
+      "near": 23,
+      "mid": 39,
+      "far": 0
+    }
+  },
+  "09-concert": {
+    "note": "Friday concert at Bayside Stage: the cheering audience is exactly the event’s real attendees.",
+    "tick": 7000,
+    "minute": 1240,
+    "player": {
+      "x": 43.5,
+      "y": 30.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-venue": 49,
+      "walking": 11
+    },
+    "vehiclesDrawn": 23,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 111,
+      "onLot": 14,
+      "riding": 1,
+      "driving": 22
+    },
+    "target": null,
+    "fps": 60,
+    "drawCalls": 662,
+    "levels": {
+      "near": 18,
+      "mid": 44,
+      "far": 0
+    }
+  },
+  "08-night-market": {
+    "note": "Lantern Night Market during its Friday festival: real visitors under the lanterns.",
+    "tick": 7000,
+    "minute": 1240,
+    "player": {
+      "x": 48.5,
+      "y": 20.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-venue": 46,
+      "walking": 14
+    },
+    "vehiclesDrawn": 21,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 111,
+      "onLot": 14,
+      "riding": 1,
+      "driving": 22
+    },
+    "target": {
+      "kind": "building",
+      "id": "cn-cafe-8",
+      "label": "Garden Bistro",
+      "distance": 0.5
+    },
+    "fps": 60,
+    "drawCalls": 576,
+    "levels": {
+      "near": 17,
+      "mid": 37,
+      "far": 8
+    }
+  },
+  "12-sunset": {
+    "note": "Sunset on the residential street (18:25): low western sun, warm sky, windows and venue lights coming on.",
+    "tick": 1105,
+    "minute": 1105,
+    "player": {
+      "x": 37.5,
+      "y": 30.5
+    },
+    "residentsDrawn": 60,
+    "residentModes": {
+      "at-stop": 2,
+      "at-venue": 15,
+      "walking": 43
+    },
+    "vehiclesDrawn": 63,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 0
+      }
+    ],
+    "hidden": {
+      "inside": 50,
+      "onLot": 9,
+      "riding": 1,
+      "driving": 92
+    },
+    "target": {
+      "kind": "resident",
+      "id": "npc-109",
+      "label": "Linh 109",
+      "distance": 0.4118252056394809
+    },
+    "fps": 60,
+    "drawCalls": 658,
+    "levels": {
+      "near": 20,
+      "mid": 42,
+      "far": 0
+    }
+  },
+  "13-night-lights": {
+    "note": "Night (21:50): street lamps and their pools, lit windows, vehicle lamps, under a moonlit sky.",
+    "tick": 1310,
+    "minute": 1310,
+    "player": {
+      "x": 37.5,
+      "y": 30.5
+    },
+    "residentsDrawn": 46,
+    "residentModes": {
+      "at-venue": 32,
+      "walking": 14
+    },
+    "vehiclesDrawn": 34,
+    "busesDrawn": [
+      {
+        "id": "line-1-bus-1",
+        "passengers": 1
+      },
+      {
+        "id": "line-1-bus-2",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-3",
+        "passengers": 0
+      },
+      {
+        "id": "line-1-bus-4",
+        "passengers": 1
+      }
+    ],
+    "hidden": {
+      "inside": 147,
+      "onLot": 7,
+      "riding": 2,
+      "driving": 32
+    },
+    "target": {
+      "kind": "building",
+      "id": "cb-clubhouse-46",
+      "label": "Bay Club",
+      "distance": 0.7071067811865476
+    },
+    "fps": 60,
+    "drawCalls": 355,
+    "levels": {
+      "near": 20,
+      "mid": 42,
+      "far": 0
+    }
+  },
+  "motion-npc-walking": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session."
+  },
+  "motion-cars-turning": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session."
+  },
+  "motion-bus-movement": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session."
+  },
+  "motion-districts-walk": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session."
+  },
+  "motion-day-night": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session."
+  },
+  "motion-mode-switching": {
+    "note": "Browser recording (WebM, 854×480 from a 1280×720 viewport) of the real session."
+  }
+}

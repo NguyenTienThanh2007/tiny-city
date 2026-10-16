@@ -106,3 +106,12 @@ export function vehicleColor(vehicle: Vehicle): number {
   return vehicle.kind === 'car' ? CAR_COLORS[vehicle.color % CAR_COLORS.length]! : LINE_COLORS[vehicle.color % LINE_COLORS.length]!;
 }
 export const lineColorCss = (index: number) => `#${LINE_COLORS[index % LINE_COLORS.length]!.toString(16).padStart(6, '0')}`;
+/** Which curb of a road tile a stop shelter stands on: a side without a road neighbour (back curbs first). */
+export function stopSide(tile: Position, roads: ReadonlySet<string>): 'N' | 'E' | 'S' | 'W' {
+  const free = (dx: number, dy: number) => !roads.has(`${tile.x + dx},${tile.y + dy}`);
+  if (free(0, -1)) return 'N';
+  if (free(-1, 0)) return 'W';
+  if (free(0, 1)) return 'S';
+  return free(1, 0) ? 'E' : 'N';
+}
+

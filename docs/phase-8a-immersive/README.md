@@ -1,5 +1,7 @@
 # Phase 8A: Immersive Life Mode (third-person 3D vertical slice)
 
+> **Since Phase 8B**, `three/neighbourhood.ts`, `residents.ts` and `vehicles.ts` described here have been replaced by the whole-city `cityScene.ts` and `actors.ts` on a pure scene model. See [docs/phase-8b-living-world-3d/](../phase-8b-living-world-3d/README.md). These 8A docs describe the slice as it was delivered.
+
 Press **Enter World** and your Life Mode character steps out of their front door into a real-time 3D version of your neighbourhood. Walk and run with W A S D and Shift, look around with the mouse or trackpad, and press **Return to City** to go back to the isometric City View exactly where you stopped. There is one city, one character and one simulation: the 3D view reads the same live world and moves the character only through validated simulation commands.
 
 | Doc | What it covers |
@@ -35,5 +37,5 @@ Without a character, without a home yet, or with no street beside the character,
 - `node scripts/p8a_city.mjs` validates the "Palm Terrace" showcase (all six Luxury Minimalist villa models, duplexes, townhouses, a park, a pool, an office).
 - `node scripts/capture_p8a.mjs [url] [outDir]` produces the screenshots and motion videos with real keyboard and mouse input.
 - `node scripts/p8a_benchmark.mjs [url] [--quick] [--software]` measures entering, idle, walking/running, orbiting, switching and a long session.
-- `e2e/immersive-third-person.spec.ts`: browser acceptance (named to run in gameplay shard 1).
+- `e2e/phase-8a-immersive.spec.ts`: browser acceptance.
 - `window.__tinyCityImmersive`: the live renderer state (player, authority, camera, stats) for tests and benchmarks.

@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BuildingDesign } from '@tiny-city/ai-architect';
-import type { Position, RoadNavigator, WorldState } from '@tiny-city/simulation';
+import type { BuildingOccupancy, LifeCommand, LifeRejectionReason, Position, RoadNavigator, WorldState } from '@tiny-city/simulation';
 import { describePlayer } from '../simulation/playerView';
+import { SIMULATION_SPEEDS, type SimulationSpeed } from '../simulation/useCitySimulation';
 import { Icon } from '../ui/Icon';
 import { NeedBars } from '../ui/LifePanel';
 import { ORBIT } from './orbitCamera';
 import { readSettings, writeSettings, type ImmersiveSettings } from './settings';
 import { ImmersiveEngine, type HudState } from './three/engine';
-import type { Quality } from './three/neighbourhood';
+import { InspectPanel } from './InspectPanel';
+import type { InteractionTarget } from './world/sceneModel';
+import type { Quality } from './three/cityScene';
 
 /**
  * Phase 8A Character View: a full-screen Three.js view of the real neighbourhood around the player's character,
@@ -26,12 +29,18 @@ export interface ImmersiveViewProps {
   readonly day: string;
   readonly clock: string;
   readonly paused: boolean;
+  /** The one clock's speed (1/2/4×), shared with the City View dock. */
+  readonly speed: SimulationSpeed;
+  readonly onSpeed: (speed: SimulationSpeed) => void;
   readonly saved: boolean;
   readonly reducedMotion: boolean;
   readonly onTogglePause: () => void;
   readonly onSave: () => void;
   readonly onExit: (yaw: number | null) => void;
   readonly onFailure: (message: string) => void;
+  /** Phase 8B: live building occupancy, and existing Life Mode commands for the inspector's actions. */
+  readonly getBuildingOccupancy: (buildingId: string) => BuildingOccupancy;
+  readonly onLife: (command: LifeCommand) => { applied: boolean; reason: LifeRejectionReason | null };
 }
 
 const MOTION_TEXT: Record<HudState['motion'], string> = {
@@ -47,6 +56,9 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
   const [hud, setHud] = useState<HudState | null>(null);
   const [quality, setQuality] = useState<Quality | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [inspecting, setInspecting] = useState<InteractionTarget | null>(null);
+  const inspectingRef = useRef<InteractionTarget | null>(null);
+  inspectingRef.current = inspecting;
   const [settings, setSettings] = useState<ImmersiveSettings>(() => readSettings());
   const exitingRef = useRef(false);
 
@@ -66,7 +78,9 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
       onReady: ({ quality: q }) => { setProgress(null); setQuality(q); engine?.canvas.focus({ preventScroll: true }); },
       onFailure: (_kind, message) => { if (!exitingRef.current) { exitingRef.current = true; propsRef.current.onFailure(message); } },
       onHud: setHud,
-      onEscape: () => setMenuOpen((open) => !open),
+      // Esc closes the inspector first, then toggles the menu.
+      onEscape: () => { if (inspectingRef.current) setInspecting(null); else setMenuOpen((open) => !open); },
+      onInteract: (target) => { setInspecting(target); if (document.pointerLockElement) document.exitPointerLock?.(); },
       onTogglePause: () => propsRef.current.onTogglePause(),
     }, readSettings());
     engineRef.current = engine;
@@ -109,6 +123,10 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
           <span>{props.day} · {props.clock}</span>
           <button type="button" className="icon-button" aria-label={props.paused ? 'Resume' : 'Pause'} title={props.paused ? 'Resume (Space)' : 'Pause (Space)'} onClick={props.onTogglePause}>
             <Icon name={props.paused ? 'play' : 'pause'} size={15} /></button>
+          <div className="immersive-speed" role="group" aria-label="Simulation speed">
+            {SIMULATION_SPEEDS.map((value) => <button key={value} type="button" className={props.speed === value ? 'active' : ''} aria-pressed={props.speed === value}
+              aria-label={`Speed ${value}x`} title={`${value}× speed`} onClick={() => props.onSpeed(value)}>{value}×</button>)}
+          </div>
         </div>
         <div className="immersive-actions">
           <button type="button" className={`immersive-save ${props.saved ? 'is-saved' : ''}`} onClick={props.onSave}><Icon name="save" size={15} />{props.saved ? 'Saved' : 'Save'}</button>
@@ -118,11 +136,16 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
       </header>
       <div className="immersive-card immersive-needs"><NeedBars player={player} /></div>
       {props.paused && <div className="immersive-paused" role="status">Time is paused · press Space or Resume to move</div>}
+      {hud?.target && !inspecting && <div className="immersive-prompt" role="status" aria-label="Interaction">
+        <kbd>E</kbd><span>{hud.target.kind === 'resident' ? `Talk to ${hud.target.label}` : `Inspect ${hud.target.label}`}</span></div>}
+      {inspecting && <InspectPanel target={inspecting} world={props.world} nav={props.getNavigator()} occupancy={props.getBuildingOccupancy}
+        onLife={(command) => { const result = props.onLife(command); if (result.applied) setInspecting(null); return result; }} onClose={() => setInspecting(null)} />}
       <div className="immersive-hints" aria-hidden="true">
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
         <span><kbd>Shift</kbd> run</span>
         <span><Icon name="mouse" size={13} /> {hud?.pointerLocked ? 'look · Esc frees the mouse' : 'drag or click to look'}</span>
         <span>scroll zoom</span>
+        <span><kbd>E</kbd> interact</span>
         <span><kbd>Esc</kbd> menu</span>
       </div>
     </>}

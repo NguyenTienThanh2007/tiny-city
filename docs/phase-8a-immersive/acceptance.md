@@ -34,7 +34,7 @@
 
 | Scenario | Where it is checked |
 |---|---|
-| A Enter World · B spawn · C WASD · D running · E follow · F orbit · G pitch and zoom limits · H villa collision · I valid ground · J return · K re-enter | `e2e/immersive-third-person.spec.ts`, test 1 |
+| A Enter World · B spawn · C WASD · D running · E follow · F orbit · G pitch and zoom limits · H villa collision · I valid ground · J return · K re-enter | `e2e/phase-8a-immersive.spec.ts`, test 1 |
 | L save and reload · M legacy save | test 2 |
 | N no character or no home (recovery) · M new city | test 3 |
 | O repeated switching without leaks (precise heap after GC, canvases, GPU stats) · P camera 4.6 · Q build tools · the City View clock resumes | test 4 |

@@ -218,3 +218,17 @@ Docs: `docs/phase-8a-immersive/`. A Three.js Character View over the same live w
 - [x] M5 Enter World / Return to City, spawn and recovery, authority bridge, save/load, nearby residents and vehicles
 - [x] M6 draw-call reduction, light preset, shader warm-up, leak fixes (per-step world clone, renderer retention)
 - [x] M7 unit + browser acceptance, screenshots and videos, benchmarks, docs, PR #25 (CI on the final commit)
+
+## Phase 8B full living world in 3D (branch `feature/p8b-living-world-3d`, from `origin/main` @ `96437da`)
+
+Docs: `docs/phase-8b-living-world-3d/`. The Character View becomes the whole living city: a pure world scene model
+(`src/immersive/world/sceneModel.ts`), an incrementally reconciled city scene kept between visits, real residents and
+vehicles drawn from live state, E-to-inspect through the existing view models, light from the game clock.
+
+- [x] M1 audit of 8A, scene model (stable IDs, static diff, actor modes, interaction targets) and its tests
+- [x] M2 whole-city scene: every building type, roads, stops, landscaping; near / mid / far levels; solid shelters; reconciliation after edits
+- [x] M3 real residents: `citizenLook` skinned characters, interpolation, sidewalks, stop slots, venue spots, hidden counts
+- [x] M4 real vehicles and buses: City View motion model, instancing per model and colour, passenger signs, riders hidden
+- [x] M5 social world: venue visitors and event attendees from real attendance; resident / building / stop inspection
+- [x] M6 day/night and lights from the clock, speed buttons, draw-call and triangle reductions, benchmarks at 19–995 residents
+- [x] M7 browser acceptance (3 e2e tests in shard 2), unit tests, 16 screenshots and 6 videos, docs, PR #26

@@ -25,9 +25,16 @@ function mesh(geometry, material, x = 0, y = 0, z = 0) {
   m.position.set(x, y, z);
   return m;
 }
-const capsule = (r, len, material, x = 0, y = 0, z = 0) => mesh(new THREE.CapsuleGeometry(r, len, 6, 14), material, x, y, z);
-const sphere = (r, material, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => { const m = mesh(new THREE.SphereGeometry(r, 22, 16), material, x, y, z); m.scale.set(sx, sy, sz); return m; };
-const rbox = (w, h, d, r, material, x = 0, y = 0, z = 0) => mesh(new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3)), material, x, y, z);
+/**
+ * Tessellation scale for real-time use (Phase 8B). 1 (the default, used by the bake) keeps every segment count exactly
+ * as baked; lower values build the same character with fewer triangles for distant residents in the 3D view.
+ */
+let DETAIL = 1;
+export function setRigDetail(detail) { DETAIL = detail; }
+const seg = (n, min = 3) => (DETAIL === 1 ? n : Math.max(min, Math.round(n * DETAIL)));
+const capsule = (r, len, material, x = 0, y = 0, z = 0) => mesh(new THREE.CapsuleGeometry(r, len, seg(6, 2), seg(14, 6)), material, x, y, z);
+const sphere = (r, material, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => { const m = mesh(new THREE.SphereGeometry(r, seg(22, 6), seg(16, 4)), material, x, y, z); m.scale.set(sx, sy, sz); return m; };
+const rbox = (w, h, d, r, material, x = 0, y = 0, z = 0) => mesh(new RoundedBoxGeometry(w, h, d, seg(3, 1), Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3)), material, x, y, z);
 
 // Skeleton dimensions (tiles).
 const HIP_Y = 0.3, THIGH = 0.15, SHIN = 0.14, SHOULDER_Y = 0.475, SHOULDER_X = 0.118, UPPER = 0.105, FORE = 0.1, HEAD_Y = 0.635, HEAD_R = 0.112;
@@ -152,7 +159,7 @@ export const LAYERS = {
     },
     dress: (s) => {
       const m = W();
-      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.165, 0.2, 20, 1), m);
+      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.165, 0.2, seg(20, 6), 1), m);
       skirt.position.set(0, -0.06, 0); skirt.scale.set(1, 1, 0.8);
       return attach(s.torso, rbox(0.19, 0.17, 0.13, 0.05, m, 0, 0.11, 0), skirt);
     },
@@ -196,25 +203,25 @@ export const LAYERS = {
   hairLong: { tint: 'hair', variants: { long: (s) => attach(s.head, rbox(0.21, 0.22, 0.07, 0.035, W(), 0, -0.07, -0.075)) } },
   cap: { tint: 'cap', variants: { base: (s) => {
     const m = W();
-    const crown = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R + 0.018, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), m);
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R + 0.018, seg(22, 6), seg(12, 3), 0, Math.PI * 2, 0, Math.PI / 2), m);
     crown.position.set(0, 0.012, 0);
     const brim = rbox(0.13, 0.012, 0.09, 0.005, m, 0, 0.012, HEAD_R + 0.02);
     return attach(s.head, crown, brim, sphere(0.012, m, 0, HEAD_R + 0.03, 0));
   } } },
   glasses: { tint: null, front: true, variants: { base: (s) => {
     const frame = mat(0x2f3437, 0.35); const z = HEAD_R * 0.98;
-    const ring = (x) => { const t = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0055, 8, 20), frame); t.position.set(x, 0.008, z); return t; };
+    const ring = (x) => { const t = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0055, seg(8, 3), seg(20, 6)), frame); t.position.set(x, 0.008, z); return t; };
     return attach(s.head, ring(-0.04), ring(0.04), rbox(0.03, 0.006, 0.006, 0.002, frame, 0, 0.012, z + 0.002));
   } } },
   sunhat: { tint: null, variants: { base: (s) => {
     const straw = mat(0xe8cf8f, 0.9), band = mat(0xc8714f, 0.7);
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.21, 0.014, 28), straw); brim.position.set(0, 0.05, 0);
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.08, 22), straw); crown.position.set(0, 0.095, 0);
-    const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(0.112, 0.113, 0.022, 22), band); ribbon.position.set(0, 0.068, 0);
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.21, 0.014, seg(28, 8)), straw); brim.position.set(0, 0.05, 0);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.08, seg(22, 6)), straw); crown.position.set(0, 0.095, 0);
+    const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(0.112, 0.113, 0.022, seg(22, 6)), band); ribbon.position.set(0, 0.068, 0);
     return attach(s.head, brim, crown, ribbon);
   } } },
   scarf: { tint: 'scarf', variants: { base: (s) => {
-    const m = W(); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.028, 10, 22), m);
+    const m = W(); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.028, seg(10, 3), seg(22, 6)), m);
     ring.rotation.x = Math.PI / 2; ring.position.set(0, 0.205, 0.005);
     return attach(s.torso, ring, rbox(0.04, 0.09, 0.022, 0.01, m, 0.035, 0.15, 0.085));
   } } },

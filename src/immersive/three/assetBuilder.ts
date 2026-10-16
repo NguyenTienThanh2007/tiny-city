@@ -30,6 +30,37 @@ export interface BuiltAsset {
   readonly solid: THREE.Box3 | null;
   readonly triangles: number;
   readonly buildMs: number;
+  /** Phase 8B mid level, built on first use: the whole model in one vertex-coloured geometry (+ its lit windows). */
+  lod?: { readonly body: THREE.BufferGeometry; readonly windows: THREE.BufferGeometry | null };
+}
+
+/** Shared materials of the mid level: one vertex-coloured body material and one window material that glows at night. */
+export const lodMaterials = {
+  body: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.82, metalness: 0.02 }),
+  windows: new THREE.MeshStandardMaterial({ color: 0x6f7f86, roughness: 0.25, metalness: 0.1, emissive: new THREE.Color(0xffd27a), emissiveIntensity: 0 }),
+};
+
+/**
+ * The mid level of a model: same shape, one material. Every part's colour (its vertex colours, or its material colour)
+ * goes into a colour attribute and detail textures are dropped, so a building beyond the near distance is one or two
+ * draw calls instead of about twenty.
+ */
+export function assetLod(asset: BuiltAsset): NonNullable<BuiltAsset['lod']> {
+  if (asset.lod) return asset.lod;
+  const body: THREE.BufferGeometry[] = [], windows: THREE.BufferGeometry[] = [];
+  for (const part of asset.parts) {
+    const g = part.geometry.clone();
+    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'color') g.deleteAttribute(name);
+    if (!g.attributes.color) {
+      const c = (part.material as THREE.MeshStandardMaterial).color ?? new THREE.Color(0xffffff), n = g.attributes.position!.count, data = new Float32Array(n * 3);
+      for (let i = 0; i < n; i += 1) data.set([c.r, c.g, c.b], i * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(data, 3));
+    }
+    (part.role === 'window' ? windows : body).push(g);
+  }
+  const merge = (list: THREE.BufferGeometry[]) => { if (!list.length) return null; const m = list.length === 1 ? list[0]! : mergeGeometries(list, false)!; for (const g of list) if (g !== m) g.dispose(); m.computeBoundingSphere(); return m; };
+  asset.lod = { body: merge(body)!, windows: merge(windows) };
+  return asset.lod;
 }
 
 let registry: Map<string, ArtAssetSource> | null = null;
@@ -152,6 +183,8 @@ export function buildAsset(id: string): BuiltAsset | null {
   const bounds = new THREE.Box3(), solid = new THREE.Box3();
   let triangles = 0;
   const meshBox = new THREE.Box3();
+  // Mid level: only the parts large enough to read beyond the near distance (walls, roofs, glazing, big trees).
+  const lodBody: THREE.BufferGeometry[] = [], lodWindows: THREE.BufferGeometry[] = [];
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || !mesh.visible) return;
@@ -174,6 +207,17 @@ export function buildAsset(id: string): BuiltAsset | null {
     const footprint = (meshBox.max.x - meshBox.min.x) * (meshBox.max.z - meshBox.min.z);
     if (role !== 'foliage' && meshBox.max.y > 0.16 && meshBox.max.y - meshBox.min.y > 0.08 && footprint > 0.03) solid.union(meshBox);
     triangles += geometry.attributes.position!.count / 3;
+    const size = meshBox.getSize(new THREE.Vector3());
+    if (Math.max(size.x, size.z) > 0.24 || size.y > 0.3) {
+      const g = geometry.clone();
+      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'color') g.deleteAttribute(name);
+      if (!g.attributes.color) {
+        const c = (material as THREE.MeshStandardMaterial).color ?? new THREE.Color(0xffffff), n = g.attributes.position!.count, data = new Float32Array(n * 3);
+        for (let i = 0; i < n; i += 1) data.set([c.r, c.g, c.b], i * 3);
+        g.setAttribute('color', new THREE.BufferAttribute(data, 3));
+      }
+      (role === 'window' ? lodWindows : lodBody).push(g);
+    }
     const key = `${role}:${material.uuid}`;
     const group = groups.get(key) ?? { material, role, geometries: [], cast: false };
     group.geometries.push(geometry);
@@ -190,14 +234,17 @@ export function buildAsset(id: string): BuiltAsset | null {
   }
   // Only the merged copies are kept; the build's own geometries are released now.
   root.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.geometry.dispose(); });
-  const built: BuiltAsset = { id, parts, bounds, solid: solid.isEmpty() ? null : solid, triangles, buildMs: performance.now() - started };
+  const mergeLod = (list: THREE.BufferGeometry[]) => { if (!list.length) return null; const m = list.length === 1 ? list[0]! : mergeGeometries(list, false)!; for (const g of list) if (g !== m) g.dispose(); m.computeBoundingSphere(); return m; };
+  const lodGeometry = mergeLod(lodBody);
+  const built: BuiltAsset = { id, parts, bounds, solid: solid.isEmpty() ? null : solid, triangles, buildMs: performance.now() - started,
+    ...(lodGeometry ? { lod: { body: lodGeometry, windows: mergeLod(lodWindows) } } : {}) };
   cache.set(id, built);
   return built;
 }
 
 /** Releases every cached model (GPU buffers are freed by the renderer's dispose on geometry). */
 export function disposeAssetCache(): void {
-  for (const built of cache.values()) for (const part of built.parts) part.geometry.dispose();
+  for (const built of cache.values()) { for (const part of built.parts) part.geometry.dispose(); built.lod?.body.dispose(); built.lod?.windows?.dispose(); }
   cache.clear();
 }
 export const cachedAssetCount = () => cache.size;

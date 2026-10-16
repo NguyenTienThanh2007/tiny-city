@@ -1676,8 +1676,9 @@ function App() {
     </main>
     {immersive && <Suspense fallback={<div className="immersive immersive-loading" role="status"><div className="immersive-loading-card"><strong>Entering the world</strong><span>Loading the 3D engine…</span></div></div>}>
       <ImmersiveView world={world} getWorld={getSnapshot} getNavigator={getNavigator} designs={buildingDesigns} advance={advanceSimulation} walk={immersiveWalk}
-        initialYaw={immersiveYawRef.current} day={`DAY ${gameDay}`} clock={gameClock} paused={world.clock.paused} saved={saved} reducedMotion={reducedMotion}
-        onTogglePause={() => { togglePause(); setSaved(false); }} onSave={save} onExit={leaveWorld} onFailure={immersiveFailure} />
+        initialYaw={immersiveYawRef.current} day={`DAY ${gameDay}`} clock={gameClock} paused={world.clock.paused} speed={speed} onSpeed={setSpeed} saved={saved} reducedMotion={reducedMotion}
+        onTogglePause={() => { togglePause(); setSaved(false); }} onSave={save} onExit={leaveWorld} onFailure={immersiveFailure}
+        getBuildingOccupancy={getBuildingOccupancy} onLife={(command) => { const result = runLife(command); return { applied: result.applied, reason: result.reason }; }} />
     </Suspense>}
     </>
   );

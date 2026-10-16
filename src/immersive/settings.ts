@@ -1,5 +1,5 @@
 import { clampSensitivity, ORBIT } from './orbitCamera';
-import type { Quality } from './three/neighbourhood';
+import type { Quality } from './three/cityScene';
 
 /** Per-viewer Character View preferences (browser storage; never part of the world or the save). */
 export interface ImmersiveSettings {
