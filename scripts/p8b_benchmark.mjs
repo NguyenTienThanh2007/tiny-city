@@ -2,7 +2,7 @@
 // Four cities (scripts/p8b_bench_cities.mjs: ~20, ~100, ~300 and ~1,000 residents) at 17:20, the evening rush, with
 // real traffic and buses. For each: entering (click → first playable frame, building the whole city), then the
 // renderer's own stats while idle, walking/running and orbiting with the clock running, then view-switch latency on
-// the kept scene and memory after repeated switching. Hardware Chromium by default; --software uses SwiftShader.
+// the kept scene and memory after repeated switching. `hydrateMs` is the whole city's build (every chunk) on entering. Hardware Chromium by default; --software uses SwiftShader.
 import { chromium } from '@playwright/test';
 import { benchCityAt } from './p8b_bench_cities.mjs';
 
@@ -42,7 +42,7 @@ async function sample(page, seconds, action) {
   const tail = rows.slice(Math.min(4, rows.length - 1));
   return { fps: avg(tail.map((r) => r.stats.fps)), fpsMin: Math.min(...tail.map((r) => r.stats.fps)), p95Ms: Math.max(...tail.map((r) => r.stats.p95Ms)),
     cpuMs: avg(tail.map((r) => r.stats.cpuMs)), simMs: avg(tail.map((r) => r.stats.simMs)), syncMs: avg(tail.map((r) => r.stats.syncMs)), renderMs: avg(tail.map((r) => r.stats.renderMs)),
-    drawCalls: Math.max(...tail.map((r) => r.stats.drawCalls)), triangles: Math.max(...tail.map((r) => r.stats.frameTriangles)),
+    drawCalls: Math.max(...tail.map((r) => r.stats.drawCalls)), meshes: Math.max(...tail.map((r) => r.stats.meshes)), triangles: Math.max(...tail.map((r) => r.stats.frameTriangles)),
     residents: Math.max(...tail.map((r) => r.residents.length)), vehicles: Math.max(...tail.map((r) => r.vehicles.length)),
     near: Math.max(...tail.map((r) => r.stats.nearBuildings)), mid: Math.max(...tail.map((r) => r.stats.midBuildings)), far: Math.max(...tail.map((r) => r.stats.farBuildings)) };
 }

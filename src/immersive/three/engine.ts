@@ -75,7 +75,7 @@ export interface ImmersiveDebug {
   commits: number;
   rejected: number;
   pointerLocked: boolean;
-  stats: CitySceneStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; fps: number; frameMs: number; p95Ms: number; initMs: number;
+  stats: CitySceneStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; /** Visible meshes (instanced meshes count once). */ meshes: number; fps: number; frameMs: number; p95Ms: number; initMs: number;
     /** Mean CPU time of the engine's frame callback (simulation advance, controller, camera, scene update, render submit). */
     cpuMs: number;
     /** Estimated GPU memory of the static scene: vertex buffers plus textures (mipmapped RGBA8), in bytes. */
@@ -515,6 +515,8 @@ export class ImmersiveEngine {
     const sorted = [...this.frameTimes].sort((a, b) => a - b);
     const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
     const info = this.renderer.info;
+    let meshes = 0;
+    this.neighbourhood.scene.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) meshes += 1; });
     const debug: ImmersiveDebug = {
       ready: true, quality: this.quality, renderer: this.rendererName,
       player: { x: this.controller.position.x, y: this.controller.position.y, yaw: this.controller.yaw, motion: motionState(this.controller), speed: Math.hypot(this.controller.velocity.x, this.controller.velocity.y),
@@ -522,7 +524,7 @@ export class ImmersiveEngine {
       authority: { x: world.player?.position.x ?? NaN, y: world.player?.position.y ?? NaN, status: world.player?.movement.status ?? 'none', tick: world.clock.tick },
       camera: { yaw: this.orbit.yaw, pitch: this.orbit.pitch, distance: this.orbit.distanceTarget, actual: this.orbit.actual, x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z },
       commits: this.commits, rejected: this.rejected, pointerLocked: document.pointerLockElement === this.canvas,
-      stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
+      stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures, meshes,
         fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs,
         cpuMs: Math.round(this.frameCosts.reduce((a, b) => a + b, 0) / Math.max(1, this.frameCosts.length) * 100) / 100, gpuBytes: this.gpuBytes,
         simMs: mean(this.split.sim), syncMs: mean(this.split.sync), renderMs: mean(this.split.render) },

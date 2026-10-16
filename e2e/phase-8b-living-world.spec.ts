@@ -22,6 +22,7 @@ type Debug = {
   hidden: { inside: number; onLot: number; riding: number; driving: number };
   entities: { buildings: string[]; stops: string[]; roads: number };
   target: { kind: string; id: string; label: string } | null;
+  camera: { yaw: number };
   reusedScene: boolean;
   sky: { phase: string; sun: number; glow: number; minute: number; lamps: number; windows: number };
   stats: { reconciles: number; lastSync: { added: number; removed: number } | null; buildings: number; fallback: string[] };
@@ -260,9 +261,15 @@ test('one world: switching views changes nothing, construction and demolition re
   expect(errors).toEqual([]);
 });
 
-test('time and light follow the game clock: sunset, then night with street and window lights', async ({ page }) => {
+test('time and light follow the game clock: a café inspected at sunset, then night with street and window lights', async ({ page }) => {
   test.setTimeout(process.env.CI ? 300_000 : 120_000);
-  const world = livingTown(18 * 60 + 40).getState();
+  // Linh walks (the simulation's own move-to) to Market Street in front of Corner Café, arriving before 18:40.
+  const sim = livingTown(17 * 60 + 40);
+  expect(sim.executeLife({ type: 'player.move-to', destination: { type: 'tile', position: { x: 11, y: 24 } } }).applied).toBe(true);
+  sim.step(60);
+  sim.pause();
+  const world = sim.getState();
+  expect(world.player!.position).toEqual({ x: 11.5, y: 24.5 });
   const errors = await openCity(page, livingSave(world));
   await enterWorld(page);
   // J. Golden hour at the saved minute (same clock as the City View).
@@ -270,6 +277,22 @@ test('time and light follow the game clock: sunset, then night with street and w
   expect(d.sky.minute).toBe(getGameTime(world.clock).minuteOfDay);
   expect(d.sky.phase).toBe('golden');
   const glow0 = d.sky.glow;
+  // I. A café: face its lot (south of the street) and inspect its live record; inspecting changes nothing.
+  await view(page).getByRole('button', { name: 'Resume' }).click();
+  const towardCafe = Math.cos(d.camera.yaw) >= 0 ? 'w' : 's';
+  await page.keyboard.down(towardCafe);
+  await expect.poll(async () => (await debug(page)).target?.id ?? null, { timeout: 30_000 }).toBe('cafe');
+  await page.keyboard.up(towardCafe);
+  await view(page).getByRole('button', { name: 'Pause' }).click();
+  await page.keyboard.press('e');
+  const cafe = page.getByRole('dialog', { name: 'Inspect Corner Café' });
+  await expect(cafe.getByRole('heading', { name: 'Corner Café' })).toBeVisible();
+  await expect(cafe).toContainText('Inside now');
+  await expect(cafe.getByRole('button', { name: 'Eat here' })).toBeVisible();
+  const before = serializeWorld((await savedWorld(page)).simulation as WorldState);
+  expect(serializeWorld((await savedWorld(page)).simulation as WorldState)).toBe(before);
+  await page.keyboard.press('Escape');
+  await expect(cafe).toHaveCount(0);
   // K. Run to night at 4×: the sky darkens, street lamps and windows light up.
   await view(page).getByRole('button', { name: 'Speed 4x' }).click();
   await view(page).getByRole('button', { name: 'Resume' }).click();

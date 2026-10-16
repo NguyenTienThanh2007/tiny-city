@@ -190,7 +190,7 @@ function occupancyLabel(): { sprite: THREE.Sprite; set(text: string, color: numb
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false, transparent: true, fog: true }));
-  sprite.scale.set(0.56, 0.14, 1);
+  sprite.scale.set(0.36, 0.09, 1);
   sprite.position.set(0, 0.62, 0);
   sprite.renderOrder = 3;
   let last = '';
