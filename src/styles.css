@@ -1611,3 +1611,19 @@ button.funds-chip:hover { background: var(--sand-200); }
   .immersive-clock { margin-left: 0; }
 }
 .immersive-stage { position: absolute; inset: 0; }
+/* Phase 8B: interaction prompt and inspector in the Character View. */
+.immersive-prompt { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 8px;
+  border-radius: 99px; background: rgba(255, 253, 248, .92); box-shadow: var(--shadow-md); color: var(--forest-900); font: 700 13px/1 var(--font-ui); }
+.immersive-prompt kbd { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--forest-800); color: var(--ivory); font: 800 12px/1 var(--font-ui); }
+.inspect-panel { position: absolute; right: 14px; top: 76px; width: min(340px, calc(100vw - 28px)); max-height: calc(100vh - 170px); overflow: auto; padding: 14px 16px; display: grid; gap: 6px; }
+.inspect-panel header { display: flex; align-items: center; justify-content: space-between; }
+.inspect-kind { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--forest-500); }
+.inspect-panel h2 { margin: 0; font: 600 20px/1.2 var(--font-display); color: var(--forest-900); }
+.inspect-sub { margin: 0 0 4px; font-size: 13px; color: var(--ink-soft); }
+.inspect-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.inspect-row span { color: var(--muted); }
+.inspect-row strong { color: var(--ink); text-align: right; font-weight: 600; }
+.inspect-actions { display: flex; gap: 8px; margin-top: 6px; }
+.inspect-actions button { flex: 1; min-height: 36px; border-radius: var(--radius-sm); border: 1px solid transparent; background: linear-gradient(180deg, var(--forest-700), var(--forest-900)); color: var(--ivory); font: 700 13px/1 var(--font-ui); cursor: pointer; }
+.inspect-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.inspect-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45; }

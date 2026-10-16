@@ -9,14 +9,22 @@ import { advanceController, createController, motionState, MOVEMENT, NO_INPUT, t
 import { createOrbit, orbitBy, updateOrbit, zoomBy, type OrbitState } from '../orbitCamera';
 import { resolveSpawn, type Spawn } from '../spawn';
 import { resolveQuality, type ImmersiveSettings } from '../settings';
-import { disposeAssetCache } from './assetBuilder';
+import { planDecor } from '../../game/worldDecor';
+import { actorScene, drawableVehicles, interactionTarget, stopObstacles, type ActorScene, type InteractionTarget } from '../world/sceneModel';
+import { ACTOR_LIMITS, releaseVehicleResources, ResidentActors, VehicleActors, vehicleWarmup } from './actors';
 import { buildCharacter, releaseCharacterMaterials, type CharacterModel } from './characterModel';
-import { Neighbourhood, VIEW_DISTANCE, type NeighbourhoodStats, type Quality } from './neighbourhood';
-import { ResidentLayer } from './residents';
-import { disposeVehicleTemplates, VehicleLayer, vehicleWarmup } from './vehicles';
+import { CityScene, DISTANCES, releaseGpuResources as releaseGpu, slicer, type CitySceneStats, type Quality } from './cityScene';
 
 /**
- * Phase 8A Character View engine: one Three.js renderer and one requestAnimationFrame loop over the authoritative
+ * Phase 8B: the city scene outlives a visit. Leaving the Character View releases its GPU side; the next visit
+ * reconciles it with whatever changed in the meantime (construction, demolition, roads, stops) instead of rebuilding.
+ */
+let cachedScene: CityScene | null = null;
+/** Drops the kept scene (tests, or when memory matters more than the next visit's speed). */
+export function releaseSceneCache() { cachedScene?.dispose(); cachedScene = null; }
+
+/**
+ * Phase 8A/8B Character View engine: one Three.js renderer and one requestAnimationFrame loop over the authoritative
  * world. While it runs, the City View's Pixi ticker is stopped and this loop feeds the same single simulation clock
  * (`advance`), so there is never a second simulation or a second frame driver.
  *
@@ -29,6 +37,8 @@ import { disposeVehicleTemplates, VehicleLayer, vehicleWarmup } from './vehicles
 
 export interface HudState {
   readonly motion: MotionState | 'inside' | 'travelling';
+  /** What E would act on right now (a real resident, building or stop), if anything. */
+  readonly target: InteractionTarget | null;
   readonly position: Position;
   readonly pointerLocked: boolean;
   readonly fps: number;
@@ -50,6 +60,8 @@ export interface EngineHost {
   onHud(hud: HudState): void;
   onEscape(): void;
   onTogglePause(): void;
+  /** E pressed while facing a real resident, building or stop. */
+  onInteract(target: InteractionTarget): void;
 }
 
 export interface ImmersiveDebug {
@@ -62,33 +74,24 @@ export interface ImmersiveDebug {
   commits: number;
   rejected: number;
   pointerLocked: boolean;
-  stats: NeighbourhoodStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; fps: number; frameMs: number; p95Ms: number; initMs: number;
+  stats: CitySceneStats & { drawCalls: number; frameTriangles: number; geometries: number; textures: number; fps: number; frameMs: number; p95Ms: number; initMs: number;
     /** Mean CPU time of the engine's frame callback (simulation advance, controller, camera, scene update, render submit). */
     cpuMs: number;
     /** Estimated GPU memory of the static scene: vertex buffers plus textures (mipmapped RGBA8), in bytes. */
     gpuBytes: number };
-  residents: string[];
-  vehicles: string[];
+  /** Drawn residents (simulation IDs) with how they appear, and drawn vehicles. */
+  residents: { id: string; name: string; mode: string; action: string; x: number; y: number }[];
+  vehicles: { id: string; x: number; y: number }[];
+  /** Residents not drawn, by reason (every resident is drawn or counted here exactly once). */
+  hidden: ActorScene['hidden'];
+  /** IDs of the static entities built in the scene. */
+  entities: { buildings: string[]; stops: string[]; roads: number };
+  target: InteractionTarget | null;
+  /** Whether this visit reused the kept scene (and reconciled it) instead of building from nothing. */
+  reusedScene: boolean;
   /** The character's composed layers (appearance → rig layers), to prove the same character in both views. */
   character: readonly string[];
   input: MoveInput;
-}
-
-function releaseGpuResources(scene: THREE.Object3D) {
-  const materials = new Set<THREE.Material>(), geometries = new Set<THREE.BufferGeometry>(), textures = new Set<THREE.Texture>();
-  scene.traverse((o) => {
-    const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    geometries.add(mesh.geometry);
-    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-      materials.add(m);
-      for (const value of Object.values(m)) if ((value as THREE.Texture)?.isTexture) textures.add(value as THREE.Texture);
-    }
-  });
-  if ((scene as THREE.Scene).environment) textures.add((scene as THREE.Scene).environment!);
-  for (const m of materials) m.dispose();
-  for (const g of geometries) g.dispose();
-  for (const t of textures) t.dispose();
 }
 
 /** Vertex buffers (instance matrices included) and textures of a scene, counted once each. */
@@ -126,16 +129,26 @@ const KEYS: Record<string, 'forward' | 'back' | 'left' | 'right' | 'run'> = {
   KeyW: 'forward', ArrowUp: 'forward', KeyS: 'back', ArrowDown: 'back', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
   ShiftLeft: 'run', ShiftRight: 'run',
 };
+const INTERACT_KEY = 'KeyE';
+/** Walkable ground with every solid shape on it: curb furniture and (Phase 8B) bus shelters. */
+const walkGridFor = (world: WorldState) => buildWalkGrid(world.plan, planDecor(world.plan), stopObstacles(world));
 /** Commit cadence: at least every half tile, or every quarter second while moving. */
 const COMMIT_DISTANCE = 0.5, COMMIT_INTERVAL = 250;
 
 export class ImmersiveEngine {
   private renderer: THREE.WebGLRenderer | null = null;
   private camera = new THREE.PerspectiveCamera(55, 1, 0.02, 60);
-  private neighbourhood: Neighbourhood | null = null;
+  private neighbourhood: CityScene | null = null;
   private character: CharacterModel | null = null;
-  private residents = new ResidentLayer();
-  private vehicles: VehicleLayer | null = null;
+  private residents: ResidentActors | null = null;
+  private vehicles: VehicleActors | null = null;
+  private actors: { world: WorldState; scene: ActorScene } | null = null;
+  private target: InteractionTarget | null = null;
+  private targetAt = 0;
+  private planRef: unknown = null;
+  private stopsRef: unknown = null;
+  private syncing = false;
+  private reusedScene = false;
   private grid: WalkGrid | null = null;
   private controller: ControllerState | null = null;
   private orbit: OrbitState | null = null;
@@ -200,7 +213,7 @@ export class ImmersiveEngine {
     r.toneMappingExposure = 1.05;
     r.shadowMap.enabled = this.quality === 'high';
     r.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.camera.far = VIEW_DISTANCE[this.quality] + 30;
+    this.camera.far = DISTANCES[this.quality].far + 25;
     const onLost = (event: Event) => { event.preventDefault(); this.host.onFailure('lost', 'The 3D view lost its graphics context (the GPU was reset or ran out of memory). Your city is safe.'); };
     this.canvas.addEventListener('webglcontextlost', onLost);
     this.cleanups.push(() => this.canvas.removeEventListener('webglcontextlost', onLost));
@@ -208,22 +221,29 @@ export class ImmersiveEngine {
 
     const world = this.host.getWorld();
     const nav = this.host.getNavigator();
-    const neighbourhood = new Neighbourhood(world, this.host.designs, this.quality);
-    this.neighbourhood = neighbourhood;
-    this.grid = buildWalkGrid(world.plan, neighbourhood.decor);
+    this.grid = walkGridFor(world);
     const spawn = resolveSpawn(world, nav, this.grid, this.host.initialYaw);
     this.spawn = spawn;
     if (!spawn.ok) { this.host.onFailure('spawn', spawn.reason, spawn); return; }
+    if (cachedScene && cachedScene.quality !== this.quality) releaseSceneCache();
+    this.reusedScene = cachedScene !== null;
+    const neighbourhood = cachedScene ?? new CityScene(this.quality);
+    cachedScene = neighbourhood;
+    this.neighbourhood = neighbourhood;
     // Glass and metal reflect a soft studio environment (generated once, tiny).
     const pmrem = new THREE.PMREMGenerator(r);
     this.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     neighbourhood.scene.environment = this.environment;
-    await neighbourhood.build((done, total, label) => this.host.onProgress(done, total, label), () => this.disposed);
+    // First visit: hydrate the whole city (nearest buildings first). Later visits: apply only what changed.
+    await neighbourhood.sync(world, this.host.designs, spawn.position, slicer(), (done, total, label) => this.host.onProgress(done, total, label), () => this.disposed);
     if (this.disposed) return;
+    this.planRef = world.plan; this.stopsRef = world.transport?.stops ?? null;
     const player = world.player!;
     this.character = buildCharacter(lookFromAppearance(player.appearance));
-    this.vehicles = new VehicleLayer(this.quality === 'high');
+    const limits = ACTOR_LIMITS[this.quality];
+    this.residents = new ResidentActors(limits);
+    this.vehicles = new VehicleActors(limits, this.quality === 'high');
     neighbourhood.scene.add(this.character.root, this.residents.group, this.vehicles.group);
     // Compile every shader the session can need now (scene, vehicles, a resident's look), not mid-walk.
     const warm = vehicleWarmup();
@@ -268,6 +288,7 @@ export class ImmersiveEngine {
       if (typing(event) || this.inputBlocked) return;
       const action = KEYS[event.code];
       if (action) { event.preventDefault(); event.stopPropagation(); this.keys.add(action); return; }
+      if (event.code === INTERACT_KEY) { event.preventDefault(); event.stopPropagation(); if (!event.repeat && this.target) this.host.onInteract(this.target); return; }
       if (event.code === 'Space') { event.preventDefault(); event.stopPropagation(); if (!event.repeat && (event.target as HTMLElement | null)?.tagName !== 'BUTTON') this.host.onTogglePause(); }
     };
     const up = (event: KeyboardEvent) => { const action = KEYS[event.code]; if (action) { event.preventDefault(); this.keys.delete(action); } };
@@ -378,6 +399,19 @@ export class ImmersiveEngine {
     const input = this.input();
     const pushing = input.forward !== 0 || input.right !== 0;
 
+    // The city changed (construction, demolition, roads, bus stops): collision follows at once, the scene catches up
+    // incrementally in the background.
+    if (world.plan !== this.planRef || (world.transport?.stops ?? null) !== this.stopsRef) {
+      this.grid = walkGridFor(world);
+      this.planRef = world.plan; this.stopsRef = world.transport?.stops ?? null;
+      if (!this.syncing) {
+        this.syncing = true;
+        const scene = this.neighbourhood;
+        // A change that lands while this sync runs is picked up by the next one.
+        void scene.sync(world, this.host.designs, this.controller.position, slicer(4), undefined, () => this.disposed)
+          .finally(() => { this.syncing = false; const live = this.host.getWorld(); if (live.plan !== world.plan || (live.transport?.stops ?? null) !== (world.transport?.stops ?? null)) this.planRef = null; });
+      }
+    }
     // Someone else moved the character (a city edit, a relocation, undo): the simulation wins.
     if (this.controlling && this.lastCommitted && Math.hypot(player.position.x - this.lastCommitted.x, player.position.y - this.lastCommitted.y) > 1e-3) {
       this.controlling = false;
@@ -420,8 +454,17 @@ export class ImmersiveEngine {
     this.character.root.position.set(c.position.x, 0, c.position.y);
     this.character.root.rotation.y = c.yaw;
     this.character.pose({ moving, stride, runBlend, time: this.time });
-    this.residents.sync(world, c.position, paused ? 0 : dt, this.time);
-    this.vehicles?.sync(world, c.position);
+    // Actors from the scene model, recomputed only when the world changes (every tick), never invented.
+    if (!this.actors || this.actors.world !== world) {
+      const roads = this.grid;
+      this.actors = { world, scene: actorScene(world, (x, y) => roads.walkable[y * roads.width + x] === 1 && x >= 0 && y >= 0 && x < roads.width && y < roads.height, this.neighbourhood.current?.stops ?? new Map()) };
+    }
+    this.residents!.sync(this.actors.scene.residents, c.position, paused ? 0 : dt, this.time);
+    this.vehicles!.sync(world, drawableVehicles(world), c.position, this.neighbourhood.skyNow?.glow ?? 0);
+    if (now - this.targetAt > 100 && this.neighbourhood.current) {
+      this.targetAt = now;
+      this.target = interactionTarget(c.position, c.yaw, this.residents!.positions(), this.neighbourhood.current.buildings.values(), this.neighbourhood.current.stops.values());
+    }
     const frameOrbit = updateOrbit(this.orbit, c.position, dt, this.neighbourhood.solids, { reducedMotion: this.host.reducedMotion });
     this.orbit = frameOrbit.state;
     this.camera.position.set(frameOrbit.position.x, frameOrbit.position.y, frameOrbit.position.z);
@@ -440,7 +483,7 @@ export class ImmersiveEngine {
       this.hudAt = now;
       const status = player.movement.status;
       const motion: HudState['motion'] = this.controlling ? motionState(c) : status === 'inside' ? 'inside' : status === 'travelling' ? 'travelling' : 'standing';
-      this.host.onHud({ motion, position: c.position, pointerLocked: document.pointerLockElement === this.canvas, fps: this.fps() });
+      this.host.onHud({ motion, target: this.target, position: c.position, pointerLocked: document.pointerLockElement === this.canvas, fps: this.fps() });
       this.publishDebug(world, input, cost);
     }
   };
@@ -466,7 +509,8 @@ export class ImmersiveEngine {
       stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
         fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs,
         cpuMs: Math.round(this.frameCosts.reduce((a, b) => a + b, 0) / Math.max(1, this.frameCosts.length) * 100) / 100, gpuBytes: this.gpuBytes },
-      residents: this.residents.ids(), vehicles: this.vehicles?.ids() ?? [], character: this.character?.layers ?? [], input,
+      residents: this.residents?.list() ?? [], vehicles: this.vehicles?.list() ?? [], hidden: this.actors?.scene.hidden ?? { inside: 0, onLot: 0, riding: 0, driving: 0 },
+      entities: this.neighbourhood.entityIds(), target: this.target, reusedScene: this.reusedScene, character: this.character?.layers ?? [], input,
     };
     (window as unknown as { __tinyCityImmersive?: ImmersiveDebug }).__tinyCityImmersive = debug;
     // Development builds expose the live scene for inspection in the browser console.
@@ -481,15 +525,20 @@ export class ImmersiveEngine {
     // Release every GPU resource the scene used before the renderer goes. Shared materials, textures and models are
     // module-level caches that outlive this view; three registers a dispose listener (holding the renderer) on each,
     // so without this every closed view would stay reachable through them.
-    if (this.neighbourhood) releaseGpuResources(this.neighbourhood.scene);
-    if (this.warmup) releaseGpuResources(this.warmup);
+    // The kept city scene loses its actors and environment and releases its GPU side; it is reconciled next visit.
+    if (this.neighbourhood) {
+      if (this.character) this.neighbourhood.scene.remove(this.character.root);
+      if (this.residents) this.neighbourhood.scene.remove(this.residents.group);
+      if (this.vehicles) this.neighbourhood.scene.remove(this.vehicles.group);
+      this.neighbourhood.scene.environment = null;
+      this.neighbourhood.releaseGpu();
+    }
+    if (this.warmup) releaseGpu(this.warmup);
     releaseCharacterMaterials();
+    releaseVehicleResources();
     this.character?.dispose();
-    this.residents.dispose();
+    this.residents?.dispose();
     this.vehicles?.dispose();
-    disposeVehicleTemplates();
-    this.neighbourhood?.dispose();
-    disposeAssetCache();
     this.environment?.dispose();
     if (this.renderer) {
       this.renderer.renderLists.dispose();

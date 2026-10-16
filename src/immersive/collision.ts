@@ -36,15 +36,13 @@ const FURNITURE: Partial<Record<Decor['kind'], (d: Decor) => Obstacle>> = {
   bikes: (d) => ({ kind: 'box', minX: d.at.x - 0.13, minY: d.at.y - 0.05, maxX: d.at.x + 0.08, maxY: d.at.y + 0.05, source: 'bikes' }),
 };
 
-export function buildWalkGrid(plan: CityPlan, decor: readonly Decor[] = []): WalkGrid {
+/** `extra`: further solid shapes on road tiles (Phase 8B bus shelters). */
+export function buildWalkGrid(plan: CityPlan, decor: readonly Decor[] = [], extra: readonly Obstacle[] = []): WalkGrid {
   const walkable = new Uint8Array(plan.width * plan.height);
   for (const r of plan.roads) if (r.x >= 0 && r.y >= 0 && r.x < plan.width && r.y < plan.height) walkable[r.y * plan.width + r.x] = 1;
   const obstacles = new Map<number, Obstacle[]>();
-  for (const d of decor) {
-    if (!CURB_DECOR.has(d.kind)) continue;
-    const make = FURNITURE[d.kind];
-    if (!make) continue;
-    const o = make(d);
+  const shapes = [...decor.flatMap((d) => { const make = CURB_DECOR.has(d.kind) ? FURNITURE[d.kind] : undefined; return make ? [make(d)] : []; }), ...extra];
+  for (const o of shapes) {
     // Register the shape in every tile it overlaps, so queries around the character find it.
     const [minX, minY, maxX, maxY] = o.kind === 'circle' ? [o.x - o.r, o.y - o.r, o.x + o.r, o.y + o.r] : [o.minX, o.minY, o.maxX, o.maxY];
     for (let ty = Math.floor(minY); ty <= Math.floor(maxY); ty += 1) for (let tx = Math.floor(minX); tx <= Math.floor(maxX); tx += 1) {

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BuildingDesign } from '@tiny-city/ai-architect';
-import type { Position, RoadNavigator, WorldState } from '@tiny-city/simulation';
+import type { BuildingOccupancy, LifeCommand, LifeRejectionReason, Position, RoadNavigator, WorldState } from '@tiny-city/simulation';
 import { describePlayer } from '../simulation/playerView';
 import { Icon } from '../ui/Icon';
 import { NeedBars } from '../ui/LifePanel';
 import { ORBIT } from './orbitCamera';
 import { readSettings, writeSettings, type ImmersiveSettings } from './settings';
 import { ImmersiveEngine, type HudState } from './three/engine';
-import type { Quality } from './three/neighbourhood';
+import { InspectPanel } from './InspectPanel';
+import type { InteractionTarget } from './world/sceneModel';
+import type { Quality } from './three/cityScene';
 
 /**
  * Phase 8A Character View: a full-screen Three.js view of the real neighbourhood around the player's character,
@@ -32,6 +34,9 @@ export interface ImmersiveViewProps {
   readonly onSave: () => void;
   readonly onExit: (yaw: number | null) => void;
   readonly onFailure: (message: string) => void;
+  /** Phase 8B: live building occupancy, and existing Life Mode commands for the inspector's actions. */
+  readonly getBuildingOccupancy: (buildingId: string) => BuildingOccupancy;
+  readonly onLife: (command: LifeCommand) => { applied: boolean; reason: LifeRejectionReason | null };
 }
 
 const MOTION_TEXT: Record<HudState['motion'], string> = {
@@ -47,6 +52,9 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
   const [hud, setHud] = useState<HudState | null>(null);
   const [quality, setQuality] = useState<Quality | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [inspecting, setInspecting] = useState<InteractionTarget | null>(null);
+  const inspectingRef = useRef<InteractionTarget | null>(null);
+  inspectingRef.current = inspecting;
   const [settings, setSettings] = useState<ImmersiveSettings>(() => readSettings());
   const exitingRef = useRef(false);
 
@@ -66,7 +74,9 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
       onReady: ({ quality: q }) => { setProgress(null); setQuality(q); engine?.canvas.focus({ preventScroll: true }); },
       onFailure: (_kind, message) => { if (!exitingRef.current) { exitingRef.current = true; propsRef.current.onFailure(message); } },
       onHud: setHud,
-      onEscape: () => setMenuOpen((open) => !open),
+      // Esc closes the inspector first, then toggles the menu.
+      onEscape: () => { if (inspectingRef.current) setInspecting(null); else setMenuOpen((open) => !open); },
+      onInteract: (target) => { setInspecting(target); if (document.pointerLockElement) document.exitPointerLock?.(); },
       onTogglePause: () => propsRef.current.onTogglePause(),
     }, readSettings());
     engineRef.current = engine;
@@ -118,11 +128,16 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
       </header>
       <div className="immersive-card immersive-needs"><NeedBars player={player} /></div>
       {props.paused && <div className="immersive-paused" role="status">Time is paused · press Space or Resume to move</div>}
+      {hud?.target && !inspecting && <div className="immersive-prompt" role="status" aria-label="Interaction">
+        <kbd>E</kbd><span>{hud.target.kind === 'resident' ? `Talk to ${hud.target.label}` : `Inspect ${hud.target.label}`}</span></div>}
+      {inspecting && <InspectPanel target={inspecting} world={props.world} nav={props.getNavigator()} occupancy={props.getBuildingOccupancy}
+        onLife={(command) => { const result = props.onLife(command); if (result.applied) setInspecting(null); return result; }} onClose={() => setInspecting(null)} />}
       <div className="immersive-hints" aria-hidden="true">
         <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
         <span><kbd>Shift</kbd> run</span>
         <span><Icon name="mouse" size={13} /> {hud?.pointerLocked ? 'look · Esc frees the mouse' : 'drag or click to look'}</span>
         <span>scroll zoom</span>
+        <span><kbd>E</kbd> interact</span>
         <span><kbd>Esc</kbd> menu</span>
       </div>
     </>}
