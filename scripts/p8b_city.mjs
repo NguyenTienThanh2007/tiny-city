@@ -16,7 +16,7 @@ export function playerHome(city) {
  * engine runs to the moment, the player rests and eats at home with the real Life commands (every two hours, when
  * needed), so captures show a cared-for character rather than one left alone for days.
  */
-export function livingCityAt(minute, { player = true } = {}) {
+export function livingCityAt(minute, { player = true, at = null, lead = 75 } = {}) {
   const city = coralBayNights();
   const sim = new Simulation(createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true },
     startingFunds: city.funds, economy: {}, transport: true, society: true }));
@@ -27,14 +27,22 @@ export function livingCityAt(minute, { player = true } = {}) {
   }
   sim.enablePopulation({ maxCitizens: 1000 });
   sim.executeTransport({ type: 'transport.create-line', stops: LINE_STOPS.map(([x, y]) => ({ x, y })), buses: 4 });
-  for (let t = 0; t < minute; t += 120) {
+  // `at`: a road tile the player walks to (the real move-to command) `lead` minutes before the moment, so a capture
+  // starts on the street where the scene is.
+  const walkFrom = at ? Math.max(0, minute - lead) : minute;
+  for (let t = 0; t < walkFrom; t += 120) {
     const p = sim.getState().player;
     if (p && p.activity.kind === 'idle') {
       if (p.needs.hunger < 65) sim.executeLife({ type: 'player.start-activity', activity: 'eat' });
       else if (p.needs.energy < 60) sim.executeLife({ type: 'player.start-activity', activity: 'rest' });
     }
-    sim.step(Math.min(120, minute - t));
+    sim.step(Math.min(120, walkFrom - t));
   }
+  if (at && player) {
+    const moved = sim.executeLife({ type: 'player.move-to', destination: { type: 'tile', position: at } });
+    if (!moved.applied) throw new Error(`move-to: ${moved.reason}`);
+  }
+  if (minute > walkFrom) sim.step(minute - walkFrom);
   sim.pause();
   const state = sim.getState();
   return { save: { size: city.size, funds: state.budget.balance, roads: city.roads, buildings: city.buildings, saveVersion: 3, simulation: JSON.parse(serializeWorld(state)) }, state, city, home };

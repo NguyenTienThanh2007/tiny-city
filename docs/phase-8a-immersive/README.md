@@ -1,5 +1,7 @@
 # Phase 8A: Immersive Life Mode (third-person 3D vertical slice)
 
+> **Since Phase 8B**, `three/neighbourhood.ts`, `residents.ts` and `vehicles.ts` described here have been replaced by the whole-city `cityScene.ts` and `actors.ts` on a pure scene model. See [docs/phase-8b-living-world-3d/](../phase-8b-living-world-3d/README.md). These 8A docs describe the slice as it was delivered.
+
 Press **Enter World** and your Life Mode character steps out of their front door into a real-time 3D version of your neighbourhood. Walk and run with W A S D and Shift, look around with the mouse or trackpad, and press **Return to City** to go back to the isometric City View exactly where you stopped. There is one city, one character and one simulation: the 3D view reads the same live world and moves the character only through validated simulation commands.
 
 | Doc | What it covers |
