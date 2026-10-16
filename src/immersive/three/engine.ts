@@ -14,6 +14,7 @@ import { actorScene, drawableVehicles, interactionTarget, stopObstacles, type Ac
 import { ACTOR_LIMITS, releaseVehicleResources, ResidentActors, VehicleActors, vehicleWarmup } from './actors';
 import { buildCharacter, releaseCharacterMaterials, type CharacterModel } from './characterModel';
 import { CityScene, DISTANCES, releaseGpuResources as releaseGpu, slicer, type CitySceneStats, type Quality } from './cityScene';
+import { lodMaterials, nightMaterials } from './assetBuilder';
 
 /**
  * Phase 8B: the city scene outlives a visit. Leaving the Character View releases its GPU side; the next visit
@@ -81,7 +82,9 @@ export interface ImmersiveDebug {
     gpuBytes: number };
   /** Drawn residents (simulation IDs) with how they appear, and drawn vehicles. */
   residents: { id: string; name: string; mode: string; action: string; x: number; y: number }[];
-  vehicles: { id: string; x: number; y: number }[];
+  vehicles: { id: string; kind: string; passengers: number; x: number; y: number }[];
+  /** Light state from the game clock: phase, sun, night glow, and the street-lamp and window emissive levels. */
+  sky: { phase: string; sun: number; glow: number; minute: number; lamps: number; windows: number };
   /** Residents not drawn, by reason (every resident is drawn or counted here exactly once). */
   hidden: ActorScene['hidden'];
   /** IDs of the static entities built in the scene. */
@@ -206,8 +209,10 @@ export class ImmersiveEngine {
       return;
     }
     const r = this.renderer;
-    // The light preset renders at three-quarter resolution: software renderers are bound by pixels shaded.
-    r.setPixelRatio(this.quality === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : 0.75);
+    // The light preset renders at three-quarter resolution, and at half on a software renderer (no GPU: every pixel is
+    // shaded on the CPU, so resolution is the cost).
+    const software = /swiftshader|llvmpipe|software|basic render/i.test(this.rendererName);
+    r.setPixelRatio(this.quality === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : software ? 0.5 : 0.75);
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.05;
@@ -509,7 +514,10 @@ export class ImmersiveEngine {
       stats: { ...this.neighbourhood.stats, drawCalls: info.render.calls, frameTriangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
         fps: this.fps(), frameMs: Math.round(cost * 100) / 100, p95Ms: Math.round(p95 * 10) / 10, initMs: this.initMs,
         cpuMs: Math.round(this.frameCosts.reduce((a, b) => a + b, 0) / Math.max(1, this.frameCosts.length) * 100) / 100, gpuBytes: this.gpuBytes },
-      residents: this.residents?.list() ?? [], vehicles: this.vehicles?.list() ?? [], hidden: this.actors?.scene.hidden ?? { inside: 0, onLot: 0, riding: 0, driving: 0 },
+      residents: this.residents?.list() ?? [],
+      vehicles: (this.vehicles?.list() ?? []).map((v) => { const sim = world.transport?.vehicles.find((x) => x.id === v.id); return { ...v, kind: sim?.kind ?? 'unknown', passengers: sim?.passengers.length ?? 0 }; }),
+      sky: { phase: this.neighbourhood.skyNow?.lighting.phase ?? 'day', sun: this.neighbourhood.skyNow?.lighting.sun ?? 1, glow: this.neighbourhood.skyNow?.glow ?? 0,
+        minute: getGameTime(world.clock).minuteOfDay, lamps: nightMaterials.lamp.emissiveIntensity, windows: lodMaterials.windows.emissiveIntensity }, hidden: this.actors?.scene.hidden ?? { inside: 0, onLot: 0, riding: 0, driving: 0 },
       entities: this.neighbourhood.entityIds(), target: this.target, reusedScene: this.reusedScene, character: this.character?.layers ?? [], input,
     };
     (window as unknown as { __tinyCityImmersive?: ImmersiveDebug }).__tinyCityImmersive = debug;

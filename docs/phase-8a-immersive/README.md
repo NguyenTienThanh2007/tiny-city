@@ -35,5 +35,5 @@ Without a character, without a home yet, or with no street beside the character,
 - `node scripts/p8a_city.mjs` validates the "Palm Terrace" showcase (all six Luxury Minimalist villa models, duplexes, townhouses, a park, a pool, an office).
 - `node scripts/capture_p8a.mjs [url] [outDir]` produces the screenshots and motion videos with real keyboard and mouse input.
 - `node scripts/p8a_benchmark.mjs [url] [--quick] [--software]` measures entering, idle, walking/running, orbiting, switching and a long session.
-- `e2e/immersive-third-person.spec.ts`: browser acceptance (named to run in gameplay shard 1).
+- `e2e/phase-8a-immersive.spec.ts`: browser acceptance.
 - `window.__tinyCityImmersive`: the live renderer state (player, authority, camera, stats) for tests and benchmarks.

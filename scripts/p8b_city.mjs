@@ -11,6 +11,11 @@ export function playerHome(city) {
   return villas.sort((a, b) => Math.hypot(a.x - 44, a.y - 22) - Math.hypot(b.x - 44, b.y - 22))[0];
 }
 
+/**
+ * Coral Bay Nights at `minute`, with the player at home in the Luxury Minimalist villa nearest the district. While the
+ * engine runs to the moment, the player rests and eats at home with the real Life commands (every two hours, when
+ * needed), so captures show a cared-for character rather than one left alone for days.
+ */
 export function livingCityAt(minute, { player = true } = {}) {
   const city = coralBayNights();
   const sim = new Simulation(createWorld({ id: 'villa-gardens-world', plan: toCityPlan(city), seed: 'villa-gardens', clock: { paused: true },
@@ -22,7 +27,14 @@ export function livingCityAt(minute, { player = true } = {}) {
   }
   sim.enablePopulation({ maxCitizens: 1000 });
   sim.executeTransport({ type: 'transport.create-line', stops: LINE_STOPS.map(([x, y]) => ({ x, y })), buses: 4 });
-  if (minute > 0) sim.step(minute);
+  for (let t = 0; t < minute; t += 120) {
+    const p = sim.getState().player;
+    if (p && p.activity.kind === 'idle') {
+      if (p.needs.hunger < 65) sim.executeLife({ type: 'player.start-activity', activity: 'eat' });
+      else if (p.needs.energy < 60) sim.executeLife({ type: 'player.start-activity', activity: 'rest' });
+    }
+    sim.step(Math.min(120, minute - t));
+  }
   sim.pause();
   const state = sim.getState();
   return { save: { size: city.size, funds: state.budget.balance, roads: city.roads, buildings: city.buildings, saveVersion: 3, simulation: JSON.parse(serializeWorld(state)) }, state, city, home };

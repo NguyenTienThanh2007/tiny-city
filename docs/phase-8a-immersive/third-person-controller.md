@@ -56,4 +56,4 @@ The HUD and `window.__tinyCityImmersive.player.motion` report `standing`, `walki
 - No movement while paused, and the frame cap holds.
 - Turning is smooth, never overshoots, and the stride advances.
 - Every position the controller reaches is accepted by the simulation's `playerWalkCheck`, over 900 frames of walking and running in a real street.
-- Browser: walking and running peak speeds are within their limits (`e2e/immersive-third-person.spec.ts`, scenario D).
+- Browser: walking and running peak speeds are within their limits (`e2e/phase-8a-immersive.spec.ts`, scenario D).

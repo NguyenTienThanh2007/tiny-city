@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { BuildingDesign } from '@tiny-city/ai-architect';
 import type { BuildingOccupancy, LifeCommand, LifeRejectionReason, Position, RoadNavigator, WorldState } from '@tiny-city/simulation';
 import { describePlayer } from '../simulation/playerView';
+import { SIMULATION_SPEEDS, type SimulationSpeed } from '../simulation/useCitySimulation';
 import { Icon } from '../ui/Icon';
 import { NeedBars } from '../ui/LifePanel';
 import { ORBIT } from './orbitCamera';
@@ -28,6 +29,9 @@ export interface ImmersiveViewProps {
   readonly day: string;
   readonly clock: string;
   readonly paused: boolean;
+  /** The one clock's speed (1/2/4×), shared with the City View dock. */
+  readonly speed: SimulationSpeed;
+  readonly onSpeed: (speed: SimulationSpeed) => void;
   readonly saved: boolean;
   readonly reducedMotion: boolean;
   readonly onTogglePause: () => void;
@@ -119,6 +123,10 @@ export default function ImmersiveView(props: ImmersiveViewProps) {
           <span>{props.day} · {props.clock}</span>
           <button type="button" className="icon-button" aria-label={props.paused ? 'Resume' : 'Pause'} title={props.paused ? 'Resume (Space)' : 'Pause (Space)'} onClick={props.onTogglePause}>
             <Icon name={props.paused ? 'play' : 'pause'} size={15} /></button>
+          <div className="immersive-speed" role="group" aria-label="Simulation speed">
+            {SIMULATION_SPEEDS.map((value) => <button key={value} type="button" className={props.speed === value ? 'active' : ''} aria-pressed={props.speed === value}
+              aria-label={`Speed ${value}x`} title={`${value}× speed`} onClick={() => props.onSpeed(value)}>{value}×</button>)}
+          </div>
         </div>
         <div className="immersive-actions">
           <button type="button" className={`immersive-save ${props.saved ? 'is-saved' : ''}`} onClick={props.onSave}><Icon name="save" size={15} />{props.saved ? 'Saved' : 'Save'}</button>
